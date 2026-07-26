@@ -1,0 +1,59 @@
+name: passengerapp
+description: "Passenger App Project"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.5.3 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.8
+  country_picker: ^2.0.27
+  sliding_up_panel: ^2.0.0
+
+  http: ^1.5.0
+  connectivity_plus: ^6.1.5
+
+  # Location
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
+
+  # Firebase
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  firebase_database: ^12.1.0
+  firebase_storage: ^13.0.4
+  firebase_app_check: ^0.4.1+2
+  cloud_firestore: ^6.0.0
+
+  # Maps & Media
+  google_maps_flutter: ^2.13.1
+  image_picker: ^1.2.0
+  permission_handler: ^12.0.1
+  package_info_plus: ^9.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/images/south_sudan_flag.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/logo.png
+  adaptive_icon_background: "#39FF14"
+  adaptive_icon_foreground: assets/images/logo.png
