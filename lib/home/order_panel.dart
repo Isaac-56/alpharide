@@ -33,9 +33,7 @@ class OrderPanel extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 25),
-
           const Text(
             "Order Ride",
             style: TextStyle(
@@ -43,9 +41,7 @@ class OrderPanel extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 25),
-
           _locationTile(
             icon: Icons.my_location,
             iconColor: Colors.green,
@@ -53,9 +49,7 @@ class OrderPanel extends StatelessWidget {
             address: pickupAddress,
             onTap: onPickupTap,
           ),
-
           const SizedBox(height: 15),
-
           _locationTile(
             icon: Icons.location_on,
             iconColor: Colors.red,
@@ -65,9 +59,7 @@ class OrderPanel extends StatelessWidget {
                 : destinationAddress,
             onTap: onDestinationTap,
           ),
-
           const SizedBox(height: 22),
-
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -84,18 +76,15 @@ class OrderPanel extends StatelessWidget {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: const Icon(
-                    Icons.local_taxi,
+                    Icons.directions_car_filled_rounded,
                     color: Colors.green,
                     size: 28,
                   ),
                 ),
-
                 const SizedBox(width: 15),
-
                 const Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         "Alpha Standard",
@@ -114,7 +103,6 @@ class OrderPanel extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -134,9 +122,7 @@ class OrderPanel extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 30),
-
           SizedBox(
             width: double.infinity,
             height: 55,
@@ -145,8 +131,7 @@ class OrderPanel extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                  BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
               child: const Text(
@@ -184,20 +169,16 @@ class OrderPanel extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor:
-              iconColor.withOpacity(0.15),
+              backgroundColor: iconColor.withValues(alpha: 0.15),
               child: Icon(
                 icon,
                 color: iconColor,
               ),
             ),
-
             const SizedBox(width: 15),
-
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
@@ -219,7 +200,6 @@ class OrderPanel extends StatelessWidget {
                 ],
               ),
             ),
-
             const Icon(
               Icons.chevron_right,
               color: Colors.grey,

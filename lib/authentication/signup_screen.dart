@@ -1,29 +1,51 @@
-//Older signup_screen
-
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:passengerapp/services/firestore_service.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
+
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:passengerapp/services/firestore_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class SignUpScreen extends StatefulWidget {
   final String phoneNumber;
 
-  const SignUpScreen({required this.phoneNumber, Key? key}) : super(key: key);
+  const SignUpScreen({
+    required this.phoneNumber,
+    super.key,
+  });
 
   @override
-  _SignUpScreenState createState() => _SignUpScreenState();
+  State<SignUpScreen> createState() =>
+      _SignUpScreenState();
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _referralCodeController = TextEditingController();
+  final FirestoreService _firestoreService =
+      FirestoreService();
+
+  final GlobalKey<FormState> _formKey =
+      GlobalKey<FormState>();
+
+  final TextEditingController _nameController =
+      TextEditingController();
+
+  final TextEditingController _referralCodeController =
+      TextEditingController();
+
+  static const Color primaryColor = Color(0xFF39FF14);
+  static const Color textColor = Color(0xFF111111);
+  static const Color secondaryTextColor =
+      Color(0xFF6B6B6B);
+  static const Color surfaceColor = Color(0xFFF7F8F7);
+  static const Color borderColor = Color(0xFFEAECEA);
+  static const Color backButtonBorderColor =
+      Color(0xFFB9B9B9);
+  static const Color errorColor = Color(0xFFD83A3A);
+
   bool _isLoading = false;
-  File? _image;
   bool _showConfirmButtons = false;
+
+  File? _image;
 
   @override
   void dispose() {
@@ -32,78 +54,291 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
+  void _showMessage(
+    String message, {
+    bool isError = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        backgroundColor:
+            isError ? errorColor : textColor,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+    );
+  }
+
   Future<void> _requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
+    final Map<Permission, PermissionStatus> statuses =
+        await [
       Permission.camera,
       Permission.storage,
     ].request();
 
-    if (statuses[Permission.camera] != PermissionStatus.granted ||
-        statuses[Permission.storage] != PermissionStatus.granted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Permissions not granted')),
+    if (!mounted) return;
+
+    final bool cameraGranted =
+        statuses[Permission.camera]?.isGranted ?? false;
+
+    final bool storageGranted =
+        statuses[Permission.storage]?.isGranted ?? false;
+
+    if (!cameraGranted || !storageGranted) {
+      _showMessage(
+        'Camera or photo permission was not granted.',
+        isError: true,
       );
     }
   }
 
-  Future<void> _selectImage(ImageSource source) async {
+  Future<void> _selectImage(
+    ImageSource source,
+  ) async {
     await _requestPermissions();
 
-    final pickedFile = await ImagePicker().pickImage(
+    final XFile? pickedFile =
+        await ImagePicker().pickImage(
       source: source,
-      preferredCameraDevice: CameraDevice.front, // Set the default to front camera
+      preferredCameraDevice: CameraDevice.front,
+      imageQuality: 85,
+      maxWidth: 1200,
     );
 
-    if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-        _showConfirmButtons = true;
-      });
+    if (pickedFile == null || !mounted) {
+      return;
     }
-  }
 
+    setState(() {
+      _image = File(pickedFile.path);
+      _showConfirmButtons = true;
+    });
+  }
 
   Future<String?> _uploadImage() async {
     if (_image == null) return null;
 
     try {
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('user_photos')
-          .child('${widget.phoneNumber}.jpg');
-      await ref.putFile(_image!);
-      return await ref.getDownloadURL();
-    } catch (e) {
-      print('Error uploading image: $e');
+      final Reference reference =
+          FirebaseStorage.instance
+              .ref()
+              .child('user_photos')
+              .child('${widget.phoneNumber}.jpg');
+
+      await reference.putFile(_image!);
+
+      return await reference.getDownloadURL();
+    } catch (error) {
+      debugPrint(
+        'Error uploading profile image: $error',
+      );
+
       return null;
     }
   }
 
   void _showPhotoOptions() {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (BuildContext context) {
-        return Wrap(
-          children: <Widget>[
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Take photo'),
-              onTap: () {
-                Navigator.pop(context);
-                _selectImage(ImageSource.camera);
-              },
+      backgroundColor: Colors.white,
+      showDragHandle: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(26),
+        ),
+      ),
+      builder: (
+        BuildContext bottomSheetContext,
+      ) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              24,
+              12,
+              24,
+              24,
             ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _selectImage(ImageSource.gallery);
-              },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: borderColor,
+                    borderRadius:
+                        BorderRadius.circular(10),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Add profile photo',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 22,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Choose how you would like to add your photo.',
+                    style: TextStyle(
+                      color: secondaryTextColor,
+                      fontSize: 14.5,
+                      height: 1.45,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                _buildPhotoOption(
+                  icon: Icons.camera_alt_outlined,
+                  title: 'Take a photo',
+                  description:
+                      'Use your phone camera',
+                  onTap: () {
+                    Navigator.pop(
+                      bottomSheetContext,
+                    );
+
+                    _selectImage(
+                      ImageSource.camera,
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 12),
+
+                _buildPhotoOption(
+                  icon: Icons.photo_library_outlined,
+                  title: 'Choose from gallery',
+                  description:
+                      'Select an existing photo',
+                  onTap: () {
+                    Navigator.pop(
+                      bottomSheetContext,
+                    );
+
+                    _selectImage(
+                      ImageSource.gallery,
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildPhotoOption({
+    required IconData icon,
+    required String title,
+    required String description,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: surfaceColor,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: borderColor,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(
+                    alpha: 0.14,
+                  ),
+                  borderRadius:
+                      BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  icon,
+                  color: textColor,
+                  size: 22,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+
+                    const SizedBox(height: 3),
+
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        color: secondaryTextColor,
+                        fontSize: 13,
+                        height: 1.4,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: secondaryTextColor,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -114,36 +349,90 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
   }
 
-  void _register() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  void _confirmPhoto() {
+    setState(() {
+      _showConfirmButtons = false;
+    });
+  }
 
-      try {
-        bool userExists = await _firestoreService.checkUserExists(widget.phoneNumber);
-        if (userExists) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User already exists')),
-          );
-          return;
-        }
+  void _goBack() {
+    FocusScope.of(context).unfocus();
 
-        String? photoUrl = await _uploadImage();
-        await _firestoreService.addUser(
-          widget.phoneNumber,
-          _nameController.text,
-          photoUrl: photoUrl,
-          referralCode: _referralCodeController.text,
+    final NavigatorState navigator =
+        Navigator.of(context);
+
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacementNamed('/login');
+    }
+  }
+
+  void _logOut() {
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      '/login',
+      (Route<dynamic> route) => false,
+    );
+  }
+
+  Future<void> _register() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final bool userExists =
+          await _firestoreService.checkUserExists(
+        widget.phoneNumber,
+      );
+
+      if (!mounted) return;
+
+      if (userExists) {
+        _showMessage(
+          'An account already exists for this number.',
+          isError: true,
         );
 
-        Navigator.of(context).pushReplacementNamed('/home');
-      } catch (e) {
-        print('Error during registration: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registration failed: $e')),
-        );
-      } finally {
+        return;
+      }
+
+      final String? photoUrl =
+          await _uploadImage();
+
+      await _firestoreService.addUser(
+        widget.phoneNumber,
+        _nameController.text.trim(),
+        photoUrl: photoUrl,
+        referralCode:
+            _referralCodeController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/home',
+        (Route<dynamic> route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      debugPrint(
+        'Error during registration: $error',
+      );
+
+      _showMessage(
+        'Registration failed. Please try again.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
@@ -151,104 +440,604 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  InputDecoration _inputDecoration({
+    required String hintText,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: const TextStyle(
+        color: Color(0xFF9A9A9A),
+        fontSize: 15.5,
+        fontWeight: FontWeight.w400,
+      ),
+      prefixIcon: Icon(
+        icon,
+        size: 21,
+        color: secondaryTextColor,
+      ),
+      filled: true,
+      fillColor: surfaceColor,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 18,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: borderColor,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: textColor,
+          width: 1.4,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: errorColor,
+        ),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: errorColor,
+          width: 1.4,
+        ),
+      ),
+      errorStyle: const TextStyle(
+        color: errorColor,
+        fontSize: 12.5,
+        height: 1.4,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('Add some personal info', style: TextStyle(color: Colors.black)),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _register,
-            child: const Text('Save', style: TextStyle(color: Colors.purple)),
-          ),
-        ],
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: GestureDetector(
-                    onTap: _showPhotoOptions,
+        child: LayoutBuilder(
+          builder: (
+            BuildContext context,
+            BoxConstraints constraints,
+          ) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
+                ),
+                child: IntrinsicHeight(
+                  child: Form(
+                    key: _formKey,
                     child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.grey[200],
-                          backgroundImage: _image != null ? FileImage(_image!) : null,
-                          child: _image == null
-                              ? const Icon(Icons.camera_alt, size: 40, color: Colors.grey)
-                              : null,
-                        ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Add a photo',
-                          style: TextStyle(color: Colors.purple),
-                        ),
-                        // Show confirm and cancel buttons if a photo is selected
-                        if (_showConfirmButtons)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.cancel, color: Colors.red),
-                                onPressed: _cancelPhoto,
+
+                        // Circular outlined back button
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Material(
+                            color: Colors.transparent,
+                            shape: const CircleBorder(
+                              side: BorderSide(
+                                color:
+                                    backButtonBorderColor,
+                                width: 1.2,
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.check, color: Colors.green),
-                                onPressed: () {
-                                  setState(() {
-                                    _showConfirmButtons = false;
-                                  });
-                                },
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: _isLoading
+                                  ? null
+                                  : _goBack,
+                              customBorder:
+                                  const CircleBorder(),
+                              child: Icon(
+                                Icons.arrow_back_rounded,
+                                size: 23,
+                                color: _isLoading
+                                    ? secondaryTextColor
+                                    : textColor,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // Page heading
+                        const Text(
+                          'Complete your profile',
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 29,
+                            height: 1.18,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.7,
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        const Text(
+                          'Add a few personal details to finish setting up your AlphaRide account.',
+                          style: TextStyle(
+                            color: secondaryTextColor,
+                            fontSize: 15.5,
+                            height: 1.55,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+
+                        const SizedBox(height: 30),
+
+                        // Profile photo
+                        Center(
+                          child: GestureDetector(
+                            onTap: _isLoading
+                                ? null
+                                : _showPhotoOptions,
+                            child: Column(
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Container(
+                                      width: 120,
+                                      height: 120,
+                                      padding:
+                                          const EdgeInsets.all(
+                                        4,
+                                      ),
+                                      decoration:
+                                          BoxDecoration(
+                                        color: primaryColor
+                                            .withValues(
+                                          alpha: 0.08,
+                                        ),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: CircleAvatar(
+                                        backgroundColor:
+                                            primaryColor
+                                                .withValues(
+                                          alpha: 0.14,
+                                        ),
+                                        backgroundImage:
+                                            _image != null
+                                                ? FileImage(
+                                                    _image!,
+                                                  )
+                                                : null,
+                                        child: _image == null
+                                            ? const Icon(
+                                                Icons
+                                                    .person_outline_rounded,
+                                                size: 50,
+                                                color:
+                                                    textColor,
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+
+                                    Positioned(
+                                      right: 2,
+                                      bottom: 2,
+                                      child: Container(
+                                        width: 38,
+                                        height: 38,
+                                        alignment:
+                                            Alignment.center,
+                                        decoration:
+                                            BoxDecoration(
+                                          color:
+                                              primaryColor,
+                                          shape:
+                                              BoxShape.circle,
+                                          border: Border.all(
+                                            color:
+                                                Colors.white,
+                                            width: 3,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons
+                                              .camera_alt_outlined,
+                                          size: 18,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                Text(
+                                  _image == null
+                                      ? 'Add profile photo'
+                                      : 'Change profile photo',
+                                  style: const TextStyle(
+                                    color: textColor,
+                                    fontSize: 14,
+                                    fontWeight:
+                                        FontWeight.w600,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 4),
+
+                                const Text(
+                                  'Optional',
+                                  style: TextStyle(
+                                    color:
+                                        secondaryTextColor,
+                                    fontSize: 12.5,
+                                    fontWeight:
+                                        FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        if (_showConfirmButtons) ...[
+                          const SizedBox(height: 16),
+
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: surfaceColor,
+                              borderRadius:
+                                  BorderRadius.circular(16),
+                              border: Border.all(
+                                color: borderColor,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child:
+                                      OutlinedButton.icon(
+                                    onPressed: _cancelPhoto,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      'Remove',
+                                    ),
+                                    style: OutlinedButton
+                                        .styleFrom(
+                                      foregroundColor:
+                                          errorColor,
+                                      side: const BorderSide(
+                                        color: errorColor,
+                                      ),
+                                      shape:
+                                          RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 10),
+
+                                Expanded(
+                                  child:
+                                      ElevatedButton.icon(
+                                    onPressed: _confirmPhoto,
+                                    icon: const Icon(
+                                      Icons.check_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      'Use photo',
+                                    ),
+                                    style: ElevatedButton
+                                        .styleFrom(
+                                      backgroundColor:
+                                          primaryColor,
+                                      foregroundColor:
+                                          Colors.black,
+                                      elevation: 0,
+                                      shape:
+                                          RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 30),
+
+                        // Full name
+                        const Text(
+                          'Full name',
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 14,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        TextFormField(
+                          controller: _nameController,
+                          enabled: !_isLoading,
+                          keyboardType: TextInputType.name,
+                          textInputAction:
+                              TextInputAction.next,
+                          textCapitalization:
+                              TextCapitalization.words,
+                          autofillHints: const [
+                            AutofillHints.name,
+                          ],
+                          cursorColor: textColor,
+                          decoration: _inputDecoration(
+                            hintText: 'Enter your full name',
+                            icon: Icons.person_outline_rounded,
+                          ),
+                          style: const TextStyle(
+                            color: textColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          validator: (String? value) {
+                            final String name =
+                                value?.trim() ?? '';
+
+                            if (name.isEmpty) {
+                              return 'Enter your full name.';
+                            }
+
+                            if (name.length < 2) {
+                              return 'Enter a valid name.';
+                            }
+
+                            return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Referral code
+                        const Text(
+                          'Referral code',
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 14,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+
+                        const SizedBox(height: 4),
+
+                        const Text(
+                          'Optional',
+                          style: TextStyle(
+                            color: secondaryTextColor,
+                            fontSize: 12.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        TextFormField(
+                          controller:
+                              _referralCodeController,
+                          enabled: !_isLoading,
+                          textInputAction:
+                              TextInputAction.done,
+                          textCapitalization:
+                              TextCapitalization.characters,
+                          cursorColor: textColor,
+                          decoration: _inputDecoration(
+                            hintText:
+                                'Enter your referral code',
+                            icon:
+                                Icons.card_giftcard_outlined,
+                          ),
+                          style: const TextStyle(
+                            color: textColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.4,
+                          ),
+                          onFieldSubmitted: (_) {
+                            if (!_isLoading) {
+                              _register();
+                            }
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Verified phone information
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius:
+                                BorderRadius.circular(16),
+                            border: Border.all(
+                              color: borderColor,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: primaryColor
+                                      .withValues(
+                                    alpha: 0.14,
+                                  ),
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    12,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons
+                                      .verified_user_outlined,
+                                  color: textColor,
+                                  size: 20,
+                                ),
+                              ),
+
+                              const SizedBox(width: 13),
+
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment
+                                          .start,
+                                  children: [
+                                    const Text(
+                                      'Verified phone number',
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontSize: 13.5,
+                                        fontWeight:
+                                            FontWeight.w600,
+                                      ),
+                                    ),
+
+                                    const SizedBox(height: 4),
+
+                                    Text(
+                                      widget.phoneNumber,
+                                      style: const TextStyle(
+                                        color:
+                                            secondaryTextColor,
+                                        fontSize: 13,
+                                        fontWeight:
+                                            FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                color: textColor,
+                                size: 20,
                               ),
                             ],
                           ),
+                        ),
+
+                        const Spacer(),
+
+                        const SizedBox(height: 28),
+
+                        // Primary button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: _isLoading
+                                ? null
+                                : _register,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.black,
+                              disabledBackgroundColor:
+                                  primaryColor.withValues(
+                                alpha: 0.45,
+                              ),
+                              elevation: 0,
+                              shadowColor:
+                                  Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 23,
+                                    height: 23,
+                                    child:
+                                        CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.black,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Save and continue',
+                                    textAlign:
+                                        TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight:
+                                          FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        Center(
+                          child: TextButton(
+                            onPressed:
+                                _isLoading ? null : _logOut,
+                            child: const Text(
+                              'Log out',
+                              style: TextStyle(
+                                color: secondaryTextColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                decoration:
+                                    TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Name',
-                    border: UnderlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your name';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _referralCodeController,
-                  decoration: const InputDecoration(
-                    labelText: 'Referral code, if you have one',
-                    border: UnderlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacementNamed('/login');
-                    },
-                    child: const Text('Log out', style: TextStyle(color: Colors.purple)),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

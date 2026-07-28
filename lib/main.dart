@@ -1,15 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 
 import 'authentication/login_screen.dart';
 import 'authentication/otp_screen.dart';
 import 'authentication/signup_screen.dart';
-import 'home/home_screen.dart';
-import 'widgets/loading_screen.dart';
-
 import 'firebase_options.dart';
+import 'home/home_screen.dart';
+import 'theme_controller.dart';
+import 'widgets/loading_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,57 +17,76 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
- // await FirebaseAppCheck.instance.activate(
-   // androidProvider: AndroidProvider.debug,
-  //);
-
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  static const Color primaryColor = Color(0xFF39FF14);
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppThemeController.themeMode,
+      builder: (
+        BuildContext context,
+        ThemeMode themeMode,
+        Widget? child,
+      ) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Alpha Passenger',
+          themeMode: themeMode,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.light,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: primaryColor,
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: Colors.white,
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: primaryColor,
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF101210),
+          ),
+          home: const LoadingScreen(),
+          routes: {
+            '/login': (_) => const LoginScreen(),
+            '/home': (_) => const HomeScreen(),
+          },
+          onGenerateRoute: (RouteSettings settings) {
+            switch (settings.name) {
+              case '/otp':
+                final Map<String, dynamic> args =
+                    settings.arguments as Map<String, dynamic>;
 
-      title: "Alpha Passenger",
+                return MaterialPageRoute(
+                  builder: (_) => OTPScreen(
+                    phoneNumber: args['phone'],
+                    verificationId: args['verificationId'],
+                  ),
+                );
 
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF39FF14),
-        ),
-      ),
+              case '/signup':
+                final String phone = settings.arguments as String;
 
-      home: const LoadingScreen(),
+                return MaterialPageRoute(
+                  builder: (_) => SignUpScreen(
+                    phoneNumber: phone,
+                  ),
+                );
+            }
 
-      routes: {
-        "/login": (_) => const LoginScreen(),
-        "/home": (_) => const HomeScreen(),
-      },
-
-      onGenerateRoute: (settings) {
-        switch (settings.name) {
-          case "/otp":
-            final args = settings.arguments as Map<String, dynamic>;
-
-            return MaterialPageRoute(
-              builder: (_) => OTPScreen(
-                phoneNumber: args["phone"],
-                verificationId: args["verificationId"],
-              ),
-            );
-
-          case "/signup":
-            final phone = settings.arguments as String;
-            return MaterialPageRoute(
-              builder: (_) => SignUpScreen(phoneNumber: phone),
-            );
-        }
-
-        return null;
+            return null;
+          },
+        );
       },
     );
   }
@@ -81,7 +99,10 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
+      builder: (
+        BuildContext context,
+        AsyncSnapshot<User?> snapshot,
+      ) {
         if (snapshot.connectionState != ConnectionState.active) {
           return const Scaffold(
             body: Center(
@@ -90,7 +111,7 @@ class AuthWrapper extends StatelessWidget {
           );
         }
 
-        final user = snapshot.data;
+        final User? user = snapshot.data;
 
         if (user == null) {
           return const LoginScreen();
