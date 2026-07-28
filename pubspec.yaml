@@ -49,6 +49,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/vehicles/
     - assets/images/south_sudan_flag.png
 
 flutter_launcher_icons:

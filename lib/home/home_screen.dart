@@ -8,12 +8,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/location_selection.dart';
+import '../models/ride_option.dart';
 import '../services/firestore_service.dart';
 import '../widgets/custom_drawer.dart';
 import '../widgets/loading_screen.dart';
 import '../widgets/location_permission_request.dart';
 import 'destination_search.dart';
 import 'map_view.dart';
+import 'order_confirmation_screen.dart';
 import 'order_panel.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -25,7 +27,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const Color primaryColor = Color(0xFF39FF14);
-  static const Color textColor = Color(0xFF111111);
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
@@ -62,7 +63,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-
     _loadUser();
     _checkPermission();
   }
@@ -78,12 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (user == null) {
       if (!mounted) return;
-
-      Navigator.pushReplacementNamed(
-        context,
-        '/login',
-      );
-
+      Navigator.pushReplacementNamed(context, '/login');
       return;
     }
 
@@ -91,11 +86,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (phoneNumber == null) {
       if (!mounted) return;
-
       setState(() {
         _isLoading = false;
       });
-
       return;
     }
 
@@ -130,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _locationPermissionGranted = true;
       });
-
       await _getCurrentLocation();
     } else {
       setState(() {
@@ -148,7 +140,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _locationPermissionGranted = true;
       });
-
       await _getCurrentLocation();
     } else if (status.isPermanentlyDenied) {
       await openAppSettings();
@@ -164,12 +155,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Please enable location services.',
-            ),
+            content: Text('Please enable location services.'),
           ),
         );
-
         return;
       }
 
@@ -180,7 +168,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       await _updateLocation(position);
-
       await _positionStream?.cancel();
 
       _positionStream = Geolocator.getPositionStream(
@@ -229,19 +216,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_mapController.isCompleted) {
       final GoogleMapController controller = await _mapController.future;
-
       await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          updatedLocation,
-          17,
-        ),
+        CameraUpdate.newLatLngZoom(updatedLocation, 17),
       );
     }
 
     await _resolveCurrentAddress();
 
     if (!mounted) return;
-
     setState(() {});
   }
 
@@ -284,11 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _auth.signOut();
 
     if (!mounted) return;
-
-    Navigator.pushReplacementNamed(
-      context,
-      '/login',
-    );
+    Navigator.pushReplacementNamed(context, '/login');
   }
 
   Future<void> _openDestinationSearch({
@@ -301,12 +279,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Waiting for your current location...',
-          ),
+          content: Text('Waiting for your current location...'),
         ),
       );
-
       return;
     }
 
@@ -383,55 +358,131 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_mapController.isCompleted) {
       final GoogleMapController controller = await _mapController.future;
-
       await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          selectedLocation,
-          16.5,
-        ),
+        CameraUpdate.newLatLngZoom(selectedLocation, 16.5),
       );
     }
   }
 
+  Future<void> _openBookingConfirmation(
+    RideOption ride,
+    PaymentMethod paymentMethod,
+  ) async {
+    final LatLng? pickupLocation = _pickupLocation ?? _currentLocation;
+
+    if (pickupLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Waiting for your current location...'),
+        ),
+      );
+      return;
+    }
+
+    final LatLng? destinationLocation = _destinationLocation;
+
+    if (destinationLocation == null || destinationAddress.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose your destination first.'),
+        ),
+      );
+      await _openDestinationSearch(isPickup: false);
+      return;
+    }
+
+    if (!mounted) return;
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrderConfirmationScreen(
+          pickupAddress: pickupAddress,
+          destinationAddress: destinationAddress,
+          pickupLocation: pickupLocation,
+          destinationLocation: destinationLocation,
+          ride: ride,
+          paymentMethod: paymentMethod,
+        ),
+      ),
+    );
+  }
+
   Widget _collapsedCard() {
+    final bool isDarkMode =
+        Theme.of(context).brightness == Brightness.dark;
+    final Color panelTextColor =
+        isDarkMode ? Colors.white : const Color(0xFF111311);
+    final Color secondaryTextColor = isDarkMode
+        ? const Color(0xFF9A9F9A)
+        : const Color(0xFF687068);
+    final Color controlColor = isDarkMode
+        ? const Color(0xFF242724)
+        : const Color(0xFFF0F3F0);
+
     return SizedBox(
       height: 90,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 15,
+          horizontal: 19,
+          vertical: 11,
         ),
         child: Row(
           children: [
             Container(
-              width: 56,
-              height: 56,
+              width: 76,
+              height: 62,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.directions_car_filled_rounded,
-                color: textColor,
-                size: 31,
-              ),
-            ),
-            const SizedBox(width: 15),
-            const Expanded(
-              child: Text(
-                'Order Now',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+                color: primaryColor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(
+                  color: primaryColor.withValues(alpha: 0.28),
                 ),
               ),
+              child: Image.asset(
+                'assets/images/vehicles/alpha_standard.png',
+                fit: BoxFit.contain,
+              ),
             ),
-            const Icon(
-              Icons.keyboard_arrow_up_rounded,
-              color: textColor,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Order now',
+                    style: TextStyle(
+                      color: panelTextColor,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Choose a ride that fits you',
+                    style: TextStyle(
+                      color: secondaryTextColor,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: controlColor,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.keyboard_arrow_up_rounded,
+                color: panelTextColor,
+              ),
             ),
           ],
         ),
@@ -469,16 +520,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 : _defaultCamera,
             markers: _markers,
             polylines: _polylines,
-            onMapCreated: (
-              GoogleMapController controller,
-            ) {
+            onMapCreated: (GoogleMapController controller) {
               if (!_mapController.isCompleted) {
                 _mapController.complete(controller);
               }
             },
           ),
-
-          // Menu button
           Positioned(
             top: 50,
             left: 16,
@@ -493,8 +540,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
-          // Current-location button
           Positioned(
             top: 50,
             right: 16,
@@ -502,23 +547,19 @@ class _HomeScreenState extends State<HomeScreen> {
               radius: 24,
               backgroundColor: Colors.white,
               child: IconButton(
-                icon: const Icon(
-                  Icons.my_location_rounded,
-                ),
+                icon: const Icon(Icons.my_location_rounded),
                 onPressed: _getCurrentLocation,
               ),
             ),
           ),
-
-          // Bottom ride-ordering panel
           DraggableScrollableSheet(
             initialChildSize: 0.13,
             minChildSize: 0.13,
-            maxChildSize: 0.60,
+            maxChildSize: 0.68,
             snap: true,
             snapSizes: const [
               0.13,
-              0.60,
+              0.68,
             ],
             builder: (
               BuildContext context,
@@ -533,22 +574,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       _sheetSize = notification.extent;
                     });
                   }
-
                   return false;
                 },
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF101210)
+                        : Colors.white,
+                    borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(30),
                     ),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 10,
+                        color: Colors.black38,
+                        blurRadius: 16,
+                        offset: Offset(0, -4),
                       ),
                     ],
                   ),
+                  clipBehavior: Clip.antiAlias,
                   child: SingleChildScrollView(
                     controller: scrollController,
                     child: _sheetSize < 0.20
@@ -557,31 +601,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             pickupAddress: pickupAddress,
                             destinationAddress: destinationAddress,
                             onPickupTap: () {
-                              _openDestinationSearch(
-                                isPickup: true,
-                              );
+                              _openDestinationSearch(isPickup: true);
                             },
                             onDestinationTap: () {
-                              _openDestinationSearch(
-                                isPickup: false,
-                              );
+                              _openDestinationSearch(isPickup: false);
                             },
-                            onConfirmPickup: () {
-                              if ((_pickupLocation ?? _currentLocation) ==
-                                  null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Waiting for current location...',
-                                    ),
-                                  ),
-                                );
-
-                                return;
-                              }
-
-                              // Continue to ride confirmation here.
-                            },
+                            onConfirmRide: _openBookingConfirmation,
                           ),
                   ),
                 ),

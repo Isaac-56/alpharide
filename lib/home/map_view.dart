@@ -23,37 +23,21 @@ class MapView extends StatelessWidget {
   Widget build(BuildContext context) {
     return GoogleMap(
       initialCameraPosition: initialCameraPosition,
-
       onMapCreated: onMapCreated,
-
       onCameraMove: onCameraMove,
-
       markers: markers,
-
       polylines: polylines,
-
       myLocationEnabled: myLocationEnabled,
-
       myLocationButtonEnabled: false,
-
       zoomControlsEnabled: false,
-
       compassEnabled: true,
-
       mapToolbarEnabled: false,
-
       trafficEnabled: false,
-
       buildingsEnabled: true,
-
       indoorViewEnabled: true,
-
       rotateGesturesEnabled: true,
-
       tiltGesturesEnabled: true,
-
       zoomGesturesEnabled: true,
-
       mapType: MapType.normal,
     );
   }

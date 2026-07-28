@@ -1,0 +1,416 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../models/ride_option.dart';
+import 'cancel_reason_screen.dart';
+
+class DriverSearchScreen extends StatefulWidget {
+  final LatLng pickupLocation;
+  final String pickupAddress;
+  final RideOption ride;
+  final PaymentMethod paymentMethod;
+
+  const DriverSearchScreen({
+    super.key,
+    required this.pickupLocation,
+    required this.pickupAddress,
+    required this.ride,
+    required this.paymentMethod,
+  });
+
+  @override
+  State<DriverSearchScreen> createState() => _DriverSearchScreenState();
+}
+
+class _DriverSearchScreenState extends State<DriverSearchScreen>
+    with SingleTickerProviderStateMixin {
+  static const Color primaryColor = Color(0xFF39FF14);
+  static const Color backgroundColor = Color(0xFF101210);
+  static const Color surfaceColor = Color(0xFF202320);
+  static const Color mutedColor = Color(0xFF9A9F9A);
+
+  late final AnimationController _progressController;
+  final Set<Marker> _markers = {};
+
+  @override
+  void initState() {
+    super.initState();
+
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+
+    _buildDriverMarkers();
+  }
+
+  @override
+  void dispose() {
+    _progressController.dispose();
+    super.dispose();
+  }
+
+  Future<BitmapDescriptor> _vehicleMarker() async {
+    final ByteData data = await rootBundle.load(widget.ride.assetPath);
+    final ui.Codec codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: 94,
+    );
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    final ByteData? byteData = await frame.image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+
+    if (byteData == null) {
+      return BitmapDescriptor.defaultMarkerWithHue(
+        BitmapDescriptor.hueGreen,
+      );
+    }
+
+    return BitmapDescriptor.bytes(
+      byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      ),
+    );
+  }
+
+  Future<void> _buildDriverMarkers() async {
+    final BitmapDescriptor carIcon = await _vehicleMarker();
+
+    if (!mounted) return;
+
+    final double latitude = widget.pickupLocation.latitude;
+    final double longitude = widget.pickupLocation.longitude;
+
+    setState(() {
+      _markers
+        ..clear()
+        ..add(
+          Marker(
+            markerId: const MarkerId('pickup'),
+            position: widget.pickupLocation,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
+            infoWindow: const InfoWindow(
+              title: 'Your pickup',
+            ),
+          ),
+        )
+        ..addAll(
+          [
+            LatLng(latitude + 0.0022, longitude - 0.0014),
+            LatLng(latitude - 0.0017, longitude + 0.0018),
+            LatLng(latitude + 0.0008, longitude + 0.0026),
+          ].asMap().entries.map(
+                (MapEntry<int, LatLng> entry) => Marker(
+                  markerId: MarkerId('driver-${entry.key}'),
+                  position: entry.value,
+                  icon: carIcon,
+                  anchor: const Offset(0.5, 0.5),
+                  flat: true,
+                ),
+              ),
+        );
+    });
+  }
+
+  Future<void> _showCancelConfirmation() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+            decoration: const BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Align(
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4B4F4B),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+
+                      final bool? cancelled = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CancelReasonScreen(),
+                        ),
+                      );
+
+                      if (cancelled == true && mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: const Text(
+                      'Cancel order',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Are you sure?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Cancelling may lead to a longer wait, and rebooking does not guarantee a faster trip.',
+                  style: TextStyle(
+                    color: mutedColor,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: const Color(0xFF071007),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(17),
+                      ),
+                    ),
+                    child: const Text(
+                      'Wait for driver',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop) {
+          _showCancelConfirmation();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: backgroundColor,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: widget.pickupLocation,
+                  zoom: 15.7,
+                ),
+                markers: _markers,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                mapToolbarEnabled: false,
+                padding: const EdgeInsets.only(
+                  bottom: 260,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.40),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: backgroundColor.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.location_on_rounded,
+                          color: primaryColor,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 7),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: 230,
+                          ),
+                          child: Text(
+                            widget.pickupAddress,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: _searchPanel(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _searchPanel() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+        decoration: const BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(28),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Looking for a driver',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 25,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${widget.ride.name} • ~ ${widget.ride.estimatedFare} ETB',
+                        style: const TextStyle(
+                          color: mutedColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: 86,
+                  height: 58,
+                  child: Image.asset(
+                    widget.ride.assetPath,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            AnimatedBuilder(
+              animation: _progressController,
+              builder: (BuildContext context, Widget? child) {
+                return LinearProgressIndicator(
+                  value: _progressController.value,
+                  minHeight: 4,
+                  borderRadius: BorderRadius.circular(99),
+                  backgroundColor: surfaceColor,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    primaryColor,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'We are matching you with the closest available driver.',
+              style: TextStyle(
+                color: mutedColor,
+                fontSize: 13.5,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            TextButton(
+              onPressed: _showCancelConfirmation,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text(
+                'Cancel order',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

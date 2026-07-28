@@ -9,19 +9,19 @@ class PlacesService {
   static const String apiKey = "AIzaSyCqwEeIXaslrBo2QCex3cZCwxOIfq0NzZY";
 
   Future<List<PredictionModel>> searchPlaces(
-      String input,
-      double latitude,
-      double longitude,
-      ) async {
+    String input,
+    double latitude,
+    double longitude,
+  ) async {
     if (input.trim().isEmpty) return [];
 
     final url = Uri.parse(
       "https://maps.googleapis.com/maps/api/place/autocomplete/json"
-          "?input=$input"
-          "&location=$latitude,$longitude"
-          "&radius=50000"
-          "&strictbounds=false"
-          "&key=$apiKey",
+      "?input=$input"
+      "&location=$latitude,$longitude"
+      "&radius=50000"
+      "&strictbounds=false"
+      "&key=$apiKey",
     );
 
     final response = await http.get(url);
@@ -39,17 +39,15 @@ class PlacesService {
 
     final List predictions = data["predictions"];
 
-    return predictions
-        .map((e) => PredictionModel.fromJson(e))
-        .toList();
+    return predictions.map((e) => PredictionModel.fromJson(e)).toList();
   }
 
   Future<Map<String, dynamic>> getPlaceDetails(String placeId) async {
     final url = Uri.parse(
       "https://maps.googleapis.com/maps/api/place/details/json"
-          "?place_id=$placeId"
-          "&fields=geometry/location,formatted_address,name"
-          "&key=$apiKey",
+      "?place_id=$placeId"
+      "&fields=geometry/location,formatted_address,name"
+      "&key=$apiKey",
     );
 
     final response = await http.get(url);
