@@ -7,7 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../models/prediction_model.dart';
+import '../models/location_selection.dart';
 import '../services/firestore_service.dart';
 import '../widgets/custom_drawer.dart';
 import '../widgets/loading_screen.dart';
@@ -24,31 +24,32 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const Color primaryColor = Color(0xFF39FF14);
+  static const Color textColor = Color(0xFF111111);
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
   final FirestoreService _firestoreService = FirestoreService();
-
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
 
-  StreamSubscription<Position>? _positionStream;
-
   final Set<Marker> _markers = {};
-
   final Set<Polyline> _polylines = {};
+
+  StreamSubscription<Position>? _positionStream;
 
   Map<String, dynamic>? userData;
 
   bool _isLoading = true;
-
   bool _locationPermissionGranted = false;
+  bool _pickupManuallySelected = false;
 
   LatLng? _currentLocation;
+  LatLng? _pickupLocation;
+  LatLng? _destinationLocation;
 
   String pickupAddress = 'Detecting current location...';
-
   String destinationAddress = '';
 
   double _sheetSize = 0.13;
@@ -192,27 +193,25 @@ class _HomeScreenState extends State<HomeScreen> {
           _updateLocation(newPosition);
         },
         onError: (Object error) {
-          debugPrint(
-            'Location stream error: $error',
-          );
+          debugPrint('Location stream error: $error');
         },
       );
     } catch (error) {
-      debugPrint(
-        'Unable to obtain location: $error',
-      );
+      debugPrint('Unable to obtain location: $error');
     }
   }
 
-  Future<void> _updateLocation(
-    Position position,
-  ) async {
+  Future<void> _updateLocation(Position position) async {
     final LatLng updatedLocation = LatLng(
       position.latitude,
       position.longitude,
     );
 
     _currentLocation = updatedLocation;
+
+    if (!_pickupManuallySelected) {
+      _pickupLocation = updatedLocation;
+    }
 
     _markers
       ..removeWhere(
@@ -239,14 +238,14 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    await _resolveAddress();
+    await _resolveCurrentAddress();
 
     if (!mounted) return;
 
     setState(() {});
   }
 
-  Future<void> _resolveAddress() async {
+  Future<void> _resolveCurrentAddress() async {
     final LatLng? currentLocation = _currentLocation;
 
     if (currentLocation == null) return;
@@ -257,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
         currentLocation.longitude,
       );
 
-      if (places.isEmpty) return;
+      if (places.isEmpty || _pickupManuallySelected) return;
 
       final Placemark place = places.first;
 
@@ -266,19 +265,18 @@ class _HomeScreenState extends State<HomeScreen> {
         place.locality,
       ]
           .whereType<String>()
-          .where(
-            (String part) => part.trim().isNotEmpty,
-          )
+          .map((String part) => part.trim())
+          .where((String part) => part.isNotEmpty)
           .toList();
 
       pickupAddress =
           addressParts.isEmpty ? 'Current location' : addressParts.join(', ');
     } catch (error) {
-      debugPrint(
-        'Unable to resolve address: $error',
-      );
+      debugPrint('Unable to resolve address: $error');
 
-      pickupAddress = 'Current location';
+      if (!_pickupManuallySelected) {
+        pickupAddress = 'Current location';
+      }
     }
   }
 
@@ -312,12 +310,18 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final PredictionModel? result = await Navigator.push<PredictionModel>(
+    final LatLng initialSearchLocation = isPickup
+        ? _pickupLocation ?? currentLocation
+        : _destinationLocation ?? currentLocation;
+
+    final LocationSelection? result = await Navigator.push<LocationSelection>(
       context,
       MaterialPageRoute(
         builder: (_) => DestinationSearch(
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude,
+          latitude: initialSearchLocation.latitude,
+          longitude: initialSearchLocation.longitude,
+          pickupAddress: pickupAddress,
+          initialAddress: isPickup ? pickupAddress : destinationAddress,
           isPickup: isPickup,
         ),
       ),
@@ -325,13 +329,68 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result == null || !mounted) return;
 
+    final LatLng selectedLocation = LatLng(
+      result.latitude,
+      result.longitude,
+    );
+
     setState(() {
       if (isPickup) {
-        pickupAddress = result.mainText;
+        _pickupManuallySelected = true;
+        _pickupLocation = selectedLocation;
+        pickupAddress = result.displayName;
+
+        _markers
+          ..removeWhere(
+            (Marker marker) => marker.markerId.value == 'pickup',
+          )
+          ..add(
+            Marker(
+              markerId: const MarkerId('pickup'),
+              position: selectedLocation,
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen,
+              ),
+              infoWindow: InfoWindow(
+                title: 'Pickup point',
+                snippet: result.address,
+              ),
+            ),
+          );
       } else {
-        destinationAddress = result.mainText;
+        _destinationLocation = selectedLocation;
+        destinationAddress = result.displayName;
+
+        _markers
+          ..removeWhere(
+            (Marker marker) => marker.markerId.value == 'destination',
+          )
+          ..add(
+            Marker(
+              markerId: const MarkerId('destination'),
+              position: selectedLocation,
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueRed,
+              ),
+              infoWindow: InfoWindow(
+                title: 'Destination',
+                snippet: result.address,
+              ),
+            ),
+          );
       }
     });
+
+    if (_mapController.isCompleted) {
+      final GoogleMapController controller = await _mapController.future;
+
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          selectedLocation,
+          16.5,
+        ),
+      );
+    }
   }
 
   Widget _collapsedCard() {
@@ -345,15 +404,17 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           children: [
             Container(
-              width: 55,
-              height: 55,
+              width: 56,
+              height: 56,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(15),
+                color: primaryColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(
                 Icons.directions_car_filled_rounded,
-                color: Colors.green,
+                color: textColor,
+                size: 31,
               ),
             ),
             const SizedBox(width: 15),
@@ -361,13 +422,16 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Text(
                 'Order Now',
                 style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
                 ),
               ),
             ),
             const Icon(
-              Icons.keyboard_arrow_up,
+              Icons.keyboard_arrow_up_rounded,
+              color: textColor,
             ),
           ],
         ),
@@ -409,9 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
               GoogleMapController controller,
             ) {
               if (!_mapController.isCompleted) {
-                _mapController.complete(
-                  controller,
-                );
+                _mapController.complete(controller);
               }
             },
           ),
@@ -424,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
               radius: 24,
               backgroundColor: Colors.white,
               child: IconButton(
-                icon: const Icon(Icons.menu),
+                icon: const Icon(Icons.menu_rounded),
                 onPressed: () {
                   _scaffoldKey.currentState?.openDrawer();
                 },
@@ -432,7 +494,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Current location button
+          // Current-location button
           Positioned(
             top: 50,
             right: 16,
@@ -441,7 +503,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.white,
               child: IconButton(
                 icon: const Icon(
-                  Icons.my_location,
+                  Icons.my_location_rounded,
                 ),
                 onPressed: _getCurrentLocation,
               ),
@@ -505,10 +567,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               );
                             },
                             onConfirmPickup: () {
-                              if (_currentLocation == null) {
-                                ScaffoldMessenger.of(
-                                  context,
-                                ).showSnackBar(
+                              if ((_pickupLocation ?? _currentLocation) ==
+                                  null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
                                       'Waiting for current location...',
@@ -519,8 +580,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return;
                               }
 
-                              // Add ride-confirmation
-                              // functionality here.
+                              // Continue to ride confirmation here.
                             },
                           ),
                   ),
