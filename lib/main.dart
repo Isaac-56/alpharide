@@ -38,6 +38,8 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Alpha Passenger',
           themeMode: themeMode,
+          themeAnimationDuration: const Duration(milliseconds: 600),
+          themeAnimationCurve: Curves.easeInOutCubicEmphasized,
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.light,

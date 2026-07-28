@@ -35,6 +35,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
 
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
+
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
 
@@ -70,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
+    _sheetController.dispose();
     super.dispose();
   }
 
@@ -86,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (phoneNumber == null) {
       if (!mounted) return;
+
       setState(() {
         _isLoading = false;
       });
@@ -123,6 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _locationPermissionGranted = true;
       });
+
       await _getCurrentLocation();
     } else {
       setState(() {
@@ -140,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _locationPermissionGranted = true;
       });
+
       await _getCurrentLocation();
     } else if (status.isPermanentlyDenied) {
       await openAppSettings();
@@ -216,6 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_mapController.isCompleted) {
       final GoogleMapController controller = await _mapController.future;
+
       await controller.animateCamera(
         CameraUpdate.newLatLngZoom(updatedLocation, 17),
       );
@@ -358,6 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_mapController.isCompleted) {
       final GoogleMapController controller = await _mapController.future;
+
       await controller.animateCamera(
         CameraUpdate.newLatLngZoom(selectedLocation, 16.5),
       );
@@ -387,6 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
           content: Text('Choose your destination first.'),
         ),
       );
+
       await _openDestinationSearch(isPickup: false);
       return;
     }
@@ -408,14 +418,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _expandOrderPanel() async {
+    if (!_sheetController.isAttached) return;
+
+    await _sheetController.animateTo(
+      0.68,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   Widget _collapsedCard() {
     final bool isDarkMode =
         Theme.of(context).brightness == Brightness.dark;
+
     final Color panelTextColor =
         isDarkMode ? Colors.white : const Color(0xFF111311);
+
     final Color secondaryTextColor = isDarkMode
         ? const Color(0xFF9A9F9A)
         : const Color(0xFF687068);
+
     final Color controlColor = isDarkMode
         ? const Color(0xFF242724)
         : const Color(0xFFF0F3F0);
@@ -460,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       letterSpacing: -0.3,
                     ),
                   ),
-                  SizedBox(height: 3),
+                  const SizedBox(height: 3),
                   Text(
                     'Choose a ride that fits you',
                     style: TextStyle(
@@ -471,17 +494,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            Container(
-              width: 34,
-              height: 34,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: controlColor,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.keyboard_arrow_up_rounded,
-                color: panelTextColor,
+            Material(
+              color: controlColor,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: _expandOrderPanel,
+                child: SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(
+                    Icons.keyboard_arrow_up_rounded,
+                    color: panelTextColor,
+                  ),
+                ),
               ),
             ),
           ],
@@ -553,6 +579,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           DraggableScrollableSheet(
+            controller: _sheetController,
             initialChildSize: 0.13,
             minChildSize: 0.13,
             maxChildSize: 0.68,
@@ -574,6 +601,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _sheetSize = notification.extent;
                     });
                   }
+
                   return false;
                 },
                 child: Container(
