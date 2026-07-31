@@ -1,71 +1,166 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class AuthController with ChangeNotifier {
-  FirebaseAuth _auth = FirebaseAuth.instance;
+class AuthController extends ChangeNotifier {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   String _verificationId = '';
 
-  // Method to initiate phone number verification and send OTP
-  Future<void> verifyPhoneNumber(String phoneNumber, BuildContext context) async {
+  Future<void> verifyPhoneNumber(
+    String phoneNumber,
+    BuildContext context,
+  ) async {
     try {
       await _auth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          // Auto-retrieve or instantly verifying the code if the device recognizes it
-          await _auth.signInWithCredential(credential);
-          notifyListeners();
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          // Handle the error
-          if (e.code == 'invalid-phone-number') {
-            _showSnackBar(context, 'The provided phone number is not valid.');
-          } else {
-            _showSnackBar(context, 'Verification failed: ${e.message}');
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (
+          PhoneAuthCredential credential,
+        ) async {
+          try {
+            await _auth.signInWithCredential(credential);
+            notifyListeners();
+          } on FirebaseAuthException catch (error) {
+            if (!context.mounted) return;
+
+            _showSnackBar(
+              context,
+              error.message ?? 'Automatic phone verification failed.',
+            );
           }
         },
-        codeSent: (String verificationId, int? resendToken) {
-          _verificationId = verificationId;
-          _showSnackBar(context, 'OTP has been sent to your phone.');
+        verificationFailed: (
+          FirebaseAuthException error,
+        ) {
+          if (!context.mounted) return;
+
+          final String message = error.code == 'invalid-phone-number'
+              ? 'The provided phone number is not valid.'
+              : error.message ?? 'Phone verification failed.';
+
+          _showSnackBar(context, message);
         },
-        codeAutoRetrievalTimeout: (String verificationId) {
+        codeSent: (
+          String verificationId,
+          int? resendToken,
+        ) {
+          _verificationId = verificationId;
+
+          if (!context.mounted) return;
+
+          _showSnackBar(
+            context,
+            'OTP has been sent to your phone.',
+          );
+        },
+        codeAutoRetrievalTimeout: (
+          String verificationId,
+        ) {
           _verificationId = verificationId;
         },
-        timeout: const Duration(seconds: 60),
       );
-    } catch (e) {
-      _showSnackBar(context, 'Failed to Verify Phone Number: $e');
+    } on FirebaseAuthException catch (error) {
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        error.message ?? 'Unable to verify this phone number.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        'Unable to verify this phone number.',
+      );
     }
   }
 
-  // Method to verify the OTP entered by the user
-  Future<void> verifyOTP(String smsCode, BuildContext context) async {
+  Future<void> verifyOTP(
+    String smsCode,
+    BuildContext context,
+  ) async {
+    if (_verificationId.isEmpty) {
+      _showSnackBar(
+        context,
+        'Please request a new verification code.',
+      );
+      return;
+    }
+
     try {
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
+      final PhoneAuthCredential credential = PhoneAuthProvider.credential(
         verificationId: _verificationId,
         smsCode: smsCode,
       );
-      UserCredential userCredential = await _auth.signInWithCredential(credential);
 
-      if (userCredential.user != null) {
-        _showSnackBar(context, 'Phone number verified successfully!');
-        // You can navigate the user to a different screen here
-        notifyListeners();
-      }
-    } catch (e) {
-      _showSnackBar(context, 'Failed to verify OTP: $e');
+      final UserCredential result =
+          await _auth.signInWithCredential(credential);
+
+      if (result.user == null) return;
+
+      notifyListeners();
+
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        'Phone number verified successfully.',
+      );
+    } on FirebaseAuthException catch (error) {
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        error.message ?? 'The verification code is invalid.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        'Unable to verify the code.',
+      );
     }
   }
 
-  // Sign out method
-  Future<void> signOut(BuildContext context) async {
-    await _auth.signOut();
-    _showSnackBar(context, 'User signed out successfully');
+  Future<void> signOut(
+    BuildContext context,
+  ) async {
+    try {
+      await _auth.signOut();
+      notifyListeners();
+
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        'You have been logged out.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+
+      _showSnackBar(
+        context,
+        'Unable to log out. Please try again.',
+      );
+    }
   }
 
-  // Utility function to show snackbars
-  void _showSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  void _showSnackBar(
+    BuildContext context,
+    String message,
+  ) {
+    if (!context.mounted) return;
+
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
   }
 }

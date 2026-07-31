@@ -1,46 +1,36 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:passengerapp/main.dart';
 
-class LoadingScreen extends StatefulWidget {
+class LoadingScreen extends StatelessWidget {
   const LoadingScreen({super.key});
 
-  @override
-  State<LoadingScreen> createState() => _LoadingScreenState();
-}
-
-class _LoadingScreenState extends State<LoadingScreen> {
-  @override
-  void initState() {
-    super.initState();
-
-    Timer(const Duration(seconds: 3), () {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const AuthWrapper(),
-        ),
-      );
-    });
-  }
+  static const Color primaryColor = Color(0xFF39FF14);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF39FF14),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              "assets/images/logo.png",
-              width: 550,
-            ),
-            const SizedBox(height: 25),
-            const CircularProgressIndicator(),
-          ],
+      backgroundColor: primaryColor,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/images/logo.png',
+                width: 550,
+                cacheWidth: 800,
+                filterQuality: FilterQuality.medium,
+              ),
+              const SizedBox(height: 25),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Colors.black,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

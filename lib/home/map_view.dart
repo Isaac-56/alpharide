@@ -6,18 +6,18 @@ class MapView extends StatelessWidget {
   final Set<Marker> markers;
   final Set<Polyline> polylines;
   final ValueChanged<GoogleMapController> onMapCreated;
-  final Function(CameraPosition)? onCameraMove;
+  final ValueChanged<CameraPosition>? onCameraMove;
   final bool myLocationEnabled;
 
   const MapView({
-    Key? key,
+    super.key,
     required this.initialCameraPosition,
     required this.markers,
     required this.polylines,
     required this.onMapCreated,
     this.onCameraMove,
     this.myLocationEnabled = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,9 +34,9 @@ class MapView extends StatelessWidget {
       mapToolbarEnabled: false,
       trafficEnabled: false,
       buildingsEnabled: true,
-      indoorViewEnabled: true,
+      indoorViewEnabled: false,
       rotateGesturesEnabled: true,
-      tiltGesturesEnabled: true,
+      tiltGesturesEnabled: false,
       zoomGesturesEnabled: true,
       mapType: MapType.normal,
     );

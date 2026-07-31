@@ -29,6 +29,8 @@ class _OTPScreenState extends State<OTPScreen>
 
   final FocusNode _focusNode = FocusNode();
 
+  final ValueNotifier<int> _secondsRemaining = ValueNotifier<int>(60);
+
   static const Color primaryColor = Color(0xFF39FF14);
   static const Color textColor = Color(0xFF111111);
   static const Color secondaryTextColor = Color(0xFF6B6B6B);
@@ -39,14 +41,13 @@ class _OTPScreenState extends State<OTPScreen>
 
   late String _verificationId;
 
-  late AnimationController _shakeController;
-  late Animation<double> _shakeAnimation;
+  late final AnimationController _shakeController;
+  late final Animation<double> _shakeAnimation;
 
   Timer? _timer;
 
   String _otp = '';
   bool _verifying = false;
-  int _secondsRemaining = 60;
 
   @override
   void initState() {
@@ -59,28 +60,45 @@ class _OTPScreenState extends State<OTPScreen>
       duration: const Duration(milliseconds: 450),
     );
 
-    _shakeAnimation = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(begin: 0, end: -10),
-        weight: 1,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: -10, end: 10),
-        weight: 2,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 10, end: -8),
-        weight: 2,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: -8, end: 8),
-        weight: 2,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 8, end: 0),
-        weight: 1,
-      ),
-    ]).animate(
+    _shakeAnimation = TweenSequence<double>(
+      [
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: 0,
+            end: -10,
+          ),
+          weight: 1,
+        ),
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: -10,
+            end: 10,
+          ),
+          weight: 2,
+        ),
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: 10,
+            end: -8,
+          ),
+          weight: 2,
+        ),
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: -8,
+            end: 8,
+          ),
+          weight: 2,
+        ),
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: 8,
+            end: 0,
+          ),
+          weight: 1,
+        ),
+      ],
+    ).animate(
       CurvedAnimation(
         parent: _shakeController,
         curve: Curves.easeInOut,
@@ -97,6 +115,7 @@ class _OTPScreenState extends State<OTPScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _secondsRemaining.dispose();
     _controller.dispose();
     _focusNode.dispose();
     _shakeController.dispose();
@@ -119,10 +138,7 @@ class _OTPScreenState extends State<OTPScreen>
 
   void _startTimer() {
     _timer?.cancel();
-
-    setState(() {
-      _secondsRemaining = 60;
-    });
+    _secondsRemaining.value = 60;
 
     _timer = Timer.periodic(
       const Duration(seconds: 1),
@@ -132,55 +148,59 @@ class _OTPScreenState extends State<OTPScreen>
           return;
         }
 
-        if (_secondsRemaining <= 1) {
+        final int remaining = _secondsRemaining.value;
+
+        if (remaining <= 1) {
           timer.cancel();
-
-          setState(() {
-            _secondsRemaining = 0;
-          });
-
+          _secondsRemaining.value = 0;
           return;
         }
 
-        setState(() {
-          _secondsRemaining--;
-        });
+        _secondsRemaining.value = remaining - 1;
       },
     );
   }
 
-  String get _timerText {
-    final int minutes = _secondsRemaining ~/ 60;
-    final int seconds = _secondsRemaining % 60;
+  String _formatTimer(int totalSeconds) {
+    final int minutes = totalSeconds ~/ 60;
+    final int seconds = totalSeconds % 60;
 
     return '$minutes:'
         '${seconds.toString().padLeft(2, '0')}';
   }
 
   void _showError(String message) {
+    if (!mounted) return;
+
     _shakeController.forward(from: 0);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: errorColor,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
-        backgroundColor: errorColor,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(20),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-      ),
-    );
+      );
   }
 
   Future<void> _verifyOTP() async {
+    if (_verifying) return;
+
     FocusScope.of(context).unfocus();
 
     if (_otp.length != 6) {
@@ -209,6 +229,8 @@ class _OTPScreenState extends State<OTPScreen>
       );
 
       if (!mounted) return;
+
+      _timer?.cancel();
 
       if (userExists) {
         Navigator.pushNamedAndRemoveUntil(
@@ -241,7 +263,9 @@ class _OTPScreenState extends State<OTPScreen>
     } catch (error) {
       if (!mounted) return;
 
-      _showError(error.toString());
+      _showError(
+        'Unable to verify the code. Please try again.',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -252,7 +276,7 @@ class _OTPScreenState extends State<OTPScreen>
   }
 
   Future<void> _resendOTP() async {
-    if (_secondsRemaining != 0 || _verifying) {
+    if (_secondsRemaining.value != 0 || _verifying) {
       return;
     }
 
@@ -264,14 +288,27 @@ class _OTPScreenState extends State<OTPScreen>
         verificationCompleted: (
           PhoneAuthCredential credential,
         ) async {
-          await _auth.signInWithCredential(
-            credential,
-          );
+          try {
+            await _auth.signInWithCredential(
+              credential,
+            );
+          } on FirebaseAuthException catch (error) {
+            if (!mounted) return;
+
+            _secondsRemaining.value = 0;
+
+            _showError(
+              error.message ?? 'Automatic verification failed.',
+            );
+          }
         },
         verificationFailed: (
           FirebaseAuthException error,
         ) {
           if (!mounted) return;
+
+          _timer?.cancel();
+          _secondsRemaining.value = 0;
 
           _showError(
             error.message ?? 'Unable to resend the verification code.',
@@ -287,24 +324,29 @@ class _OTPScreenState extends State<OTPScreen>
             _verificationId = verificationId;
           });
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'A new verification code was sent.',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+          final ScaffoldMessengerState messenger =
+              ScaffoldMessenger.of(context);
+
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'A new verification code was sent.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                backgroundColor: textColor,
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.all(20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              backgroundColor: textColor,
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          );
+            );
         },
         codeAutoRetrievalTimeout: (
           String verificationId,
@@ -315,7 +357,12 @@ class _OTPScreenState extends State<OTPScreen>
     } catch (error) {
       if (!mounted) return;
 
-      _showError(error.toString());
+      _timer?.cancel();
+      _secondsRemaining.value = 0;
+
+      _showError(
+        'Unable to resend the code. Please try again.',
+      );
     }
   }
 
@@ -347,7 +394,7 @@ class _OTPScreenState extends State<OTPScreen>
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(
+              children: List<Widget>.generate(
                 6,
                 (int index) {
                   final String digit = index < _otp.length ? _otp[index] : '';
@@ -393,6 +440,59 @@ class _OTPScreenState extends State<OTPScreen>
     );
   }
 
+  Widget _buildResendSection() {
+    return ValueListenableBuilder<int>(
+      valueListenable: _secondsRemaining,
+      builder: (
+        BuildContext context,
+        int secondsRemaining,
+        Widget? child,
+      ) {
+        final bool canResend = secondsRemaining == 0 && !_verifying;
+
+        return Column(
+          children: [
+            Text(
+              secondsRemaining == 0
+                  ? 'Didn’t receive the code?'
+                  : 'Request a new code in '
+                      '${_formatTimer(secondsRemaining)}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: secondaryTextColor,
+                fontSize: 13.5,
+                height: 1.4,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: canResend ? _resendOTP : null,
+              style: TextButton.styleFrom(
+                foregroundColor: textColor,
+                disabledForegroundColor: secondaryTextColor,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+              ),
+              child: Text(
+                'Resend code',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  decoration: canResend
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -420,8 +520,6 @@ class _OTPScreenState extends State<OTPScreen>
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(height: 8),
-
-                    // Circular outlined back button
                     Align(
                       alignment: Alignment.centerLeft,
                       child: SizedBox(
@@ -455,13 +553,10 @@ class _OTPScreenState extends State<OTPScreen>
                         ),
                       ),
                     ),
-
                     SizedBox(
                       height: keyboardVisible ? 18 : 36,
                     ),
-
                     if (!keyboardVisible) ...[
-                      // Verification illustration
                       Container(
                         width: 144,
                         height: 144,
@@ -489,10 +584,8 @@ class _OTPScreenState extends State<OTPScreen>
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 36),
                     ],
-
                     const Text(
                       'Verify your number',
                       textAlign: TextAlign.center,
@@ -504,9 +597,7 @@ class _OTPScreenState extends State<OTPScreen>
                         letterSpacing: -0.7,
                       ),
                     ),
-
                     const SizedBox(height: 14),
-
                     Text.rich(
                       TextSpan(
                         style: const TextStyle(
@@ -531,14 +622,10 @@ class _OTPScreenState extends State<OTPScreen>
                       ),
                       textAlign: TextAlign.center,
                     ),
-
                     SizedBox(
                       height: keyboardVisible ? 20 : 32,
                     ),
-
                     _buildOTPBoxes(),
-
-                    // Hidden keyboard input
                     SizedBox(
                       width: 1,
                       height: 1,
@@ -578,62 +665,18 @@ class _OTPScreenState extends State<OTPScreen>
                             }
                           },
                           onSubmitted: (_) {
-                            if (!_verifying) {
-                              _verifyOTP();
-                            }
+                            _verifyOTP();
                           },
                         ),
                       ),
                     ),
-
                     SizedBox(
                       height: keyboardVisible ? 12 : 20,
                     ),
-
-                    Text(
-                      _secondsRemaining == 0
-                          ? 'Didn’t receive the code?'
-                          : 'Request a new code in $_timerText',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: secondaryTextColor,
-                        fontSize: 13.5,
-                        height: 1.4,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    TextButton(
-                      onPressed: _secondsRemaining == 0 && !_verifying
-                          ? _resendOTP
-                          : null,
-                      style: TextButton.styleFrom(
-                        foregroundColor: textColor,
-                        disabledForegroundColor: secondaryTextColor,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                      child: Text(
-                        'Resend code',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          decoration: _secondsRemaining == 0
-                              ? TextDecoration.underline
-                              : TextDecoration.none,
-                        ),
-                      ),
-                    ),
-
+                    _buildResendSection(),
                     SizedBox(
                       height: keyboardVisible ? 16 : 32,
                     ),
-
-                    // Verify button
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -648,7 +691,9 @@ class _OTPScreenState extends State<OTPScreen>
                           elevation: 0,
                           shadowColor: Colors.transparent,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(
+                              16,
+                            ),
                           ),
                         ),
                         child: _verifying
@@ -670,7 +715,6 @@ class _OTPScreenState extends State<OTPScreen>
                               ),
                       ),
                     ),
-
                     const SizedBox(height: 24),
                   ],
                 ),

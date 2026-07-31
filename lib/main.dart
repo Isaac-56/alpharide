@@ -10,7 +10,7 @@ import 'home/home_screen.dart';
 import 'theme_controller.dart';
 import 'widgets/loading_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(
@@ -38,8 +38,15 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Alpha Passenger',
           themeMode: themeMode,
+<<<<<<< HEAD
           themeAnimationDuration: const Duration(milliseconds: 600),
           themeAnimationCurve: Curves.easeInOutCubicEmphasized,
+=======
+          themeAnimationDuration: const Duration(
+            milliseconds: 450,
+          ),
+          themeAnimationCurve: Curves.easeInOutCubic,
+>>>>>>> 9c25bab (Update ride panel controls and booking UI)
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.light,
@@ -58,7 +65,10 @@ class MyApp extends StatelessWidget {
             ),
             scaffoldBackgroundColor: const Color(0xFF101210),
           ),
-          home: const LoadingScreen(),
+
+          // AuthWrapper now controls the first page.
+          home: const AuthWrapper(),
+
           routes: {
             '/login': (_) => const LoginScreen(),
             '/home': (_) => const HomeScreen(),
@@ -66,27 +76,28 @@ class MyApp extends StatelessWidget {
           onGenerateRoute: (RouteSettings settings) {
             switch (settings.name) {
               case '/otp':
-                final Map<String, dynamic> args =
+                final Map<String, dynamic> arguments =
                     settings.arguments as Map<String, dynamic>;
 
-                return MaterialPageRoute(
+                return MaterialPageRoute<void>(
                   builder: (_) => OTPScreen(
-                    phoneNumber: args['phone'],
-                    verificationId: args['verificationId'],
+                    phoneNumber: arguments['phone'] as String,
+                    verificationId: arguments['verificationId'] as String,
                   ),
                 );
 
               case '/signup':
-                final String phone = settings.arguments as String;
+                final String phoneNumber = settings.arguments as String;
 
-                return MaterialPageRoute(
+                return MaterialPageRoute<void>(
                   builder: (_) => SignUpScreen(
-                    phoneNumber: phone,
+                    phoneNumber: phoneNumber,
                   ),
                 );
-            }
 
-            return null;
+              default:
+                return null;
+            }
           },
         );
       },
@@ -105,12 +116,12 @@ class AuthWrapper extends StatelessWidget {
         BuildContext context,
         AsyncSnapshot<User?> snapshot,
       ) {
-        if (snapshot.connectionState != ConnectionState.active) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingScreen();
+        }
+
+        if (snapshot.hasError) {
+          return const LoginScreen();
         }
 
         final User? user = snapshot.data;

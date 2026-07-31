@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -25,44 +27,94 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
   static const Color primaryColor = Color(0xFF39FF14);
   static const Color textColor = Color(0xFF111111);
   static const Color secondaryTextColor = Color(0xFF6B6B6B);
+  static const Color errorColor = Color(0xFFD83A3A);
 
   GoogleMapController? _mapController;
+  Timer? _addressDebounce;
 
   late LatLng _selectedLocation;
   late String _selectedAddress;
 
+  bool _isCameraMoving = false;
   bool _isResolvingAddress = false;
   bool _isLocatingUser = false;
+  bool _isConfirming = false;
+
   int _addressRequestId = 0;
+
+  bool get _canConfirm =>
+      !_isCameraMoving &&
+      !_isResolvingAddress &&
+      !_isLocatingUser &&
+      !_isConfirming;
 
   @override
   void initState() {
     super.initState();
 
     _selectedLocation = widget.initialLocation;
-    _selectedAddress = widget.initialAddress.trim().isEmpty
-        ? 'Finding this address...'
-        : widget.initialAddress.trim();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _resolveAddress(_selectedLocation);
-    });
+    final String initialAddress = widget.initialAddress.trim();
+
+    _selectedAddress =
+        initialAddress.isEmpty ? 'Finding this address...' : initialAddress;
+
+    if (initialAddress.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _resolveAddress(_selectedLocation);
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _addressRequestId++;
+    _addressDebounce?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
 
-  Future<void> _resolveAddress(LatLng location) async {
+  void _showMessage(
+    String message, {
+    bool isError = false,
+  }) {
+    if (!mounted) return;
+
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: isError ? errorColor : textColor,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _resolveAddress(
+    LatLng location,
+  ) async {
     final int requestId = ++_addressRequestId;
 
-    if (mounted) {
-      setState(() {
-        _isResolvingAddress = true;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _isResolvingAddress = true;
+    });
 
     try {
       final List<Placemark> places = await placemarkFromCoordinates(
@@ -70,7 +122,9 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         location.longitude,
       );
 
-      if (!mounted || requestId != _addressRequestId) return;
+      if (!mounted || requestId != _addressRequestId) {
+        return;
+      }
 
       final String address =
           places.isEmpty ? 'Pinned location' : _formatPlacemark(places.first);
@@ -80,9 +134,13 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         _isResolvingAddress = false;
       });
     } catch (error) {
-      debugPrint('Unable to resolve selected location: $error');
+      debugPrint(
+        'Unable to resolve selected location: $error',
+      );
 
-      if (!mounted || requestId != _addressRequestId) return;
+      if (!mounted || requestId != _addressRequestId) {
+        return;
+      }
 
       setState(() {
         _selectedAddress = 'Pinned location';
@@ -92,7 +150,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
   }
 
   String _formatPlacemark(Placemark place) {
-    final List<String> parts = [
+    final List<String> parts = <String?>[
       place.name,
       place.street,
       place.subLocality,
@@ -104,10 +162,13 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         .where((String part) => part.isNotEmpty)
         .toList();
 
-    final List<String> uniqueParts = [];
+    final List<String> uniqueParts = <String>[];
+    final Set<String> normalizedParts = <String>{};
 
     for (final String part in parts) {
-      if (!uniqueParts.contains(part)) {
+      final String normalized = part.toLowerCase();
+
+      if (normalizedParts.add(normalized)) {
         uniqueParts.add(part);
       }
     }
@@ -117,27 +178,102 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         : uniqueParts.take(3).join(', ');
   }
 
+  void _onMapCreated(
+    GoogleMapController controller,
+  ) {
+    _mapController = controller;
+  }
+
   void _onCameraMove(CameraPosition position) {
     _selectedLocation = position.target;
+    _addressDebounce?.cancel();
+
+    if (_isCameraMoving) return;
+
+    _addressRequestId++;
+
+    setState(() {
+      _isCameraMoving = true;
+      _isResolvingAddress = true;
+    });
   }
 
   void _onCameraIdle() {
-    _resolveAddress(_selectedLocation);
+    if (!mounted) return;
+
+    setState(() {
+      _isCameraMoving = false;
+    });
+
+    final LatLng location = _selectedLocation;
+
+    _addressDebounce?.cancel();
+
+    _addressDebounce = Timer(
+      const Duration(milliseconds: 320),
+      () => _resolveAddress(location),
+    );
+  }
+
+  Future<bool> _ensureLocationPermission() async {
+    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      _showMessage(
+        'Turn on location services to find your position.',
+        isError: true,
+      );
+
+      return false;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      _showMessage(
+        'Location permission is required to find your position.',
+        isError: true,
+      );
+
+      return false;
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      _showMessage(
+        'Location permission is disabled. Enable it in phone settings.',
+        isError: true,
+      );
+
+      return false;
+    }
+
+    return true;
   }
 
   Future<void> _moveToCurrentLocation() async {
-    if (_isLocatingUser) return;
+    if (_isLocatingUser || _isConfirming) return;
 
     setState(() {
       _isLocatingUser = true;
     });
 
     try {
+      final bool hasPermission = await _ensureLocationPermission();
+
+      if (!hasPermission || !mounted) return;
+
       final Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
         ),
       );
+
+      if (!mounted) return;
 
       final LatLng currentLocation = LatLng(
         position.latitude,
@@ -146,21 +282,31 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
 
       _selectedLocation = currentLocation;
 
-      await _mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          currentLocation,
-          17,
-        ),
+      final GoogleMapController? controller = _mapController;
+
+      if (controller != null) {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            currentLocation,
+            17,
+          ),
+        );
+      } else {
+        await _resolveAddress(currentLocation);
+      }
+    } on TimeoutException {
+      _showMessage(
+        'Location is taking too long. Please try again.',
+        isError: true,
       );
     } catch (error) {
-      if (!mounted) return;
+      debugPrint(
+        'Unable to get current location: $error',
+      );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Unable to get your current location.',
-          ),
-        ),
+      _showMessage(
+        'Unable to get your current location.',
+        isError: true,
       );
     } finally {
       if (mounted) {
@@ -171,16 +317,41 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     }
   }
 
-  Future<void> _moveToTappedPoint(LatLng point) async {
+  Future<void> _moveToTappedPoint(
+    LatLng point,
+  ) async {
+    if (_isLocatingUser || _isConfirming) return;
+
     _selectedLocation = point;
 
-    await _mapController?.animateCamera(
-      CameraUpdate.newLatLng(point),
-    );
+    final GoogleMapController? controller = _mapController;
+
+    if (controller == null) {
+      await _resolveAddress(point);
+      return;
+    }
+
+    try {
+      await controller.animateCamera(
+        CameraUpdate.newLatLng(point),
+      );
+    } catch (error) {
+      debugPrint(
+        'Unable to move map camera: $error',
+      );
+
+      if (mounted) {
+        await _resolveAddress(point);
+      }
+    }
   }
 
   void _confirmLocation() {
-    if (_isResolvingAddress) return;
+    if (!_canConfirm) return;
+
+    setState(() {
+      _isConfirming = true;
+    });
 
     Navigator.pop(
       context,
@@ -193,6 +364,15 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     );
   }
 
+  void _closePicker() {
+    if (_isConfirming) return;
+
+    _addressDebounce?.cancel();
+    _addressRequestId++;
+
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final String pointLabel =
@@ -201,18 +381,18 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     final String buttonLabel =
         widget.isPickup ? 'Confirm pickup point' : 'Confirm destination';
 
+    final double bottomSafeArea = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
-        children: [
+        children: <Widget>[
           GoogleMap(
             initialCameraPosition: CameraPosition(
               target: widget.initialLocation,
               zoom: 17,
             ),
-            onMapCreated: (GoogleMapController controller) {
-              _mapController = controller;
-            },
+            onMapCreated: _onMapCreated,
             onCameraMove: _onCameraMove,
             onCameraIdle: _onCameraIdle,
             onTap: _moveToTappedPoint,
@@ -224,53 +404,67 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
             buildingsEnabled: true,
           ),
 
-          // Fixed center pickup marker
+          // Fixed center marker
           Center(
             child: IgnorePointer(
-              child: Transform.translate(
-                offset: const Offset(0, -27),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: primaryColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white,
-                          width: 4,
+              child: RepaintBoundary(
+                child: Transform.translate(
+                  offset: const Offset(0, -27),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      AnimatedScale(
+                        scale: _isCameraMoving ? 1.08 : 1,
+                        duration: const Duration(
+                          milliseconds: 160,
                         ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x33000000),
-                            blurRadius: 14,
-                            offset: Offset(0, 6),
+                        curve: Curves.easeOut,
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: primaryColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 4,
+                            ),
+                            boxShadow: const <BoxShadow>[
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                blurRadius: 14,
+                                offset: Offset(0, 6),
+                              ),
+                            ],
                           ),
-                        ],
+                          child: const Icon(
+                            Icons.location_on_rounded,
+                            color: textColor,
+                            size: 30,
+                          ),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.location_on_rounded,
+                      AnimatedContainer(
+                        duration: const Duration(
+                          milliseconds: 160,
+                        ),
+                        width: 3,
+                        height: _isCameraMoving ? 24 : 18,
                         color: textColor,
-                        size: 30,
                       ),
-                    ),
-                    Container(
-                      width: 3,
-                      height: 18,
-                      color: textColor,
-                    ),
-                    Container(
-                      width: 10,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: textColor.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(20),
+                      Container(
+                        width: 10,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: textColor.withValues(
+                            alpha: 0.25,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -287,10 +481,10 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                   color: Colors.white,
                   elevation: 3,
                   shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
                   child: IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
+                    tooltip: 'Close map',
+                    onPressed: _isConfirming ? null : _closePicker,
                     icon: const Icon(
                       Icons.close_rounded,
                       color: textColor,
@@ -304,34 +498,35 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
           // Current-location tracker
           Positioned(
             right: 16,
-            bottom: 218,
-            child: SafeArea(
-              top: false,
-              child: Material(
-                color: Colors.white,
-                elevation: 3,
-                shape: const CircleBorder(),
-                child: IconButton(
-                  onPressed: _isLocatingUser ? null : _moveToCurrentLocation,
-                  icon: _isLocatingUser
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            color: textColor,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.my_location_rounded,
+            bottom: 218 + bottomSafeArea,
+            child: Material(
+              color: Colors.white,
+              elevation: 3,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: IconButton(
+                tooltip: 'Use current location',
+                onPressed: _isLocatingUser || _isConfirming
+                    ? null
+                    : _moveToCurrentLocation,
+                icon: _isLocatingUser
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
                           color: textColor,
                         ),
-                ),
+                      )
+                    : const Icon(
+                        Icons.my_location_rounded,
+                        color: textColor,
+                      ),
               ),
             ),
           ),
 
-          // Selected address and confirmation
+          // Selected address panel
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -347,7 +542,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(28),
                 ),
-                boxShadow: [
+                boxShadow: <BoxShadow>[
                   BoxShadow(
                     color: Color(0x1F000000),
                     blurRadius: 24,
@@ -360,9 +555,9 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: <Widget>[
                     Row(
-                      children: [
+                      children: <Widget>[
                         Container(
                           width: 42,
                           height: 42,
@@ -371,7 +566,9 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                             color: primaryColor.withValues(
                               alpha: 0.14,
                             ),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(
+                              12,
+                            ),
                           ),
                           child: const Icon(
                             Icons.location_on_outlined,
@@ -383,7 +580,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                            children: <Widget>[
                               Text(
                                 pointLabel,
                                 style: const TextStyle(
@@ -393,17 +590,27 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                _isResolvingAddress
-                                    ? 'Finding this address...'
-                                    : _selectedAddress,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: textColor,
-                                  fontSize: 15.5,
-                                  height: 1.3,
-                                  fontWeight: FontWeight.w600,
+                              AnimatedSwitcher(
+                                duration: const Duration(
+                                  milliseconds: 180,
+                                ),
+                                child: Text(
+                                  _isResolvingAddress || _isCameraMoving
+                                      ? 'Finding this address...'
+                                      : _selectedAddress,
+                                  key: ValueKey<String>(
+                                    _isResolvingAddress || _isCameraMoving
+                                        ? 'resolving-address'
+                                        : _selectedAddress,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: textColor,
+                                    fontSize: 15.5,
+                                    height: 1.3,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
@@ -416,24 +623,36 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton.icon(
-                        onPressed:
-                            _isResolvingAddress ? null : _confirmLocation,
+                        onPressed: _canConfirm ? _confirmLocation : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           foregroundColor: textColor,
-                          disabledBackgroundColor:
-                              primaryColor.withValues(alpha: 0.45),
-                          disabledForegroundColor:
-                              textColor.withValues(alpha: 0.55),
+                          disabledBackgroundColor: primaryColor.withValues(
+                            alpha: 0.45,
+                          ),
+                          disabledForegroundColor: textColor.withValues(
+                            alpha: 0.55,
+                          ),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(
+                              16,
+                            ),
                           ),
                         ),
-                        icon: const Icon(
-                          Icons.check_circle_outline_rounded,
-                          size: 21,
-                        ),
+                        icon: _isResolvingAddress || _isCameraMoving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: textColor,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 21,
+                              ),
                         label: Text(
                           buttonLabel,
                           style: const TextStyle(

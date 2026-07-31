@@ -31,7 +31,6 @@ class PlacesService {
     }
 
     final data = json.decode(response.body);
-    print(data);
 
     if (data["status"] != "OK" && data["status"] != "ZERO_RESULTS") {
       throw Exception(data["error_message"] ?? data["status"]);
@@ -57,8 +56,6 @@ class PlacesService {
     }
 
     final data = json.decode(response.body);
-
-    print(data);
 
     if (data["status"] != "OK") {
       throw Exception(data["error_message"] ?? data["status"]);

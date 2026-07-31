@@ -42,12 +42,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<Polyline> _polylines = {};
 
   StreamSubscription<Position>? _positionStream;
+  Position? _lastProcessedPosition;
 
   Map<String, dynamic>? userData;
 
   bool _isLoading = true;
+  bool _isLocating = false;
   bool _locationPermissionGranted = false;
   bool _pickupManuallySelected = false;
+  bool _isSheetCollapsed = true;
 
   LatLng? _currentLocation;
   LatLng? _pickupLocation;
@@ -55,8 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String pickupAddress = 'Detecting current location...';
   String destinationAddress = '';
-
-  double _sheetSize = 0.13;
 
   static const CameraPosition _defaultCamera = CameraPosition(
     target: LatLng(4.8517, 31.5825),
@@ -98,9 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      final Map<String, dynamic>? data = await _firestoreService.getUser(
-        phoneNumber,
-      );
+      final Map<String, dynamic>? data =
+          await _firestoreService.getUser(phoneNumber);
 
       if (!mounted) return;
 
@@ -154,6 +154,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _getCurrentLocation() async {
+    if (_isLocating) return;
+
+    _isLocating = true;
+
     try {
       final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
@@ -174,17 +178,39 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-      await _updateLocation(position);
+      await _updateLocation(
+        position,
+        centerCamera: true,
+        resolveAddress: true,
+      );
+
       await _positionStream?.cancel();
 
       _positionStream = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.best,
-          distanceFilter: 5,
+          distanceFilter: 15,
         ),
       ).listen(
         (Position newPosition) {
-          _updateLocation(newPosition);
+          final Position? previousPosition = _lastProcessedPosition;
+
+          if (previousPosition != null) {
+            final double distance = Geolocator.distanceBetween(
+              previousPosition.latitude,
+              previousPosition.longitude,
+              newPosition.latitude,
+              newPosition.longitude,
+            );
+
+            if (distance < 12) return;
+          }
+
+          _updateLocation(
+            newPosition,
+            centerCamera: false,
+            resolveAddress: false,
+          );
         },
         onError: (Object error) {
           debugPrint('Location stream error: $error');
@@ -192,36 +218,48 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } catch (error) {
       debugPrint('Unable to obtain location: $error');
+    } finally {
+      _isLocating = false;
     }
   }
 
-  Future<void> _updateLocation(Position position) async {
+  Future<void> _updateLocation(
+    Position position, {
+    required bool centerCamera,
+    required bool resolveAddress,
+  }) async {
     final LatLng updatedLocation = LatLng(
       position.latitude,
       position.longitude,
     );
 
-    _currentLocation = updatedLocation;
+    _lastProcessedPosition = position;
 
-    if (!_pickupManuallySelected) {
-      _pickupLocation = updatedLocation;
-    }
+    if (!mounted) return;
 
-    _markers
-      ..removeWhere(
-        (Marker marker) => marker.markerId.value == 'me',
-      )
-      ..add(
-        Marker(
-          markerId: const MarkerId('me'),
-          position: updatedLocation,
-          infoWindow: const InfoWindow(
-            title: 'You are here',
+    setState(() {
+      _currentLocation = updatedLocation;
+
+      if (!_pickupManuallySelected) {
+        _pickupLocation = updatedLocation;
+      }
+
+      _markers
+        ..removeWhere(
+          (Marker marker) => marker.markerId.value == 'me',
+        )
+        ..add(
+          Marker(
+            markerId: const MarkerId('me'),
+            position: updatedLocation,
+            infoWindow: const InfoWindow(
+              title: 'You are here',
+            ),
           ),
-        ),
-      );
+        );
+    });
 
-    if (_mapController.isCompleted) {
+    if (centerCamera && _mapController.isCompleted) {
       final GoogleMapController controller = await _mapController.future;
 
       await controller.animateCamera(
@@ -229,10 +267,30 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    if (!resolveAddress) return;
+
     await _resolveCurrentAddress();
 
     if (!mounted) return;
+
     setState(() {});
+  }
+
+  Future<void> _centerOnCurrentLocation() async {
+    final LatLng? currentLocation = _currentLocation;
+
+    if (currentLocation == null) {
+      await _getCurrentLocation();
+      return;
+    }
+
+    if (!_mapController.isCompleted) return;
+
+    final GoogleMapController controller = await _mapController.future;
+
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(currentLocation, 17),
+    );
   }
 
   Future<void> _resolveCurrentAddress() async {
@@ -274,7 +332,11 @@ class _HomeScreenState extends State<HomeScreen> {
     await _auth.signOut();
 
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/login');
+
+    Navigator.pushReplacementNamed(
+      context,
+      '/login',
+    );
   }
 
   Future<void> _openDestinationSearch({
@@ -368,7 +430,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final GoogleMapController controller = await _mapController.future;
 
       await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(selectedLocation, 16.5),
+        CameraUpdate.newLatLngZoom(
+          selectedLocation,
+          16.5,
+        ),
       );
     }
   }
@@ -429,12 +494,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _collapsedCard() {
+<<<<<<< HEAD
     final bool isDarkMode =
         Theme.of(context).brightness == Brightness.dark;
+=======
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+>>>>>>> 9c25bab (Update ride panel controls and booking UI)
 
     final Color panelTextColor =
         isDarkMode ? Colors.white : const Color(0xFF111311);
 
+<<<<<<< HEAD
     final Color secondaryTextColor = isDarkMode
         ? const Color(0xFF9A9F9A)
         : const Color(0xFF687068);
@@ -442,6 +512,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color controlColor = isDarkMode
         ? const Color(0xFF242724)
         : const Color(0xFFF0F3F0);
+=======
+    final Color secondaryTextColor =
+        isDarkMode ? const Color(0xFF9A9F9A) : const Color(0xFF687068);
+
+    final Color controlColor =
+        isDarkMode ? const Color(0xFF242724) : const Color(0xFFF0F3F0);
+>>>>>>> 9c25bab (Update ride panel controls and booking UI)
 
     return SizedBox(
       height: 90,
@@ -500,6 +577,10 @@ class _HomeScreenState extends State<HomeScreen> {
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: _expandOrderPanel,
+<<<<<<< HEAD
+=======
+                customBorder: const CircleBorder(),
+>>>>>>> 9c25bab (Update ride panel controls and booking UI)
                 child: SizedBox(
                   width: 40,
                   height: 40,
@@ -546,7 +627,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 : _defaultCamera,
             markers: _markers,
             polylines: _polylines,
-            onMapCreated: (GoogleMapController controller) {
+            onMapCreated: (
+              GoogleMapController controller,
+            ) {
               if (!_mapController.isCompleted) {
                 _mapController.complete(controller);
               }
@@ -559,7 +642,10 @@ class _HomeScreenState extends State<HomeScreen> {
               radius: 24,
               backgroundColor: Colors.white,
               child: IconButton(
-                icon: const Icon(Icons.menu_rounded),
+                icon: const Icon(
+                  Icons.menu_rounded,
+                  color: Color(0xFF111311),
+                ),
                 onPressed: () {
                   _scaffoldKey.currentState?.openDrawer();
                 },
@@ -573,8 +659,11 @@ class _HomeScreenState extends State<HomeScreen> {
               radius: 24,
               backgroundColor: Colors.white,
               child: IconButton(
-                icon: const Icon(Icons.my_location_rounded),
-                onPressed: _getCurrentLocation,
+                icon: const Icon(
+                  Icons.my_location_rounded,
+                  color: Color(0xFF111311),
+                ),
+                onPressed: _centerOnCurrentLocation,
               ),
             ),
           ),
@@ -596,9 +685,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onNotification: (
                   DraggableScrollableNotification notification,
                 ) {
-                  if ((_sheetSize - notification.extent).abs() > 0.001) {
+                  final bool collapsed = notification.extent < 0.20;
+
+                  if (collapsed != _isSheetCollapsed) {
                     setState(() {
-                      _sheetSize = notification.extent;
+                      _isSheetCollapsed = collapsed;
                     });
                   }
 
@@ -623,16 +714,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   clipBehavior: Clip.antiAlias,
                   child: SingleChildScrollView(
                     controller: scrollController,
-                    child: _sheetSize < 0.20
+                    child: _isSheetCollapsed
                         ? _collapsedCard()
                         : OrderPanel(
                             pickupAddress: pickupAddress,
                             destinationAddress: destinationAddress,
                             onPickupTap: () {
-                              _openDestinationSearch(isPickup: true);
+                              _openDestinationSearch(
+                                isPickup: true,
+                              );
                             },
                             onDestinationTap: () {
-                              _openDestinationSearch(isPickup: false);
+                              _openDestinationSearch(
+                                isPickup: false,
+                              );
                             },
                             onConfirmRide: _openBookingConfirmation,
                           ),
