@@ -38,15 +38,10 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Alpha Passenger',
           themeMode: themeMode,
-<<<<<<< HEAD
-          themeAnimationDuration: const Duration(milliseconds: 600),
-          themeAnimationCurve: Curves.easeInOutCubicEmphasized,
-=======
           themeAnimationDuration: const Duration(
-            milliseconds: 450,
+            milliseconds: 600,
           ),
-          themeAnimationCurve: Curves.easeInOutCubic,
->>>>>>> 9c25bab (Update ride panel controls and booking UI)
+          themeAnimationCurve: Curves.easeInOutCubicEmphasized,
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.light,
@@ -65,15 +60,14 @@ class MyApp extends StatelessWidget {
             ),
             scaffoldBackgroundColor: const Color(0xFF101210),
           ),
-
-          // AuthWrapper now controls the first page.
           home: const AuthWrapper(),
-
           routes: {
             '/login': (_) => const LoginScreen(),
             '/home': (_) => const HomeScreen(),
           },
-          onGenerateRoute: (RouteSettings settings) {
+          onGenerateRoute: (
+            RouteSettings settings,
+          ) {
             switch (settings.name) {
               case '/otp':
                 final Map<String, dynamic> arguments =

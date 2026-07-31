@@ -29,7 +29,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Color primaryColor = Color(0xFF39FF14);
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
   final FirestoreService _firestoreService = FirestoreService();
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final Completer<GoogleMapController> _mapController =
@@ -38,8 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  final Set<Marker> _markers = {};
-  final Set<Polyline> _polylines = {};
+  final Set<Marker> _markers = <Marker>{};
+  final Set<Polyline> _polylines = <Polyline>{};
 
   StreamSubscription<Position>? _positionStream;
   Position? _lastProcessedPosition;
@@ -57,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   LatLng? _destinationLocation;
 
   String pickupAddress = 'Detecting current location...';
+
   String destinationAddress = '';
 
   static const CameraPosition _defaultCamera = CameraPosition(
@@ -83,7 +86,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (user == null) {
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/login');
+
+      Navigator.pushReplacementNamed(
+        context,
+        '/login',
+      );
+
       return;
     }
 
@@ -95,12 +103,14 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isLoading = false;
       });
+
       return;
     }
 
     try {
-      final Map<String, dynamic>? data =
-          await _firestoreService.getUser(phoneNumber);
+      final Map<String, dynamic>? data = await _firestoreService.getUser(
+        phoneNumber,
+      );
 
       if (!mounted) return;
 
@@ -109,7 +119,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     } catch (error) {
-      debugPrint('Failed to load user: $error');
+      debugPrint(
+        'Failed to load user: $error',
+      );
 
       if (!mounted) return;
 
@@ -166,9 +178,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please enable location services.'),
+            content: Text(
+              'Please enable location services.',
+            ),
           ),
         );
+
         return;
       }
 
@@ -213,11 +228,15 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
         onError: (Object error) {
-          debugPrint('Location stream error: $error');
+          debugPrint(
+            'Location stream error: $error',
+          );
         },
       );
     } catch (error) {
-      debugPrint('Unable to obtain location: $error');
+      debugPrint(
+        'Unable to obtain location: $error',
+      );
     } finally {
       _isLocating = false;
     }
@@ -263,7 +282,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final GoogleMapController controller = await _mapController.future;
 
       await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(updatedLocation, 17),
+        CameraUpdate.newLatLngZoom(
+          updatedLocation,
+          17,
+        ),
       );
     }
 
@@ -289,7 +311,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final GoogleMapController controller = await _mapController.future;
 
     await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(currentLocation, 17),
+      CameraUpdate.newLatLngZoom(
+        currentLocation,
+        17,
+      ),
     );
   }
 
@@ -304,23 +329,31 @@ class _HomeScreenState extends State<HomeScreen> {
         currentLocation.longitude,
       );
 
-      if (places.isEmpty || _pickupManuallySelected) return;
+      if (places.isEmpty || _pickupManuallySelected) {
+        return;
+      }
 
       final Placemark place = places.first;
 
-      final List<String> addressParts = [
+      final List<String> addressParts = <String?>[
         place.street,
         place.locality,
       ]
           .whereType<String>()
-          .map((String part) => part.trim())
-          .where((String part) => part.isNotEmpty)
+          .map(
+            (String part) => part.trim(),
+          )
+          .where(
+            (String part) => part.isNotEmpty,
+          )
           .toList();
 
       pickupAddress =
           addressParts.isEmpty ? 'Current location' : addressParts.join(', ');
     } catch (error) {
-      debugPrint('Unable to resolve address: $error');
+      debugPrint(
+        'Unable to resolve address: $error',
+      );
 
       if (!_pickupManuallySelected) {
         pickupAddress = 'Current location';
@@ -349,9 +382,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Waiting for your current location...'),
+          content: Text(
+            'Waiting for your current location...',
+          ),
         ),
       );
+
       return;
     }
 
@@ -361,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final LocationSelection? result = await Navigator.push<LocationSelection>(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<LocationSelection>(
         builder: (_) => DestinationSearch(
           latitude: initialSearchLocation.latitude,
           longitude: initialSearchLocation.longitude,
@@ -404,6 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
       } else {
         _destinationLocation = selectedLocation;
+
         destinationAddress = result.displayName;
 
         _markers
@@ -412,7 +449,9 @@ class _HomeScreenState extends State<HomeScreen> {
           )
           ..add(
             Marker(
-              markerId: const MarkerId('destination'),
+              markerId: const MarkerId(
+                'destination',
+              ),
               position: selectedLocation,
               icon: BitmapDescriptor.defaultMarkerWithHue(
                 BitmapDescriptor.hueRed,
@@ -447,9 +486,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (pickupLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Waiting for your current location...'),
+          content: Text(
+            'Waiting for your current location...',
+          ),
         ),
       );
+
       return;
     }
 
@@ -458,11 +500,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (destinationLocation == null || destinationAddress.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Choose your destination first.'),
+          content: Text(
+            'Choose your destination first.',
+          ),
         ),
       );
 
-      await _openDestinationSearch(isPickup: false);
+      await _openDestinationSearch(
+        isPickup: false,
+      );
+
       return;
     }
 
@@ -470,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await Navigator.push<void>(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => OrderConfirmationScreen(
           pickupAddress: pickupAddress,
           destinationAddress: destinationAddress,
@@ -494,31 +541,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _collapsedCard() {
-<<<<<<< HEAD
-    final bool isDarkMode =
-        Theme.of(context).brightness == Brightness.dark;
-=======
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
->>>>>>> 9c25bab (Update ride panel controls and booking UI)
 
     final Color panelTextColor =
         isDarkMode ? Colors.white : const Color(0xFF111311);
 
-<<<<<<< HEAD
-    final Color secondaryTextColor = isDarkMode
-        ? const Color(0xFF9A9F9A)
-        : const Color(0xFF687068);
-
-    final Color controlColor = isDarkMode
-        ? const Color(0xFF242724)
-        : const Color(0xFFF0F3F0);
-=======
     final Color secondaryTextColor =
         isDarkMode ? const Color(0xFF9A9F9A) : const Color(0xFF687068);
 
     final Color controlColor =
         isDarkMode ? const Color(0xFF242724) : const Color(0xFFF0F3F0);
->>>>>>> 9c25bab (Update ride panel controls and booking UI)
 
     return SizedBox(
       height: 90,
@@ -528,16 +560,20 @@ class _HomeScreenState extends State<HomeScreen> {
           vertical: 11,
         ),
         child: Row(
-          children: [
+          children: <Widget>[
             Container(
               width: 76,
               height: 62,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha: 0.10),
+                color: primaryColor.withValues(
+                  alpha: 0.10,
+                ),
                 borderRadius: BorderRadius.circular(17),
                 border: Border.all(
-                  color: primaryColor.withValues(alpha: 0.28),
+                  color: primaryColor.withValues(
+                    alpha: 0.28,
+                  ),
                 ),
               ),
               child: Image.asset(
@@ -550,7 +586,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: <Widget>[
                   Text(
                     'Order now',
                     style: TextStyle(
@@ -577,10 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: _expandOrderPanel,
-<<<<<<< HEAD
-=======
                 customBorder: const CircleBorder(),
->>>>>>> 9c25bab (Update ride panel controls and booking UI)
                 child: SizedBox(
                   width: 40,
                   height: 40,
@@ -617,7 +650,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onSignOut: _signOut,
       ),
       body: Stack(
-        children: [
+        children: <Widget>[
           MapView(
             initialCameraPosition: _currentLocation != null
                 ? CameraPosition(
@@ -631,7 +664,9 @@ class _HomeScreenState extends State<HomeScreen> {
               GoogleMapController controller,
             ) {
               if (!_mapController.isCompleted) {
-                _mapController.complete(controller);
+                _mapController.complete(
+                  controller,
+                );
               }
             },
           ),
@@ -673,7 +708,7 @@ class _HomeScreenState extends State<HomeScreen> {
             minChildSize: 0.13,
             maxChildSize: 0.68,
             snap: true,
-            snapSizes: const [
+            snapSizes: const <double>[
               0.13,
               0.68,
             ],
@@ -698,12 +733,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF101210)
+                        ? const Color(
+                            0xFF101210,
+                          )
                         : Colors.white,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(30),
                     ),
-                    boxShadow: const [
+                    boxShadow: const <BoxShadow>[
                       BoxShadow(
                         color: Colors.black38,
                         blurRadius: 16,
