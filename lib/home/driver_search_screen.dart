@@ -350,7 +350,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        '${widget.ride.name} • ~ ${widget.ride.estimatedFare} ETB',
+                        '${widget.ride.name} • ~ ${widget.ride.estimatedFareLabel}',
                         style: const TextStyle(
                           color: mutedColor,
                           fontSize: 13,

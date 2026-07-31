@@ -94,7 +94,7 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 26),
                   _detailRow(
                     label: 'Estimated price',
-                    value: '~ ${ride.estimatedFare} ETB',
+                    value: '~ ${ride.estimatedFareLabel}',
                   ),
                   _detailRow(
                     label: 'Seats',
@@ -114,16 +114,15 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 14),
                   _detailRow(
                     label: 'Minimum fare',
-                    value: '${ride.minimumFare} ETB',
+                    value: ride.minimumFareLabel,
                   ),
                   _detailRow(
                     label: 'Base fare',
-                    value: '${ride.baseFare} ETB',
+                    value: ride.baseFareLabel,
                   ),
                   _detailRow(
                     label: 'Distance and time',
-                    value:
-                        '${ride.perMinute} ETB/min • ${ride.perKilometer} ETB/km',
+                    value: '${ride.perMinuteLabel} • ${ride.perKilometerLabel}',
                   ),
                   Theme(
                     data: Theme.of(context).copyWith(

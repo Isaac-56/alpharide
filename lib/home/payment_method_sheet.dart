@@ -40,7 +40,9 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedMethod = widget.initialMethod;
+
+    // Cash is currently the only available payment method.
+    _selectedMethod = PaymentMethod.cash;
   }
 
   @override
@@ -82,7 +84,10 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                 ),
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context, _selectedMethod);
+                    Navigator.pop(
+                      context,
+                      PaymentMethod.cash,
+                    );
                   },
                   child: const Text(
                     'Done',
@@ -96,25 +101,36 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
               ],
             ),
             const SizedBox(height: 10),
-            _paymentTile(
-              method: PaymentMethod.card,
-              icon: Icons.credit_card_rounded,
-              title: 'Card',
-              subtitle: 'Add a debit or credit card',
-            ),
-            const SizedBox(height: 12),
+
+            // Cash — currently available
             _paymentTile(
               method: PaymentMethod.cash,
               icon: Icons.payments_rounded,
               title: 'Cash',
               subtitle: 'Pay the driver after your ride',
+              enabled: true,
             ),
             const SizedBox(height: 12),
+
+            // Card — coming soon
+            _paymentTile(
+              method: PaymentMethod.card,
+              icon: Icons.credit_card_rounded,
+              title: 'Card',
+              subtitle: 'Debit and credit card payments',
+              enabled: false,
+              comingSoon: true,
+            ),
+            const SizedBox(height: 12),
+
+            // Wallet — coming soon
             _paymentTile(
               method: PaymentMethod.wallet,
               icon: Icons.account_balance_wallet_rounded,
               title: 'Wallet',
-              subtitle: 'Use your AlphaRide balance',
+              subtitle: 'Pay using your AlphaRide balance',
+              enabled: false,
+              comingSoon: true,
             ),
           ],
         ),
@@ -127,19 +143,23 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
     required IconData icon,
     required String title,
     required String subtitle,
+    required bool enabled,
+    bool comingSoon = false,
   }) {
-    final bool selected = method == _selectedMethod;
+    final bool selected = enabled && method == _selectedMethod;
 
     return Material(
-      color: _surfaceColor,
+      color: enabled ? _surfaceColor : _surfaceColor.withValues(alpha: 0.62),
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedMethod = method;
-          });
-        },
+        onTap: enabled
+            ? () {
+                setState(() {
+                  _selectedMethod = method;
+                });
+              }
+            : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.all(17),
@@ -164,7 +184,11 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                 ),
                 child: Icon(
                   icon,
-                  color: selected ? _primaryColor : Colors.white,
+                  color: selected
+                      ? _primaryColor
+                      : enabled
+                          ? Colors.white
+                          : _mutedColor.withValues(alpha: 0.55),
                 ),
               ),
               const SizedBox(width: 14),
@@ -174,8 +198,10 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: enabled
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.48),
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
@@ -183,8 +209,10 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        color: _mutedColor,
+                      style: TextStyle(
+                        color: enabled
+                            ? _mutedColor
+                            : _mutedColor.withValues(alpha: 0.48),
                         fontSize: 13,
                         height: 1.25,
                       ),
@@ -192,20 +220,35 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                   ],
                 ),
               ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                child: selected
-                    ? const Icon(
-                        Icons.check_circle_rounded,
-                        key: ValueKey<String>('selected'),
-                        color: _primaryColor,
-                        size: 25,
-                      )
-                    : const SizedBox(
-                        key: ValueKey<String>('unselected'),
-                        width: 25,
-                      ),
-              ),
+              const SizedBox(width: 10),
+              if (comingSoon)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2B2E2B),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: const Color(0xFF3B3F3B),
+                    ),
+                  ),
+                  child: const Text(
+                    'Coming soon',
+                    style: TextStyle(
+                      color: _mutedColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else if (selected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: _primaryColor,
+                  size: 25,
+                ),
             ],
           ),
         ),

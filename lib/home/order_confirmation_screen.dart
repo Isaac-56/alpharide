@@ -336,7 +336,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                   ),
                 ),
                 Text(
-                  '~ ${widget.ride.estimatedFare} ETB',
+                  '~ ${widget.ride.estimatedFareLabel}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -371,7 +371,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                       ),
                     ),
                     Text(
-                      '~ ${widget.ride.estimatedFare} ETB',
+                      '~ ${widget.ride.estimatedFareLabel}',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
