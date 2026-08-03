@@ -19,6 +19,7 @@ class RideOption {
   final int perMinute;
   final int perKilometer;
   final bool isElectric;
+  final bool isCorporate;
 
   const RideOption({
     required this.id,
@@ -32,6 +33,7 @@ class RideOption {
     required this.perMinute,
     required this.perKilometer,
     this.isElectric = false,
+    this.isCorporate = false,
   });
 
   String get estimatedFareLabel =>
@@ -151,6 +153,19 @@ class RideOption {
       baseFare: 11000,
       perMinute: 700,
       perKilometer: 6350,
+    ),
+    RideOption(
+      id: 'corporate',
+      name: 'Alpha Corporate',
+      description: 'Executive rides for business and hotel transfers',
+      assetPath: 'assets/images/vehicles/alpha_corporate.png',
+      seats: 4,
+      estimatedFare: 48000,
+      minimumFare: 20000,
+      baseFare: 12000,
+      perMinute: 750,
+      perKilometer: 7500,
+      isCorporate: true,
     ),
   ];
 }
