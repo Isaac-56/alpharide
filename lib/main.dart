@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'authentication/login_screen.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await AppThemeController.initialize();
 
   runApp(const MyApp());
 }
@@ -48,8 +50,29 @@ class MyApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(
               seedColor: primaryColor,
               brightness: Brightness.light,
+              surface: const Color(0xFFFFFFFF),
             ),
             scaffoldBackgroundColor: Colors.white,
+            fontFamily: 'Roboto',
+            dividerColor: const Color(0xFFE8EBE8),
+            splashFactory: InkSparkle.splashFactory,
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: <TargetPlatform, PageTransitionsBuilder>{
+                TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+              },
+            ),
+            snackBarTheme: SnackBarThemeData(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF171A17),
+              contentTextStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
           darkTheme: ThemeData(
             useMaterial3: true,
@@ -57,8 +80,29 @@ class MyApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(
               seedColor: primaryColor,
               brightness: Brightness.dark,
+              surface: const Color(0xFF101210),
             ),
             scaffoldBackgroundColor: const Color(0xFF101210),
+            fontFamily: 'Roboto',
+            dividerColor: const Color(0xFF292D29),
+            splashFactory: InkSparkle.splashFactory,
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: <TargetPlatform, PageTransitionsBuilder>{
+                TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+              },
+            ),
+            snackBarTheme: SnackBarThemeData(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFFF4F7F4),
+              contentTextStyle: const TextStyle(
+                color: Color(0xFF101210),
+                fontWeight: FontWeight.w600,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
           home: const AuthWrapper(),
           routes: {

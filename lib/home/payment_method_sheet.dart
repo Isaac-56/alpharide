@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 
 const Color _primaryColor = Color(0xFF39FF14);
-const Color _backgroundColor = Color(0xFF101210);
-const Color _surfaceColor = Color(0xFF202320);
-const Color _mutedColor = Color(0xFF9A9F9A);
 
 Future<PaymentMethod?> showPaymentMethodSheet({
   required BuildContext context,
@@ -42,18 +40,22 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
     super.initState();
 
     // Cash is currently the only available payment method.
-    _selectedMethod = PaymentMethod.cash;
+    _selectedMethod = widget.initialMethod == PaymentMethod.cash
+        ? widget.initialMethod
+        : PaymentMethod.cash;
   }
 
   @override
   Widget build(BuildContext context) {
+    final Color backgroundColor = AlphaColors.background(context);
+
     return SafeArea(
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        decoration: const BoxDecoration(
-          color: _backgroundColor,
-          borderRadius: BorderRadius.vertical(
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: const BorderRadius.vertical(
             top: Radius.circular(28),
           ),
         ),
@@ -64,18 +66,18 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
               width: 42,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFF4A4E4A),
+                color: AlphaColors.border(context),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
             const SizedBox(height: 18),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Payment method',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AlphaColors.text(context),
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.4,
@@ -147,9 +149,12 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
     bool comingSoon = false,
   }) {
     final bool selected = enabled && method == _selectedMethod;
+    final Color surfaceColor = AlphaColors.surface(context);
+    final Color mutedColor = AlphaColors.muted(context);
+    final Color textColor = AlphaColors.text(context);
 
     return Material(
-      color: enabled ? _surfaceColor : _surfaceColor.withValues(alpha: 0.62),
+      color: enabled ? surfaceColor : surfaceColor.withValues(alpha: 0.62),
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -179,7 +184,7 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                 decoration: BoxDecoration(
                   color: selected
                       ? _primaryColor.withValues(alpha: 0.14)
-                      : const Color(0xFF2B2E2B),
+                      : AlphaColors.border(context).withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: Icon(
@@ -187,8 +192,8 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                   color: selected
                       ? _primaryColor
                       : enabled
-                          ? Colors.white
-                          : _mutedColor.withValues(alpha: 0.55),
+                          ? textColor
+                          : mutedColor.withValues(alpha: 0.55),
                 ),
               ),
               const SizedBox(width: 14),
@@ -200,8 +205,8 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                       title,
                       style: TextStyle(
                         color: enabled
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.48),
+                            ? textColor
+                            : textColor.withValues(alpha: 0.48),
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
@@ -211,8 +216,8 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                       subtitle,
                       style: TextStyle(
                         color: enabled
-                            ? _mutedColor
-                            : _mutedColor.withValues(alpha: 0.48),
+                            ? mutedColor
+                            : mutedColor.withValues(alpha: 0.48),
                         fontSize: 13,
                         height: 1.25,
                       ),
@@ -228,16 +233,16 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2B2E2B),
+                    color: AlphaColors.border(context).withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(99),
                     border: Border.all(
-                      color: const Color(0xFF3B3F3B),
+                      color: AlphaColors.border(context),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Coming soon',
                     style: TextStyle(
-                      color: _mutedColor,
+                      color: mutedColor,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),

@@ -648,6 +648,7 @@ class _HomeScreenState extends State<HomeScreen> {
         userData: userData,
         auth: _auth,
         onSignOut: _signOut,
+        onProfileUpdated: _loadUser,
       ),
       body: Stack(
         children: <Widget>[

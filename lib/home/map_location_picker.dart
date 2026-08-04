@@ -5,6 +5,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../account/account_ui.dart';
 import '../models/location_selection.dart';
 
 class MapLocationPicker extends StatefulWidget {
@@ -26,7 +27,6 @@ class MapLocationPicker extends StatefulWidget {
 class _MapLocationPickerState extends State<MapLocationPicker> {
   static const Color primaryColor = Color(0xFF39FF14);
   static const Color textColor = Color(0xFF111111);
-  static const Color secondaryTextColor = Color(0xFF6B6B6B);
   static const Color errorColor = Color(0xFFD83A3A);
 
   GoogleMapController? _mapController;
@@ -382,9 +382,13 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         widget.isPickup ? 'Confirm pickup point' : 'Confirm destination';
 
     final double bottomSafeArea = MediaQuery.paddingOf(context).bottom;
+    final Color pageBackground = AlphaColors.background(context);
+    final Color surface = AlphaColors.surface(context);
+    final Color foreground = AlphaColors.text(context);
+    final Color muted = AlphaColors.muted(context);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: pageBackground,
       body: Stack(
         children: <Widget>[
           GoogleMap(
@@ -478,16 +482,16 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Material(
-                  color: Colors.white,
+                  color: surface,
                   elevation: 3,
                   shape: const CircleBorder(),
                   clipBehavior: Clip.antiAlias,
                   child: IconButton(
                     tooltip: 'Close map',
                     onPressed: _isConfirming ? null : _closePicker,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
-                      color: textColor,
+                      color: foreground,
                     ),
                   ),
                 ),
@@ -500,7 +504,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
             right: 16,
             bottom: 218 + bottomSafeArea,
             child: Material(
-              color: Colors.white,
+              color: surface,
               elevation: 3,
               shape: const CircleBorder(),
               clipBehavior: Clip.antiAlias,
@@ -518,9 +522,9 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                           color: textColor,
                         ),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.my_location_rounded,
-                        color: textColor,
+                        color: foreground,
                       ),
               ),
             ),
@@ -537,12 +541,12 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                 24,
                 16,
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(28),
                 ),
-                boxShadow: <BoxShadow>[
+                boxShadow: const <BoxShadow>[
                   BoxShadow(
                     color: Color(0x1F000000),
                     blurRadius: 24,
@@ -570,9 +574,9 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                               12,
                             ),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.location_on_outlined,
-                            color: textColor,
+                            color: foreground,
                             size: 23,
                           ),
                         ),
@@ -583,8 +587,8 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                             children: <Widget>[
                               Text(
                                 pointLabel,
-                                style: const TextStyle(
-                                  color: secondaryTextColor,
+                                style: TextStyle(
+                                  color: muted,
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -605,8 +609,8 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
                                   ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: textColor,
+                                  style: TextStyle(
+                                    color: foreground,
                                     fontSize: 15.5,
                                     height: 1.3,
                                     fontWeight: FontWeight.w600,
