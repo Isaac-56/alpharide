@@ -15,6 +15,7 @@ class CustomDrawer extends StatelessWidget {
   final FirebaseAuth auth;
   final VoidCallback? onSignOut;
   final VoidCallback? onProfileUpdated;
+  final VoidCallback? onRequestOpen;
 
   const CustomDrawer({
     super.key,
@@ -22,6 +23,7 @@ class CustomDrawer extends StatelessWidget {
     required this.auth,
     this.onSignOut,
     this.onProfileUpdated,
+    this.onRequestOpen,
   });
 
   static const Color primaryColor = Color(0xFF39FF14);
@@ -68,6 +70,14 @@ class CustomDrawer extends StatelessWidget {
       if (refreshProfile && result == true) {
         onProfileUpdated?.call();
       }
+
+      if (!navigator.mounted || onRequestOpen == null) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigator.mounted) {
+          onRequestOpen?.call();
+        }
+      });
     }
 
     void openPhonePage(Widget Function(String phone) builder) {

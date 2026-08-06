@@ -649,6 +649,7 @@ class _HomeScreenState extends State<HomeScreen> {
         auth: _auth,
         onSignOut: _signOut,
         onProfileUpdated: _loadUser,
+        onRequestOpen: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       body: Stack(
         children: <Widget>[
