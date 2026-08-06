@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../account/account_ui.dart';
 import '../models/location_selection.dart';
 import '../models/prediction_model.dart';
 import 'map_location_picker.dart';
@@ -30,10 +31,6 @@ class DestinationSearch extends StatefulWidget {
 
 class _DestinationSearchState extends State<DestinationSearch> {
   static const Color primaryColor = Color(0xFF39FF14);
-  static const Color textColor = Color(0xFF111111);
-  static const Color secondaryTextColor = Color(0xFF6B6B6B);
-  static const Color surfaceColor = Color(0xFFF7F8F7);
-  static const Color borderColor = Color(0xFFE7EAE7);
   static const Color errorColor = Color(0xFFD83A3A);
 
   final TextEditingController _searchController = TextEditingController();
@@ -297,10 +294,15 @@ class _DestinationSearchState extends State<DestinationSearch> {
         widget.isPickup ? 'Set pickup point on map' : 'Set destination on map';
 
     final bool hasQuery = _searchController.text.trim().isNotEmpty;
+    final Color pageBackground = AlphaColors.background(context);
+    final Color textColor = AlphaColors.text(context);
+    final Color secondaryTextColor = AlphaColors.muted(context);
+    final Color surfaceColor = AlphaColors.surface(context);
+    final Color borderColor = AlphaColors.border(context);
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: Colors.white,
+      backgroundColor: pageBackground,
       body: SafeArea(
         child: CustomScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -321,11 +323,9 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       width: 46,
                       height: 46,
                       child: Material(
-                        color: Colors.white,
-                        shape: const CircleBorder(
-                          side: BorderSide(
-                            color: borderColor,
-                          ),
+                        color: surfaceColor,
+                        shape: CircleBorder(
+                          side: BorderSide(color: borderColor),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
@@ -333,7 +333,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                               ? null
                               : _closePage,
                           customBorder: const CircleBorder(),
-                          child: const Icon(
+                          child: Icon(
                             Icons.close_rounded,
                             color: textColor,
                             size: 25,
@@ -342,7 +342,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       ),
                     ),
                     const SizedBox(height: 26),
-                    const Text(
+                    Text(
                       'Pick-up address',
                       style: TextStyle(
                         color: secondaryTextColor,
@@ -358,7 +358,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                           : widget.pickupAddress,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: textColor,
                         fontSize: 19,
                         height: 1.3,
@@ -367,7 +367,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Divider(
+                    Divider(
                       height: 1,
                       thickness: 1,
                       color: borderColor,
@@ -382,23 +382,23 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       textInputAction: TextInputAction.search,
                       autocorrect: false,
                       enableSuggestions: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: textColor,
                         fontSize: 17,
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: InputDecoration(
                         labelText: fieldLabel,
-                        labelStyle: const TextStyle(
+                        labelStyle: TextStyle(
                           color: secondaryTextColor,
                           fontSize: 14,
                         ),
-                        floatingLabelStyle: const TextStyle(
+                        floatingLabelStyle: TextStyle(
                           color: textColor,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.search_rounded,
                           color: textColor,
                         ),
@@ -421,19 +421,15 @@ class _DestinationSearchState extends State<DestinationSearch> {
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: borderColor,
-                          ),
+                          borderSide: BorderSide(color: borderColor),
                         ),
                         disabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: borderColor,
-                          ),
+                          borderSide: BorderSide(color: borderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                             color: textColor,
                             width: 1.4,
                           ),
@@ -453,9 +449,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: textColor,
                           disabledForegroundColor: secondaryTextColor,
-                          side: const BorderSide(
-                            color: borderColor,
-                          ),
+                          side: BorderSide(color: borderColor),
                           alignment: Alignment.centerLeft,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 17,
@@ -477,7 +471,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: _isOpeningMap
-                                  ? const SizedBox(
+                                  ? SizedBox(
                                       width: 17,
                                       height: 17,
                                       child: CircularProgressIndicator(
@@ -485,7 +479,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                                         color: textColor,
                                       ),
                                     )
-                                  : const Icon(
+                                  : Icon(
                                       Icons.map_outlined,
                                       color: textColor,
                                       size: 21,
@@ -495,13 +489,13 @@ class _DestinationSearchState extends State<DestinationSearch> {
                             Expanded(
                               child: Text(
                                 mapButtonLabel,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15.5,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                            const Icon(
+                            Icon(
                               Icons.chevron_right_rounded,
                               color: secondaryTextColor,
                             ),
@@ -513,7 +507,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       duration: const Duration(milliseconds: 180),
                       child: !_isSearching
                           ? const SizedBox.shrink()
-                          : const Padding(
+                          : Padding(
                               key: ValueKey<String>(
                                 'search-progress',
                               ),
@@ -575,7 +569,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                 ),
                 sliver: SliverList.separated(
                   itemCount: _predictions.length,
-                  separatorBuilder: (_, __) => const Divider(
+                  separatorBuilder: (_, __) => Divider(
                     height: 1,
                     indent: 70,
                     endIndent: 12,
@@ -600,7 +594,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                 hasQuery &&
                 _predictions.isEmpty &&
                 _errorMessage == null)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
                   child: Padding(
@@ -649,6 +643,9 @@ class _SearchResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -671,9 +668,9 @@ class _SearchResultTile extends StatelessWidget {
                       .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.location_on_outlined,
-                  color: _DestinationSearchState.textColor,
+                  color: textColor,
                   size: 22,
                 ),
               ),
@@ -686,8 +683,8 @@ class _SearchResultTile extends StatelessWidget {
                       prediction.mainText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _DestinationSearchState.textColor,
+                      style: TextStyle(
+                        color: textColor,
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -698,8 +695,8 @@ class _SearchResultTile extends StatelessWidget {
                         prediction.secondaryText,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _DestinationSearchState.secondaryTextColor,
+                        style: TextStyle(
+                          color: mutedColor,
                           fontSize: 13,
                           height: 1.35,
                         ),
@@ -712,17 +709,17 @@ class _SearchResultTile extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 9),
                 child: isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: _DestinationSearchState.textColor,
+                          color: textColor,
                         ),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.north_west_rounded,
-                        color: _DestinationSearchState.secondaryTextColor,
+                        color: mutedColor,
                         size: 18,
                       ),
               ),

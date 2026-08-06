@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../account/account_ui.dart';
+
 class CancelReasonScreen extends StatelessWidget {
   const CancelReasonScreen({super.key});
 
-  static const Color backgroundColor = Color(0xFF101210);
   static const Color primaryColor = Color(0xFF39FF14);
-  static const Color surfaceColor = Color(0xFF202320);
 
   static const List<String> reasons = [
     'Fare is too high',
@@ -18,6 +18,11 @@ class CancelReasonScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color backgroundColor = AlphaColors.background(context);
+    final Color surfaceColor = AlphaColors.surface(context);
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SafeArea(
@@ -28,32 +33,30 @@ class CancelReasonScreen extends StatelessWidget {
             children: [
               Material(
                 color: surfaceColor,
-                shape: const CircleBorder(
-                  side: BorderSide(
-                    color: Color(0xFF4A4E4A),
-                  ),
+                shape: CircleBorder(
+                  side: BorderSide(color: AlphaColors.border(context)),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: () {
                     Navigator.pop(context, false);
                   },
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 54,
                     height: 54,
                     child: Icon(
                       Icons.close_rounded,
-                      color: Colors.white,
+                      color: textColor,
                       size: 29,
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 38),
-              const Text(
+              Text(
                 'Cancel order',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: textColor,
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.65,
@@ -92,16 +95,16 @@ class CancelReasonScreen extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   reason,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: textColor,
                                     fontSize: 17,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
-                              const Icon(
+                              Icon(
                                 Icons.chevron_right_rounded,
-                                color: Color(0xFF8F948F),
+                                color: mutedColor,
                               ),
                             ],
                           ),
@@ -111,7 +114,7 @@ class CancelReasonScreen extends StatelessWidget {
                   },
                 ),
               ),
-              const Row(
+              Row(
                 children: [
                   Icon(
                     Icons.info_outline_rounded,
@@ -123,7 +126,7 @@ class CancelReasonScreen extends StatelessWidget {
                     child: Text(
                       'Choose the reason that best describes your cancellation.',
                       style: TextStyle(
-                        color: Color(0xFF8F948F),
+                        color: mutedColor,
                         fontSize: 12,
                         height: 1.35,
                       ),

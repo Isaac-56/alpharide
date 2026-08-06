@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 import 'cancel_reason_screen.dart';
 
@@ -29,9 +30,6 @@ class DriverSearchScreen extends StatefulWidget {
 class _DriverSearchScreenState extends State<DriverSearchScreen>
     with SingleTickerProviderStateMixin {
   static const Color primaryColor = Color(0xFF39FF14);
-  static const Color backgroundColor = Color(0xFF101210);
-  static const Color surfaceColor = Color(0xFF202320);
-  static const Color mutedColor = Color(0xFF9A9F9A);
 
   late final AnimationController _progressController;
   final Set<Marker> _markers = {};
@@ -125,13 +123,17 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       context: context,
       backgroundColor: Colors.transparent,
       builder: (BuildContext sheetContext) {
+        final Color backgroundColor = AlphaColors.background(sheetContext);
+        final Color textColor = AlphaColors.text(sheetContext);
+        final Color mutedColor = AlphaColors.muted(sheetContext);
+
         return SafeArea(
           top: false,
           child: Container(
             padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: backgroundColor,
-              borderRadius: BorderRadius.vertical(
+              borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(28),
               ),
             ),
@@ -145,7 +147,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                     width: 42,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4B4F4B),
+                      color: AlphaColors.border(sheetContext),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -167,27 +169,27 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                         Navigator.pop(context);
                       }
                     },
-                    child: const Text(
+                    child: Text(
                       'Cancel order',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: textColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
-                const Text(
+                Text(
                   'Are you sure?',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: textColor,
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.6,
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Cancelling may lead to a longer wait, and rebooking does not guarantee a faster trip.',
                   style: TextStyle(
                     color: mutedColor,
@@ -230,6 +232,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   @override
   Widget build(BuildContext context) {
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final Color backgroundColor = AlphaColors.background(context);
+    final Color textColor = AlphaColors.text(context);
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) {
@@ -259,7 +265,9 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
             Positioned.fill(
               child: IgnorePointer(
                 child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.40),
+                  color: isDarkMode
+                      ? Colors.black.withValues(alpha: 0.40)
+                      : Colors.white.withValues(alpha: 0.08),
                 ),
               ),
             ),
@@ -294,8 +302,8 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                             widget.pickupAddress,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: textColor,
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                             ),
@@ -318,14 +326,19 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   Widget _searchPanel() {
+    final Color backgroundColor = AlphaColors.background(context);
+    final Color surfaceColor = AlphaColors.surface(context);
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return SafeArea(
       top: false,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.vertical(
+          borderRadius: const BorderRadius.vertical(
             top: Radius.circular(28),
           ),
         ),
@@ -339,10 +352,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Looking for a driver',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: textColor,
                           fontSize: 25,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
@@ -351,7 +364,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                       const SizedBox(height: 5),
                       Text(
                         '${widget.ride.name} • ~ ${widget.ride.estimatedFareLabel}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: mutedColor,
                           fontSize: 13,
                         ),
@@ -385,7 +398,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
               },
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'We are matching you with the closest available driver.',
               style: TextStyle(
                 color: mutedColor,
@@ -398,7 +411,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
               onPressed: _showCancelConfirmation,
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
-                foregroundColor: Colors.white,
+                foregroundColor: textColor,
               ),
               child: const Text(
                 'Cancel order',

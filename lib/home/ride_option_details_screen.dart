@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 
 class RideOptionDetailsScreen extends StatelessWidget {
@@ -11,12 +12,13 @@ class RideOptionDetailsScreen extends StatelessWidget {
   });
 
   static const Color primaryColor = Color(0xFF39FF14);
-  static const Color backgroundColor = Color(0xFF101210);
-  static const Color dividerColor = Color(0xFF292C29);
-  static const Color mutedColor = Color(0xFF8F948F);
 
   @override
   Widget build(BuildContext context) {
+    final Color backgroundColor = AlphaColors.background(context);
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SafeArea(
@@ -44,8 +46,8 @@ class RideOptionDetailsScreen extends StatelessWidget {
                       Expanded(
                         child: Text(
                           ride.name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 30,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.7,
@@ -85,7 +87,7 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     ride.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: mutedColor,
                       fontSize: 15,
                       height: 1.4,
@@ -93,19 +95,21 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 26),
                   _detailRow(
+                    context: context,
                     label: 'Estimated price',
                     value: '~ ${ride.estimatedFareLabel}',
                   ),
                   _detailRow(
+                    context: context,
                     label: 'Seats',
                     value: '${ride.seats} seats',
                   ),
-                  _acceptedPaymentRow(),
+                  _acceptedPaymentRow(context),
                   const SizedBox(height: 30),
-                  const Text(
+                  Text(
                     'AlphaRide transport',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: textColor,
                       fontSize: 23,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.4,
@@ -113,14 +117,17 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _detailRow(
+                    context: context,
                     label: 'Minimum fare',
                     value: ride.minimumFareLabel,
                   ),
                   _detailRow(
+                    context: context,
                     label: 'Base fare',
                     value: ride.baseFareLabel,
                   ),
                   _detailRow(
+                    context: context,
                     label: 'Distance and time',
                     value: '${ride.perMinuteLabel} • ${ride.perKilometerLabel}',
                   ),
@@ -135,15 +142,15 @@ class RideOptionDetailsScreen extends StatelessWidget {
                       ),
                       iconColor: primaryColor,
                       collapsedIconColor: mutedColor,
-                      title: const Text(
+                      title: Text(
                         'More',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: textColor,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      children: const [
+                      children: [
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
@@ -174,23 +181,21 @@ class RideOptionDetailsScreen extends StatelessWidget {
 
   Widget _roundBackButton(BuildContext context) {
     return Material(
-      color: const Color(0xFF232623),
-      shape: const CircleBorder(
-        side: BorderSide(
-          color: Color(0xFF4A4E4A),
-        ),
+      color: AlphaColors.surface(context),
+      shape: CircleBorder(
+        side: BorderSide(color: AlphaColors.border(context)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           Navigator.pop(context);
         },
-        child: const SizedBox(
+        child: SizedBox(
           width: 52,
           height: 52,
           child: Icon(
             Icons.arrow_back_rounded,
-            color: Colors.white,
+            color: AlphaColors.text(context),
             size: 27,
           ),
         ),
@@ -199,15 +204,19 @@ class RideOptionDetailsScreen extends StatelessWidget {
   }
 
   Widget _detailRow({
+    required BuildContext context,
     required String label,
     required String value,
   }) {
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: dividerColor,
+            color: AlphaColors.border(context),
           ),
         ),
       ),
@@ -217,7 +226,7 @@ class RideOptionDetailsScreen extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: mutedColor,
                 fontSize: 15,
               ),
@@ -227,8 +236,8 @@ class RideOptionDetailsScreen extends StatelessWidget {
           Text(
             value,
             textAlign: TextAlign.end,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: textColor,
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -238,17 +247,20 @@ class RideOptionDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _acceptedPaymentRow() {
+  Widget _acceptedPaymentRow(BuildContext context) {
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: dividerColor,
+            color: AlphaColors.border(context),
           ),
         ),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Expanded(
             child: Text(
@@ -260,21 +272,18 @@ class RideOptionDetailsScreen extends StatelessWidget {
             ),
           ),
           Icon(
-            Icons.account_balance_wallet_rounded,
-            color: Colors.white,
-            size: 25,
-          ),
-          SizedBox(width: 13),
-          Icon(
-            Icons.credit_card_rounded,
-            color: Colors.white,
-            size: 25,
-          ),
-          SizedBox(width: 13),
-          Icon(
             Icons.payments_rounded,
-            color: Colors.white,
+            color: textColor,
             size: 25,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Cash only',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),

@@ -642,6 +642,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final Color mapControlColor =
+        isDarkMode ? const Color(0xFF202320) : Colors.white;
+    final Color mapControlIconColor =
+        isDarkMode ? Colors.white : const Color(0xFF111311);
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: CustomDrawer(
@@ -677,11 +683,11 @@ class _HomeScreenState extends State<HomeScreen> {
             left: 16,
             child: CircleAvatar(
               radius: 24,
-              backgroundColor: Colors.white,
+              backgroundColor: mapControlColor,
               child: IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.menu_rounded,
-                  color: Color(0xFF111311),
+                  color: mapControlIconColor,
                 ),
                 onPressed: () {
                   _scaffoldKey.currentState?.openDrawer();
@@ -694,11 +700,11 @@ class _HomeScreenState extends State<HomeScreen> {
             right: 16,
             child: CircleAvatar(
               radius: 24,
-              backgroundColor: Colors.white,
+              backgroundColor: mapControlColor,
               child: IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.my_location_rounded,
-                  color: Color(0xFF111311),
+                  color: mapControlIconColor,
                 ),
                 onPressed: _centerOnCurrentLocation,
               ),

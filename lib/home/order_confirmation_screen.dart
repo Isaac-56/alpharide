@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 import 'driver_search_screen.dart';
 
@@ -32,9 +33,6 @@ class OrderConfirmationScreen extends StatefulWidget {
 
 class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   static const Color primaryColor = Color(0xFF39FF14);
-  static const Color backgroundColor = Color(0xFF101210);
-  static const Color surfaceColor = Color(0xFF202320);
-  static const Color mutedColor = Color(0xFF9A9F9A);
 
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
@@ -136,6 +134,9 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final Color backgroundColor = AlphaColors.background(context);
+
     return Scaffold(
       backgroundColor: backgroundColor,
       body: Stack(
@@ -169,7 +170,9 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
           Positioned.fill(
             child: IgnorePointer(
               child: ColoredBox(
-                color: Colors.black.withValues(alpha: 0.33),
+                color: isDarkMode
+                    ? Colors.black.withValues(alpha: 0.33)
+                    : Colors.white.withValues(alpha: 0.08),
               ),
             ),
           ),
@@ -200,6 +203,10 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   }
 
   Widget _pickupLabel() {
+    final Color backgroundColor = AlphaColors.background(context);
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 14,
@@ -209,7 +216,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
         color: backgroundColor.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF343734),
+          color: AlphaColors.border(context),
         ),
       ),
       child: Row(
@@ -224,7 +231,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Pickup point',
                   style: TextStyle(
                     color: mutedColor,
@@ -236,8 +243,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                   widget.pickupAddress,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: textColor,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -251,14 +258,19 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   }
 
   Widget _confirmationPanel() {
+    final Color backgroundColor = AlphaColors.background(context);
+    final Color surfaceColor = AlphaColors.surface(context);
+    final Color textColor = AlphaColors.text(context);
+    final Color mutedColor = AlphaColors.muted(context);
+
     return SafeArea(
       top: false,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.vertical(
+          borderRadius: const BorderRadius.vertical(
             top: Radius.circular(28),
           ),
         ),
@@ -269,7 +281,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
               width: 42,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B4F4B),
+                color: AlphaColors.border(context),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -285,12 +297,12 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                   _addressLine(
                     label: 'A',
                     address: widget.pickupAddress,
-                    color: Colors.white,
+                    color: textColor,
                   ),
-                  const Divider(
+                  Divider(
                     height: 18,
                     indent: 39,
-                    color: Color(0xFF363936),
+                    color: AlphaColors.border(context),
                   ),
                   _addressLine(
                     label: 'B',
@@ -318,8 +330,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                     children: [
                       Text(
                         widget.ride.name,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: textColor,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
@@ -327,7 +339,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                       const SizedBox(height: 2),
                       Text(
                         '${widget.ride.seats} seats • ${_paymentLabel(widget.paymentMethod)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: mutedColor,
                           fontSize: 12,
                         ),
@@ -337,8 +349,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                 ),
                 Text(
                   '~ ${widget.ride.estimatedFareLabel}',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: textColor,
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
@@ -392,6 +404,9 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
     required String address,
     required Color color,
   }) {
+    final Color textColor = AlphaColors.text(context);
+    final Color labelTextColor = AlphaColors.background(context);
+
     return Row(
       children: [
         Container(
@@ -404,8 +419,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF101210),
+            style: TextStyle(
+              color: labelTextColor,
               fontSize: 12,
               fontWeight: FontWeight.w900,
             ),
@@ -417,8 +432,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
             address,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: textColor,
               fontSize: 14.5,
               fontWeight: FontWeight.w600,
             ),
@@ -430,23 +445,21 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
 
   Widget _roundBackButton(BuildContext context) {
     return Material(
-      color: const Color(0xFF202320),
-      shape: const CircleBorder(
-        side: BorderSide(
-          color: Color(0xFF464A46),
-        ),
+      color: AlphaColors.surface(context),
+      shape: CircleBorder(
+        side: BorderSide(color: AlphaColors.border(context)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           Navigator.pop(context);
         },
-        child: const SizedBox(
+        child: SizedBox(
           width: 52,
           height: 52,
           child: Icon(
             Icons.arrow_back_rounded,
-            color: Colors.white,
+            color: AlphaColors.text(context),
             size: 27,
           ),
         ),
