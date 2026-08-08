@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'destination_search.dart';
 import 'map_view.dart';
 import 'order_confirmation_screen.dart';
 import 'order_panel.dart';
+import 'services/directions_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,6 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final FirestoreService _firestoreService = FirestoreService();
 
+  final DirectionsService _directionsService = const DirectionsService();
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final Completer<GoogleMapController> _mapController =
@@ -42,6 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Set<Marker> _markers = <Marker>{};
   final Set<Polyline> _polylines = <Polyline>{};
+
+  List<LatLng> _routePoints = const <LatLng>[];
+  int _routeRequestId = 0;
 
   StreamSubscription<Position>? _positionStream;
   Position? _lastProcessedPosition;
@@ -465,7 +472,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    if (_mapController.isCompleted) {
+    if (_destinationLocation != null) {
+      await _refreshRoadRoute(
+        showFailureMessage: true,
+      );
+    } else if (_mapController.isCompleted) {
       final GoogleMapController controller = await _mapController.future;
 
       await controller.animateCamera(
@@ -475,6 +486,115 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _refreshRoadRoute({
+    bool showFailureMessage = false,
+  }) async {
+    final LatLng? pickupLocation = _pickupLocation ?? _currentLocation;
+    final LatLng? destinationLocation = _destinationLocation;
+
+    if (pickupLocation == null || destinationLocation == null) {
+      if (!mounted) return;
+
+      setState(() {
+        _routePoints = const <LatLng>[];
+        _polylines.clear();
+      });
+
+      return;
+    }
+
+    final int requestId = ++_routeRequestId;
+
+    try {
+      final DrivingRoute route =
+          await _directionsService.getShortestDrivingRoute(
+        origin: pickupLocation,
+        destination: destinationLocation,
+      );
+
+      if (!mounted || requestId != _routeRequestId) return;
+
+      setState(() {
+        _routePoints = route.points;
+        _polylines
+          ..clear()
+          ..add(
+            Polyline(
+              polylineId: const PolylineId('road-route'),
+              color: primaryColor,
+              width: 6,
+              jointType: JointType.round,
+              startCap: Cap.roundCap,
+              endCap: Cap.roundCap,
+              geodesic: false,
+              points: route.points,
+            ),
+          );
+      });
+
+      await _fitRoutePoints(route.points);
+    } catch (error) {
+      debugPrint('Unable to calculate road route: $error');
+
+      if (!mounted || requestId != _routeRequestId) return;
+
+      setState(() {
+        _routePoints = const <LatLng>[];
+        _polylines.clear();
+      });
+
+      if (showFailureMessage) {
+        final String message = error is DirectionsException
+            ? error.message
+            : 'The road route could not be loaded. Please try again.';
+
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                message,
+              ),
+            ),
+          );
+      }
+    }
+  }
+
+  Future<void> _fitRoutePoints(List<LatLng> points) async {
+    if (points.isEmpty || !_mapController.isCompleted) return;
+
+    final GoogleMapController controller = await _mapController.future;
+    double south = points.first.latitude;
+    double north = points.first.latitude;
+    double west = points.first.longitude;
+    double east = points.first.longitude;
+
+    for (final LatLng point in points.skip(1)) {
+      south = math.min(south, point.latitude);
+      north = math.max(north, point.latitude);
+      west = math.min(west, point.longitude);
+      east = math.max(east, point.longitude);
+    }
+
+    if ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001) {
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(points.first, 17),
+      );
+      return;
+    }
+
+    await controller.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
+        ),
+        84,
+      ),
+    );
   }
 
   Future<void> _openBookingConfirmation(
@@ -523,6 +643,7 @@ class _HomeScreenState extends State<HomeScreen> {
           destinationAddress: destinationAddress,
           pickupLocation: pickupLocation,
           destinationLocation: destinationLocation,
+          initialRoutePoints: _routePoints,
           ride: ride,
           paymentMethod: paymentMethod,
         ),

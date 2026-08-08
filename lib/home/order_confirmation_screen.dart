@@ -7,12 +7,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 import 'driver_search_screen.dart';
+import 'services/directions_service.dart';
 
 class OrderConfirmationScreen extends StatefulWidget {
   final String pickupAddress;
   final String destinationAddress;
   final LatLng pickupLocation;
   final LatLng destinationLocation;
+  final List<LatLng> initialRoutePoints;
   final RideOption ride;
   final PaymentMethod paymentMethod;
 
@@ -22,6 +24,7 @@ class OrderConfirmationScreen extends StatefulWidget {
     required this.destinationAddress,
     required this.pickupLocation,
     required this.destinationLocation,
+    this.initialRoutePoints = const <LatLng>[],
     required this.ride,
     required this.paymentMethod,
   });
@@ -36,6 +39,22 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
 
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
+
+  final DirectionsService _directionsService = const DirectionsService();
+
+  late List<LatLng> _routePoints;
+  bool _isRouteLoading = false;
+  String? _routeError;
+
+  @override
+  void initState() {
+    super.initState();
+    _routePoints = List<LatLng>.of(widget.initialRoutePoints);
+
+    if (_routePoints.length < 2) {
+      _loadRoadRoute();
+    }
+  }
 
   Set<Marker> get _markers {
     return {
@@ -63,39 +82,80 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   }
 
   Set<Polyline> get _polylines {
+    if (_routePoints.length < 2) return <Polyline>{};
+
     return {
       Polyline(
         polylineId: const PolylineId('route-preview'),
         color: primaryColor,
         width: 5,
         jointType: JointType.round,
-        points: [
-          widget.pickupLocation,
-          widget.destinationLocation,
-        ],
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        geodesic: false,
+        points: _routePoints,
       ),
     };
+  }
+
+  Future<void> _loadRoadRoute() async {
+    if (_isRouteLoading) return;
+
+    setState(() {
+      _isRouteLoading = true;
+      _routeError = null;
+    });
+
+    try {
+      final DrivingRoute route =
+          await _directionsService.getShortestDrivingRoute(
+        origin: widget.pickupLocation,
+        destination: widget.destinationLocation,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _routePoints = route.points;
+        _isRouteLoading = false;
+      });
+
+      await _fitRoute();
+    } catch (error) {
+      debugPrint('Unable to load confirmation route: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        _isRouteLoading = false;
+        _routeError = error is DirectionsException
+            ? error.message
+            : 'Road route unavailable. Tap to try again.';
+      });
+    }
   }
 
   Future<void> _fitRoute() async {
     final GoogleMapController controller = await _mapController.future;
 
-    final double south = math.min(
-      widget.pickupLocation.latitude,
-      widget.destinationLocation.latitude,
-    );
-    final double north = math.max(
-      widget.pickupLocation.latitude,
-      widget.destinationLocation.latitude,
-    );
-    final double west = math.min(
-      widget.pickupLocation.longitude,
-      widget.destinationLocation.longitude,
-    );
-    final double east = math.max(
-      widget.pickupLocation.longitude,
-      widget.destinationLocation.longitude,
-    );
+    final List<LatLng> boundsPoints = _routePoints.length >= 2
+        ? _routePoints
+        : <LatLng>[
+            widget.pickupLocation,
+            widget.destinationLocation,
+          ];
+
+    double south = boundsPoints.first.latitude;
+    double north = boundsPoints.first.latitude;
+    double west = boundsPoints.first.longitude;
+    double east = boundsPoints.first.longitude;
+
+    for (final LatLng point in boundsPoints.skip(1)) {
+      south = math.min(south, point.latitude);
+      north = math.max(north, point.latitude);
+      west = math.min(west, point.longitude);
+      east = math.max(east, point.longitude);
+    }
 
     if ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001) {
       await controller.animateCamera(
@@ -125,6 +185,9 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
         builder: (_) => DriverSearchScreen(
           pickupLocation: widget.pickupLocation,
           pickupAddress: widget.pickupAddress,
+          destinationLocation: widget.destinationLocation,
+          destinationAddress: widget.destinationAddress,
+          initialRoutePoints: _routePoints,
           ride: widget.ride,
           paymentMethod: widget.paymentMethod,
         ),
@@ -176,6 +239,17 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
               ),
             ),
           ),
+          if (_isRouteLoading)
+            const SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  color: primaryColor,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+            ),
           SafeArea(
             child: Stack(
               children: [
@@ -193,11 +267,60 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
               ],
             ),
           ),
+          if (_routeError != null)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 86,
+              left: 18,
+              right: 18,
+              child: _routeErrorBanner(),
+            ),
           Align(
             alignment: Alignment.bottomCenter,
             child: _confirmationPanel(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _routeErrorBanner() {
+    return Material(
+      color: AlphaColors.surface(context).withValues(alpha: 0.96),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: _loadRoadRoute,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 13,
+            vertical: 10,
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.route_rounded,
+                color: primaryColor,
+                size: 20,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  _routeError!,
+                  style: TextStyle(
+                    color: AlphaColors.text(context),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.refresh_rounded,
+                color: AlphaColors.text(context),
+                size: 19,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

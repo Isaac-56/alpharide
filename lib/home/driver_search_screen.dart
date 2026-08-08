@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -8,10 +9,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 import 'cancel_reason_screen.dart';
+import 'services/directions_service.dart';
 
 class DriverSearchScreen extends StatefulWidget {
   final LatLng pickupLocation;
   final String pickupAddress;
+  final LatLng destinationLocation;
+  final String destinationAddress;
+  final List<LatLng> initialRoutePoints;
   final RideOption ride;
   final PaymentMethod paymentMethod;
 
@@ -19,6 +24,9 @@ class DriverSearchScreen extends StatefulWidget {
     super.key,
     required this.pickupLocation,
     required this.pickupAddress,
+    required this.destinationLocation,
+    required this.destinationAddress,
+    this.initialRoutePoints = const <LatLng>[],
     required this.ride,
     required this.paymentMethod,
   });
@@ -32,7 +40,14 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   static const Color primaryColor = Color(0xFF39FF14);
 
   late final AnimationController _progressController;
+  final Completer<GoogleMapController> _mapController =
+      Completer<GoogleMapController>();
+  final DirectionsService _directionsService = const DirectionsService();
   final Set<Marker> _markers = {};
+
+  late List<LatLng> _routePoints;
+  bool _isRouteLoading = false;
+  String? _routeError;
 
   @override
   void initState() {
@@ -43,7 +58,108 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       duration: const Duration(seconds: 3),
     )..repeat();
 
+    _routePoints = List<LatLng>.of(widget.initialRoutePoints);
+
     _buildDriverMarkers();
+
+    if (_routePoints.length < 2) {
+      _loadRoadRoute();
+    }
+  }
+
+  Set<Polyline> get _polylines {
+    if (_routePoints.length < 2) return <Polyline>{};
+
+    return <Polyline>{
+      Polyline(
+        polylineId: const PolylineId('active-trip-route'),
+        color: primaryColor,
+        width: 6,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        geodesic: false,
+        points: _routePoints,
+      ),
+    };
+  }
+
+  Future<void> _loadRoadRoute() async {
+    if (_isRouteLoading) return;
+
+    setState(() {
+      _isRouteLoading = true;
+      _routeError = null;
+    });
+
+    try {
+      final DrivingRoute route =
+          await _directionsService.getShortestDrivingRoute(
+        origin: widget.pickupLocation,
+        destination: widget.destinationLocation,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _routePoints = route.points;
+        _isRouteLoading = false;
+      });
+
+      await _fitRoute();
+    } catch (error) {
+      debugPrint('Unable to load driver-search route: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        _isRouteLoading = false;
+        _routeError = error is DirectionsException
+            ? error.message
+            : 'Road route unavailable. Tap to retry.';
+      });
+    }
+  }
+
+  Future<void> _fitRoute() async {
+    if (!_mapController.isCompleted) return;
+
+    final List<LatLng> boundsPoints = _routePoints.length >= 2
+        ? _routePoints
+        : <LatLng>[
+            widget.pickupLocation,
+            widget.destinationLocation,
+          ];
+    final GoogleMapController controller = await _mapController.future;
+
+    double south = boundsPoints.first.latitude;
+    double north = boundsPoints.first.latitude;
+    double west = boundsPoints.first.longitude;
+    double east = boundsPoints.first.longitude;
+
+    for (final LatLng point in boundsPoints.skip(1)) {
+      south = math.min(south, point.latitude);
+      north = math.max(north, point.latitude);
+      west = math.min(west, point.longitude);
+      east = math.max(east, point.longitude);
+    }
+
+    if ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001) {
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(widget.pickupLocation, 17),
+      );
+      return;
+    }
+
+    await controller.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
+        ),
+        82,
+      ),
+    );
   }
 
   @override
@@ -97,6 +213,19 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
             ),
             infoWindow: const InfoWindow(
               title: 'Your pickup',
+            ),
+          ),
+        )
+        ..add(
+          Marker(
+            markerId: const MarkerId('destination'),
+            position: widget.destinationLocation,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
+            infoWindow: InfoWindow(
+              title: 'Destination',
+              snippet: widget.destinationAddress,
             ),
           ),
         )
@@ -254,12 +383,22 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   zoom: 15.7,
                 ),
                 markers: _markers,
+                polylines: _polylines,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
                 mapToolbarEnabled: false,
                 padding: const EdgeInsets.only(
                   bottom: 260,
                 ),
+                onMapCreated: (GoogleMapController controller) {
+                  if (!_mapController.isCompleted) {
+                    _mapController.complete(controller);
+                    Future<void>.delayed(
+                      const Duration(milliseconds: 350),
+                      _fitRoute,
+                    );
+                  }
+                },
               ),
             ),
             Positioned.fill(
@@ -315,11 +454,71 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 ),
               ),
             ),
+            if (_isRouteLoading)
+              const SafeArea(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: LinearProgressIndicator(
+                    minHeight: 3,
+                    color: primaryColor,
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
+              ),
+            if (_routeError != null)
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + 78,
+                left: 18,
+                right: 18,
+                child: _routeErrorBanner(),
+              ),
             Align(
               alignment: Alignment.bottomCenter,
               child: _searchPanel(),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _routeErrorBanner() {
+    return Material(
+      color: AlphaColors.surface(context).withValues(alpha: 0.96),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: _loadRoadRoute,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 13,
+            vertical: 10,
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.route_rounded,
+                color: primaryColor,
+                size: 20,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  _routeError!,
+                  style: TextStyle(
+                    color: AlphaColors.text(context),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.refresh_rounded,
+                color: AlphaColors.text(context),
+                size: 19,
+              ),
+            ],
+          ),
         ),
       ),
     );
