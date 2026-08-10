@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../account/account_ui.dart';
 import '../models/ride_option.dart';
 import 'cancel_reason_screen.dart';
 import 'services/directions_service.dart';
+import 'services/live_driver_marker_controller.dart';
 
 class DriverSearchScreen extends StatefulWidget {
   final LatLng pickupLocation;
@@ -44,6 +43,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       Completer<GoogleMapController>();
   final DirectionsService _directionsService = const DirectionsService();
   final Set<Marker> _markers = {};
+  late final LiveDriverMarkerController _liveDrivers;
 
   late List<LatLng> _routePoints;
   bool _isRouteLoading = false;
@@ -60,7 +60,13 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     _routePoints = List<LatLng>.of(widget.initialRoutePoints);
 
-    _buildDriverMarkers();
+    _liveDrivers = LiveDriverMarkerController(
+      center: widget.pickupLocation,
+    )
+      ..addListener(_refreshDriverMarkers)
+      ..start();
+
+    _buildStaticMarkers();
 
     if (_routePoints.length < 2) {
       _loadRoadRoute();
@@ -164,87 +170,45 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   @override
   void dispose() {
+    _liveDrivers
+      ..removeListener(_refreshDriverMarkers)
+      ..dispose();
     _progressController.dispose();
     super.dispose();
   }
 
-  Future<BitmapDescriptor> _vehicleMarker() async {
-    final ByteData data = await rootBundle.load(widget.ride.assetPath);
-    final ui.Codec codec = await ui.instantiateImageCodec(
-      data.buffer.asUint8List(),
-      targetWidth: 94,
-    );
-    final ui.FrameInfo frame = await codec.getNextFrame();
-    final ByteData? byteData = await frame.image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-
-    if (byteData == null) {
-      return BitmapDescriptor.defaultMarkerWithHue(
-        BitmapDescriptor.hueGreen,
-      );
-    }
-
-    return BitmapDescriptor.bytes(
-      byteData.buffer.asUint8List(
-        byteData.offsetInBytes,
-        byteData.lengthInBytes,
-      ),
-    );
+  void _refreshDriverMarkers() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _buildDriverMarkers() async {
-    final BitmapDescriptor carIcon = await _vehicleMarker();
-
-    if (!mounted) return;
-
-    final double latitude = widget.pickupLocation.latitude;
-    final double longitude = widget.pickupLocation.longitude;
-
-    setState(() {
-      _markers
-        ..clear()
-        ..add(
-          Marker(
-            markerId: const MarkerId('pickup'),
-            position: widget.pickupLocation,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueGreen,
-            ),
-            infoWindow: const InfoWindow(
-              title: 'Your pickup',
-            ),
+  void _buildStaticMarkers() {
+    _markers
+      ..clear()
+      ..add(
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: widget.pickupLocation,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
           ),
-        )
-        ..add(
-          Marker(
-            markerId: const MarkerId('destination'),
-            position: widget.destinationLocation,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed,
-            ),
-            infoWindow: InfoWindow(
-              title: 'Destination',
-              snippet: widget.destinationAddress,
-            ),
+          infoWindow: const InfoWindow(
+            title: 'Your pickup',
           ),
-        )
-        ..addAll(
-          [
-            LatLng(latitude + 0.0022, longitude - 0.0014),
-            LatLng(latitude - 0.0017, longitude + 0.0018),
-            LatLng(latitude + 0.0008, longitude + 0.0026),
-          ].asMap().entries.map(
-                (MapEntry<int, LatLng> entry) => Marker(
-                  markerId: MarkerId('driver-${entry.key}'),
-                  position: entry.value,
-                  icon: carIcon,
-                  anchor: const Offset(0.5, 0.5),
-                  flat: true,
-                ),
-              ),
-        );
-    });
+        ),
+      )
+      ..add(
+        Marker(
+          markerId: const MarkerId('destination'),
+          position: widget.destinationLocation,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueRed,
+          ),
+          infoWindow: InfoWindow(
+            title: 'Destination',
+            snippet: widget.destinationAddress,
+          ),
+        ),
+      );
   }
 
   Future<void> _showCancelConfirmation() async {
@@ -382,7 +346,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   target: widget.pickupLocation,
                   zoom: 15.7,
                 ),
-                markers: _markers,
+                markers: <Marker>{
+                  ..._markers,
+                  ..._liveDrivers.markers,
+                },
                 polylines: _polylines,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
