@@ -143,32 +143,62 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  late final Stream<User?> _authStateChanges;
+  late final Future<void> _minimumSplashDuration;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStateChanges = FirebaseAuth.instance.authStateChanges();
+    _minimumSplashDuration = Future<void>.delayed(
+      const Duration(milliseconds: 2450),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return FutureBuilder<void>(
+      future: _minimumSplashDuration,
       builder: (
         BuildContext context,
-        AsyncSnapshot<User?> snapshot,
+        AsyncSnapshot<void> splashSnapshot,
       ) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingScreen();
-        }
+        return StreamBuilder<User?>(
+          stream: _authStateChanges,
+          builder: (
+            BuildContext context,
+            AsyncSnapshot<User?> authSnapshot,
+          ) {
+            final bool splashComplete =
+                splashSnapshot.connectionState == ConnectionState.done;
+            final bool authReady =
+                authSnapshot.connectionState != ConnectionState.waiting;
 
-        if (snapshot.hasError) {
-          return const LoginScreen();
-        }
+            if (!splashComplete || !authReady) {
+              return const LoadingScreen();
+            }
 
-        final User? user = snapshot.data;
+            if (authSnapshot.hasError) {
+              return const LoginScreen();
+            }
 
-        if (user == null) {
-          return const LoginScreen();
-        }
+            final User? user = authSnapshot.data;
 
-        return const HomeScreen();
+            if (user == null) {
+              return const LoginScreen();
+            }
+
+            return const HomeScreen();
+          },
+        );
       },
     );
   }
