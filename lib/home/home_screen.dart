@@ -12,7 +12,6 @@ import '../models/location_selection.dart';
 import '../models/ride_option.dart';
 import '../services/firestore_service.dart';
 import '../widgets/custom_drawer.dart';
-import '../widgets/loading_screen.dart';
 import '../widgets/location_permission_request.dart';
 import 'destination_search.dart';
 import 'map_view.dart';
@@ -54,9 +53,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Position? _lastProcessedPosition;
 
   Map<String, dynamic>? userData;
-
-  bool _isLoading = true;
   bool _isLocating = false;
+  bool _locationPermissionChecked = false;
   bool _locationPermissionGranted = false;
   bool _pickupManuallySelected = false;
   bool _isSheetCollapsed = true;
@@ -107,9 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (phoneNumber == null) {
       if (!mounted) return;
 
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() {});
 
       return;
     }
@@ -123,7 +119,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         userData = data;
-        _isLoading = false;
       });
     } catch (error) {
       debugPrint(
@@ -132,9 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() {});
     }
   }
 
@@ -145,12 +138,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (status.isGranted) {
       setState(() {
+        _locationPermissionChecked = true;
         _locationPermissionGranted = true;
       });
 
       await _getCurrentLocation();
     } else {
       setState(() {
+        _locationPermissionChecked = true;
         _locationPermissionGranted = false;
       });
     }
@@ -163,6 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (status.isGranted) {
       setState(() {
+        _locationPermissionChecked = true;
         _locationPermissionGranted = true;
       });
 
@@ -753,11 +749,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const LoadingScreen();
-    }
-
-    if (!_locationPermissionGranted) {
+    if (_locationPermissionChecked && !_locationPermissionGranted) {
       return LocationPermissionRequest(
         onRequestPermission: _requestPermission,
       );
@@ -789,6 +781,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 : _defaultCamera,
             markers: _markers,
             polylines: _polylines,
+            myLocationEnabled:
+                _locationPermissionChecked && _locationPermissionGranted,
             onMapCreated: (
               GoogleMapController controller,
             ) {
