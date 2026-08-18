@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "486103357366",
-    "project_id": "alpha-ride-29708",
-    "storage_bucket": "alpha-ride-29708.firebasestorage.app"
+    "project_number": "157920578374",
+    "project_id": "alpharide-passenger",
+    "storage_bucket": "alpharide-passenger.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:486103357366:android:c53f304752a76ab17f1317",
+        "mobilesdk_app_id": "1:157920578374:android:79f46bba7a119ad57f7347",
         "android_client_info": {
           "package_name": "com.alpharideapp.passengerapp"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCqwEeIXaslrBo2QCex3cZCwxOIfq0NzZY"
+          "current_key": "AIzaSyDbabsHW0sHxZElIdolwSJohn4PktojrXc"
         }
       ],
       "services": {

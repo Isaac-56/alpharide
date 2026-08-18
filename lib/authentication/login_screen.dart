@@ -121,7 +121,55 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  void _setLoading(bool value) {
+    if (!mounted || _loading == value) return;
+
+    setState(() {
+      _loading = value;
+    });
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    final ScaffoldMessengerState messenger =
+        ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+  }
+
+  String _messageForAuthError(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'invalid-phone-number':
+        return 'Enter a valid phone number, including the correct country code.';
+      case 'too-many-requests':
+        return 'Too many verification attempts. Please wait a few minutes and try again.';
+      case 'quota-exceeded':
+        return 'The SMS limit has been reached. Please try again later.';
+      case 'network-request-failed':
+        return 'Check your internet connection and try again.';
+      case 'operation-not-allowed':
+        return 'Phone sign-in is not enabled for this app.';
+      case 'app-not-authorized':
+      case 'captcha-check-failed':
+      case 'missing-client-identifier':
+      case 'internal-error':
+        return 'AlphaRide could not complete app verification. Close the verification page and try again. If it continues, the Android SHA configuration must be updated in Firebase.';
+      default:
+        return error.message ??
+            'Phone verification failed. Please try again.';
+    }
+  }
+
   Future<void> _sendOTP() async {
+    if (_loading) return;
+
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) {
@@ -143,43 +191,44 @@ class _LoginScreenState extends State<LoginScreen> {
         '+${_selectedCountry.phoneCode}'
         '${_phoneController.text.trim()}';
 
-    setState(() {
-      _loading = true;
-    });
+    _setLoading(true);
 
     try {
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 60),
         verificationCompleted: (
           PhoneAuthCredential credential,
         ) async {
-          await FirebaseAuth.instance
-              .signInWithCredential(credential);
+          try {
+            await FirebaseAuth.instance
+                .signInWithCredential(credential);
 
-          if (!mounted) return;
+            if (!mounted) return;
 
-          Navigator.pushReplacementNamed(
-            context,
-            '/home',
-          );
+            _setLoading(false);
+
+            Navigator.pushReplacementNamed(
+              context,
+              '/home',
+            );
+          } on FirebaseAuthException catch (error) {
+            _setLoading(false);
+            _showMessage(_messageForAuthError(error));
+          } catch (_) {
+            _setLoading(false);
+            _showMessage(
+              'Automatic verification failed. Please request a new code.',
+            );
+          }
         },
         verificationFailed: (
           FirebaseAuthException error,
         ) {
           if (!mounted) return;
 
-          setState(() {
-            _loading = false;
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                error.message ??
-                    'Phone verification failed.',
-              ),
-            ),
-          );
+          _setLoading(false);
+          _showMessage(_messageForAuthError(error));
         },
         codeSent: (
           String verificationId,
@@ -187,9 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ) {
           if (!mounted) return;
 
-          setState(() {
-            _loading = false;
-          });
+          _setLoading(false);
 
           Navigator.pushNamed(
             context,
@@ -205,22 +252,16 @@ class _LoginScreenState extends State<LoginScreen> {
         ) {
           if (!mounted) return;
 
-          setState(() {
-            _loading = false;
-          });
+          _setLoading(false);
         },
       );
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        _loading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString()),
-        ),
+    } on FirebaseAuthException catch (error) {
+      _setLoading(false);
+      _showMessage(_messageForAuthError(error));
+    } catch (_) {
+      _setLoading(false);
+      _showMessage(
+        'Unable to start phone verification. Please try again.',
       );
     }
   }

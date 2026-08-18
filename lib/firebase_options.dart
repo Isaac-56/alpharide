@@ -41,11 +41,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCqwEeIXaslrBo2QCex3cZCwxOIfq0NzZY',
-    appId: '1:486103357366:android:c53f304752a76ab17f1317',
-    messagingSenderId: '486103357366',
-    projectId: 'alpha-ride-29708',
-    storageBucket: 'alpha-ride-29708.firebasestorage.app',
+    apiKey: 'AIzaSyDbabsHW0sHxZElIdolwSJohn4PktojrXc',
+    appId: '1:157920578374:android:79f46bba7a119ad57f7347',
+    messagingSenderId: '157920578374',
+    projectId: 'alpharide-passenger',
+    storageBucket: 'alpharide-passenger.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyB5-vNpfNRhHqabPFpCUCTBnYADC6nVSzI',
