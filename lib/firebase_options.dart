@@ -41,12 +41,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBIJrHQRxEjgRMwdpiLD8sbqyoAVxUgLQ0',
-    appId: '1:1089638546298:android:4f467d316283f9ce47b4c3',
-    messagingSenderId: '1089638546298',
-    projectId: 'taxi-b58df',
-    databaseURL: 'https://taxi-b58df-default-rtdb.firebaseio.com',
-    storageBucket: 'taxi-b58df.firebasestorage.app',
+    apiKey: 'AIzaSyCqwEeIXaslrBo2QCex3cZCwxOIfq0NzZY',
+    appId: '1:486103357366:android:c53f304752a76ab17f1317',
+    messagingSenderId: '486103357366',
+    projectId: 'alpha-ride-29708',
+    storageBucket: 'alpha-ride-29708.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyB5-vNpfNRhHqabPFpCUCTBnYADC6nVSzI',

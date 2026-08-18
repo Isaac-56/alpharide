@@ -1,14 +1,13 @@
 {
   "project_info": {
-    "project_number": "1089638546298",
-    "firebase_url": "https://taxi-b58df-default-rtdb.firebaseio.com",
-    "project_id": "taxi-b58df",
-    "storage_bucket": "taxi-b58df.firebasestorage.app"
+    "project_number": "486103357366",
+    "project_id": "alpha-ride-29708",
+    "storage_bucket": "alpha-ride-29708.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1089638546298:android:4f467d316283f9ce47b4c3",
+        "mobilesdk_app_id": "1:486103357366:android:c53f304752a76ab17f1317",
         "android_client_info": {
           "package_name": "com.alpharideapp.passengerapp"
         }
@@ -16,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBIJrHQRxEjgRMwdpiLD8sbqyoAVxUgLQ0"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:1089638546298:android:02c296f30dc2376247b4c3",
-        "android_client_info": {
-          "package_name": "com.nile.nile_taxi_app"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBIJrHQRxEjgRMwdpiLD8sbqyoAVxUgLQ0"
+          "current_key": "AIzaSyCqwEeIXaslrBo2QCex3cZCwxOIfq0NzZY"
         }
       ],
       "services": {
