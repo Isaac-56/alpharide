@@ -65,8 +65,7 @@ class SessionService {
   Future<bool> validateExistingSession(User user) async {
     await _waitForSignInTransition();
 
-    final SharedPreferences preferences =
-        await SharedPreferences.getInstance();
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
     final String key = _localSessionKey(user.uid);
     final String? localSessionId = preferences.getString(key);
 
@@ -133,8 +132,7 @@ class SessionService {
 
   Future<void> signOutCurrentDevice() async {
     final User? user = _auth.currentUser;
-    final SharedPreferences preferences =
-        await SharedPreferences.getInstance();
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
 
     if (user != null) {
       final String key = _localSessionKey(user.uid);
@@ -168,8 +166,7 @@ class SessionService {
   }
 
   Future<void> forceLocalSignOut(User user) async {
-    final SharedPreferences preferences =
-        await SharedPreferences.getInstance();
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
 
     await preferences.remove(_localSessionKey(user.uid));
 
@@ -179,9 +176,7 @@ class SessionService {
   }
 
   Future<void> _waitForSignInTransition() async {
-    for (int attempt = 0;
-        _signInInProgress && attempt < 300;
-        attempt += 1) {
+    for (int attempt = 0; _signInInProgress && attempt < 300; attempt += 1) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
   }

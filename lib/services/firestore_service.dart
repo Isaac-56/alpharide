@@ -275,10 +275,7 @@ class FirestoreService {
 
       for (final QueryDocumentSnapshot<Map<String, dynamic>> document
           in snapshot.docs) {
-        await currentReference
-            .collection(subcollection)
-            .doc(document.id)
-            .set(
+        await currentReference.collection(subcollection).doc(document.id).set(
               document.data(),
               SetOptions(merge: true),
             );

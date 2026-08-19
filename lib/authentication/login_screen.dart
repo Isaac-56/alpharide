@@ -14,8 +14,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _phoneController =
-      TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
 
   static const Color primaryColor = Color(0xFF39FF14);
   static const Color textColor = Color(0xFF111111);
@@ -134,8 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showMessage(String message) {
     if (!mounted) return;
 
-    final ScaffoldMessengerState messenger =
-        ScaffoldMessenger.of(context);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     messenger
       ..hideCurrentSnackBar()
@@ -164,8 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'internal-error':
         return 'AlphaRide could not complete app verification. Close the verification page and try again. If it continues, the Android SHA configuration must be updated in Firebase.';
       default:
-        return error.message ??
-            'Phone verification failed. Please try again.';
+        return error.message ?? 'Phone verification failed. Please try again.';
     }
   }
 
@@ -189,8 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final String phoneNumber =
-        '+${_selectedCountry.phoneCode}'
+    final String phoneNumber = '+${_selectedCountry.phoneCode}'
         '${_phoneController.text.trim()}';
 
     _setLoading(true);
@@ -206,8 +202,8 @@ class _LoginScreenState extends State<LoginScreen> {
             SessionService.instance.beginSignIn();
 
             try {
-              final UserCredential result = await FirebaseAuth.instance
-                  .signInWithCredential(credential);
+              final UserCredential result =
+                  await FirebaseAuth.instance.signInWithCredential(credential);
               final User? user = result.user;
 
               if (user == null) {
@@ -304,8 +300,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Form(
                     key: _formKey,
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Spacer(flex: 2),
 
@@ -398,11 +393,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.phone,
                           textInputAction: TextInputAction.done,
                           cursorColor: textColor,
-                          autovalidateMode:
-                              AutovalidateMode.onUserInteraction,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
                           inputFormatters: [
-                            FilteringTextInputFormatter
-                                .digitsOnly,
+                            FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(10),
                           ],
                           onFieldSubmitted: (_) {
@@ -419,25 +412,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             filled: true,
                             fillColor: surfaceColor,
-                            contentPadding:
-                                const EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 19,
                             ),
-                            prefixIconConstraints:
-                                const BoxConstraints(
+                            prefixIconConstraints: const BoxConstraints(
                               minWidth: 0,
                               minHeight: 0,
                             ),
                             prefixIcon: InkWell(
                               onTap: _openCountryPicker,
-                              borderRadius:
-                                  const BorderRadius.horizontal(
+                              borderRadius: const BorderRadius.horizontal(
                                 left: Radius.circular(16),
                               ),
                               child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(
+                                padding: const EdgeInsets.symmetric(
                                   horizontal: 14,
                                 ),
                                 child: Row(
@@ -460,8 +449,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     const SizedBox(width: 2),
                                     const Icon(
-                                      Icons
-                                          .keyboard_arrow_down_rounded,
+                                      Icons.keyboard_arrow_down_rounded,
                                       size: 20,
                                       color: secondaryTextColor,
                                     ),
@@ -476,31 +464,26 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(16),
                               borderSide: const BorderSide(
                                 color: borderColor,
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(16),
                               borderSide: const BorderSide(
                                 color: textColor,
                                 width: 1.4,
                               ),
                             ),
                             errorBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(16),
                               borderSide: const BorderSide(
                                 color: Color(0xFFD83A3A),
                               ),
                             ),
-                            focusedErrorBorder:
-                                OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(16),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
                               borderSide: const BorderSide(
                                 color: Color(0xFFD83A3A),
                                 width: 1.4,
@@ -519,8 +502,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             letterSpacing: 0.1,
                           ),
                           validator: (String? value) {
-                            final String number =
-                                value?.trim() ?? '';
+                            final String number = value?.trim() ?? '';
 
                             if (number.isEmpty) {
                               return 'Enter your phone number.';
@@ -560,24 +542,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: surfaceColor,
-                            borderRadius:
-                                BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: borderColor,
                               width: 1,
                             ),
                           ),
                           child: Row(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Checkbox(
                                 value: _agree,
                                 activeColor: primaryColor,
                                 checkColor: Colors.black,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(5),
+                                  borderRadius: BorderRadius.circular(5),
                                 ),
                                 side: const BorderSide(
                                   color: secondaryTextColor,
@@ -596,28 +575,22 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: const Text.rich(
                                     TextSpan(
                                       style: TextStyle(
-                                        color:
-                                            secondaryTextColor,
+                                        color: secondaryTextColor,
                                         fontSize: 13,
                                         height: 1.45,
-                                        fontWeight:
-                                            FontWeight.w400,
+                                        fontWeight: FontWeight.w400,
                                       ),
                                       children: [
                                         TextSpan(
-                                          text:
-                                              'I agree to AlphaRide’s ',
+                                          text: 'I agree to AlphaRide’s ',
                                         ),
                                         TextSpan(
-                                          text:
-                                              'Terms & Conditions',
+                                          text: 'Terms & Conditions',
                                           style: TextStyle(
                                             color: textColor,
-                                            fontWeight:
-                                                FontWeight.w600,
+                                            fontWeight: FontWeight.w600,
                                             decoration:
-                                                TextDecoration
-                                                    .underline,
+                                                TextDecoration.underline,
                                           ),
                                         ),
                                         TextSpan(text: ' and '),
@@ -625,11 +598,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                           text: 'Privacy Policy',
                                           style: TextStyle(
                                             color: textColor,
-                                            fontWeight:
-                                                FontWeight.w600,
+                                            fontWeight: FontWeight.w600,
                                             decoration:
-                                                TextDecoration
-                                                    .underline,
+                                                TextDecoration.underline,
                                           ),
                                         ),
                                         TextSpan(text: '.'),
@@ -649,40 +620,34 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: double.infinity,
                           height: 56,
                           child: ElevatedButton(
-                            onPressed:
-                                _loading ? null : _sendOTP,
+                            onPressed: _loading ? null : _sendOTP,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryColor,
                               foregroundColor: Colors.black,
-                              disabledBackgroundColor:
-                                  primaryColor.withValues(
+                              disabledBackgroundColor: primaryColor.withValues(
                                 alpha: 0.45,
                               ),
                               elevation: 0,
                               shadowColor: Colors.transparent,
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(16),
                               ),
                             ),
                             child: _loading
                                 ? const SizedBox(
                                     width: 23,
                                     height: 23,
-                                    child:
-                                        CircularProgressIndicator(
+                                    child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
                                       color: Colors.black,
                                     ),
                                   )
                                 : const Text(
                                     'Continue',
-                                    textAlign:
-                                        TextAlign.center,
+                                    textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 17,
-                                      fontWeight:
-                                          FontWeight.w700,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                           ),

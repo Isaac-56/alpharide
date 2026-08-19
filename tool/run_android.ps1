@@ -1,10 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$configPath = Join-Path $projectRoot "configoutes.json"
+$configDirectory = Join-Path -Path $projectRoot -ChildPath "config"
+$configPath = Join-Path -Path $configDirectory -ChildPath "routes.json"
 
 if (-not (Test-Path -LiteralPath $configPath)) {
-    throw "Missing configoutes.json. Run .	oolconfigure_routes.ps1 first."
+    throw "Missing routes configuration. Run the route configuration script first."
 }
 
 Push-Location $projectRoot
