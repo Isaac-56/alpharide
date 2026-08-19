@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/firestore_service.dart';
+import '../services/session_service.dart';
 
 class OTPScreen extends StatefulWidget {
   final String phoneNumber;
@@ -222,7 +223,22 @@ class _OTPScreenState extends State<OTPScreen>
         smsCode: _otp,
       );
 
-      await _auth.signInWithCredential(credential);
+      SessionService.instance.beginSignIn();
+
+      try {
+        final UserCredential result =
+            await _auth.signInWithCredential(credential);
+        final User? user = result.user;
+
+        if (user == null) {
+          throw StateError('Firebase did not return a signed-in user.');
+        }
+
+        await SessionService.instance.activateSession(user);
+      } catch (_) {
+        SessionService.instance.cancelSignIn();
+        rethrow;
+      }
 
       final bool userExists = await _firestore.checkUserExists(
         widget.phoneNumber,
@@ -289,9 +305,22 @@ class _OTPScreenState extends State<OTPScreen>
           PhoneAuthCredential credential,
         ) async {
           try {
-            await _auth.signInWithCredential(
-              credential,
-            );
+            SessionService.instance.beginSignIn();
+
+            try {
+              final UserCredential result =
+                  await _auth.signInWithCredential(credential);
+              final User? user = result.user;
+
+              if (user == null) {
+                throw StateError('Firebase did not return a signed-in user.');
+              }
+
+              await SessionService.instance.activateSession(user);
+            } catch (_) {
+              SessionService.instance.cancelSignIn();
+              rethrow;
+            }
           } on FirebaseAuthException catch (error) {
             if (!mounted) return;
 
