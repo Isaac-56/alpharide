@@ -37,8 +37,9 @@ class DirectionsService {
   }) async {
     if (_apiKey.trim().isEmpty) {
       throw const DirectionsException(
-        'Google routing is not configured. Restart AlphaRide with a '
-        'GOOGLE_ROUTES_API_KEY.',
+        'Routing configuration is missing. Run '
+        '.\\tool\\configure_routes.ps1, then launch '
+        'AlphaRide (Android with routing) from VS Code.',
       );
     }
 
