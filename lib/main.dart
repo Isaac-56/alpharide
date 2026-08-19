@@ -8,6 +8,7 @@ import 'authentication/otp_screen.dart';
 import 'authentication/signup_screen.dart';
 import 'firebase_options.dart';
 import 'home/home_screen.dart';
+import 'services/session_service.dart';
 import 'theme_controller.dart';
 import 'widgets/loading_screen.dart';
 
@@ -40,9 +41,7 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Alpha Passenger',
           themeMode: themeMode,
-          themeAnimationDuration: const Duration(
-            milliseconds: 600,
-          ),
+          themeAnimationDuration: const Duration(milliseconds: 600),
           themeAnimationCurve: Curves.easeInOutCubicEmphasized,
           theme: ThemeData(
             useMaterial3: true,
@@ -109,9 +108,7 @@ class MyApp extends StatelessWidget {
             '/login': (_) => const LoginScreen(),
             '/home': (_) => const HomeScreen(),
           },
-          onGenerateRoute: (
-            RouteSettings settings,
-          ) {
+          onGenerateRoute: (RouteSettings settings) {
             switch (settings.name) {
               case '/otp':
                 final Map<String, dynamic> arguments =
@@ -196,10 +193,121 @@ class _AuthWrapperState extends State<AuthWrapper> {
               return const LoginScreen();
             }
 
+            return ActiveSessionGate(
+              key: ValueKey<String>(user.uid),
+              user: user,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class ActiveSessionGate extends StatefulWidget {
+  final User user;
+
+  const ActiveSessionGate({
+    required this.user,
+    super.key,
+  });
+
+  @override
+  State<ActiveSessionGate> createState() => _ActiveSessionGateState();
+}
+
+class _ActiveSessionGateState extends State<ActiveSessionGate> {
+  late final Future<bool> _validation;
+  bool _signOutScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _validation = SessionService.instance.validateExistingSession(widget.user);
+  }
+
+  void _scheduleForcedSignOut() {
+    if (_signOutScheduled) return;
+    _signOutScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await SessionService.instance.forceLocalSignOut(widget.user);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _validation,
+      builder: (
+        BuildContext context,
+        AsyncSnapshot<bool> validationSnapshot,
+      ) {
+        if (validationSnapshot.connectionState != ConnectionState.done) {
+          return const _SessionCheckingScreen();
+        }
+
+        if (validationSnapshot.data != true) {
+          _scheduleForcedSignOut();
+          return const _SessionCheckingScreen(
+            message: 'This account was opened on another device.',
+          );
+        }
+
+        return StreamBuilder<bool>(
+          stream: SessionService.instance.watchSession(widget.user),
+          builder: (
+            BuildContext context,
+            AsyncSnapshot<bool> sessionSnapshot,
+          ) {
+            if (sessionSnapshot.hasData && sessionSnapshot.data == false) {
+              _scheduleForcedSignOut();
+              return const _SessionCheckingScreen(
+                message: 'Signing out this older session…',
+              );
+            }
+
             return const HomeScreen();
           },
         );
       },
+    );
+  }
+}
+
+class _SessionCheckingScreen extends StatelessWidget {
+  final String? message;
+
+  const _SessionCheckingScreen({
+    this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: colors.primary,
+              ),
+              if (message != null) ...[
+                const SizedBox(height: 18),
+                Text(
+                  message!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
