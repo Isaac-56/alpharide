@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../services/session_service.dart';
+
 class AuthController extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -17,15 +19,36 @@ class AuthController extends ChangeNotifier {
         verificationCompleted: (
           PhoneAuthCredential credential,
         ) async {
+          SessionService.instance.beginSignIn();
+
           try {
-            await _auth.signInWithCredential(credential);
+            final UserCredential result =
+                await _auth.signInWithCredential(credential);
+            final User? user = result.user;
+
+            if (user == null) {
+              throw StateError('Firebase did not return a signed-in user.');
+            }
+
+            await SessionService.instance.activateSession(user);
             notifyListeners();
           } on FirebaseAuthException catch (error) {
+            SessionService.instance.cancelSignIn();
+
             if (!context.mounted) return;
 
             _showSnackBar(
               context,
               error.message ?? 'Automatic phone verification failed.',
+            );
+          } catch (_) {
+            SessionService.instance.cancelSignIn();
+
+            if (!context.mounted) return;
+
+            _showSnackBar(
+              context,
+              'Automatic phone verification failed.',
             );
           }
         },
@@ -66,7 +89,7 @@ class AuthController extends ChangeNotifier {
         context,
         error.message ?? 'Unable to verify this phone number.',
       );
-    } catch (error) {
+    } catch (_) {
       if (!context.mounted) return;
 
       _showSnackBar(
@@ -88,6 +111,8 @@ class AuthController extends ChangeNotifier {
       return;
     }
 
+    SessionService.instance.beginSignIn();
+
     try {
       final PhoneAuthCredential credential = PhoneAuthProvider.credential(
         verificationId: _verificationId,
@@ -96,9 +121,13 @@ class AuthController extends ChangeNotifier {
 
       final UserCredential result =
           await _auth.signInWithCredential(credential);
+      final User? user = result.user;
 
-      if (result.user == null) return;
+      if (user == null) {
+        throw StateError('Firebase did not return a signed-in user.');
+      }
 
+      await SessionService.instance.activateSession(user);
       notifyListeners();
 
       if (!context.mounted) return;
@@ -108,13 +137,17 @@ class AuthController extends ChangeNotifier {
         'Phone number verified successfully.',
       );
     } on FirebaseAuthException catch (error) {
+      SessionService.instance.cancelSignIn();
+
       if (!context.mounted) return;
 
       _showSnackBar(
         context,
         error.message ?? 'The verification code is invalid.',
       );
-    } catch (error) {
+    } catch (_) {
+      SessionService.instance.cancelSignIn();
+
       if (!context.mounted) return;
 
       _showSnackBar(
@@ -128,7 +161,7 @@ class AuthController extends ChangeNotifier {
     BuildContext context,
   ) async {
     try {
-      await _auth.signOut();
+      await SessionService.instance.signOutCurrentDevice();
       notifyListeners();
 
       if (!context.mounted) return;
@@ -137,7 +170,7 @@ class AuthController extends ChangeNotifier {
         context,
         'You have been logged out.',
       );
-    } catch (error) {
+    } catch (_) {
       if (!context.mounted) return;
 
       _showSnackBar(
