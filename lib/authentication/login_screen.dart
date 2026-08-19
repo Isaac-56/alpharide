@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/session_service.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -201,8 +203,22 @@ class _LoginScreenState extends State<LoginScreen> {
           PhoneAuthCredential credential,
         ) async {
           try {
-            await FirebaseAuth.instance
-                .signInWithCredential(credential);
+            SessionService.instance.beginSignIn();
+
+            try {
+              final UserCredential result = await FirebaseAuth.instance
+                  .signInWithCredential(credential);
+              final User? user = result.user;
+
+              if (user == null) {
+                throw StateError('Firebase did not return a signed-in user.');
+              }
+
+              await SessionService.instance.activateSession(user);
+            } catch (_) {
+              SessionService.instance.cancelSignIn();
+              rethrow;
+            }
 
             if (!mounted) return;
 
