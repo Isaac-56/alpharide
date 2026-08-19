@@ -20,7 +20,7 @@ class FirestoreService {
   }
 
   DocumentReference<Map<String, dynamic>> userReference(
-    String phoneNumber,
+    String _,
   ) {
     return _users.doc(_requireUser().uid);
   }
