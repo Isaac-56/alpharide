@@ -52,9 +52,8 @@ class _LoadingScreenState extends State<LoadingScreen>
             BuildContext context,
             BoxConstraints constraints,
           ) {
-            final double logoSize = (constraints.maxWidth * 0.82)
-                .clamp(260.0, 370.0)
-                .toDouble();
+            final double logoSize =
+                (constraints.maxWidth * 0.82).clamp(260.0, 370.0).toDouble();
 
             return Center(
               child: Column(

@@ -19,8 +19,7 @@ class DirectionsService {
   static const String _apiKey = String.fromEnvironment(
     'GOOGLE_ROUTES_API_KEY',
   );
-  static const String _androidPackage =
-      'com.alpharideapp.passengerapp';
+  static const String _androidPackage = 'com.alpharideapp.passengerapp';
   static const String _androidCertificateSha1 = String.fromEnvironment(
     'GOOGLE_ANDROID_CERT_SHA1',
   );
@@ -37,8 +36,9 @@ class DirectionsService {
   }) async {
     if (_apiKey.trim().isEmpty) {
       throw const DirectionsException(
-        'Google routing is not configured. Restart AlphaRide with a '
-        'GOOGLE_ROUTES_API_KEY.',
+        'Routing configuration is missing. Run '
+        '.\\tool\\configure_routes.ps1, then launch '
+        'AlphaRide (Android with routing) from VS Code.',
       );
     }
 
@@ -59,14 +59,12 @@ class DirectionsService {
             headers: <String, String>{
               'Content-Type': 'application/json; charset=UTF-8',
               'X-Goog-Api-Key': _apiKey,
-              'X-Goog-FieldMask':
-                  'routes.distanceMeters,routes.duration,'
+              'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,'
                   'routes.polyline.encodedPolyline',
               'X-Android-Package': _androidPackage,
               if (_androidCertificateSha1.trim().isNotEmpty)
-                'X-Android-Cert': _androidCertificateSha1
-                    .replaceAll(':', '')
-                    .toUpperCase(),
+                'X-Android-Cert':
+                    _androidCertificateSha1.replaceAll(':', '').toUpperCase(),
             },
             body: jsonEncode(
               <String, Object>{
@@ -110,9 +108,8 @@ class DirectionsService {
     }
 
     final Object? decoded = _tryDecode(response.body);
-    final Map<String, dynamic> body = decoded is Map<String, dynamic>
-        ? decoded
-        : <String, dynamic>{};
+    final Map<String, dynamic> body =
+        decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw DirectionsException(_readError(body, response.statusCode));
@@ -129,10 +126,10 @@ class DirectionsService {
     }
 
     final Map<String, dynamic> route = routes.first as Map<String, dynamic>;
-    final Map<String, dynamic> polyline = route['polyline']
-            is Map<String, dynamic>
-        ? route['polyline'] as Map<String, dynamic>
-        : <String, dynamic>{};
+    final Map<String, dynamic> polyline =
+        route['polyline'] is Map<String, dynamic>
+            ? route['polyline'] as Map<String, dynamic>
+            : <String, dynamic>{};
     final String encodedPolyline =
         polyline['encodedPolyline']?.toString() ?? '';
     final List<LatLng> points = _decodePolyline(encodedPolyline);
@@ -143,8 +140,7 @@ class DirectionsService {
       );
     }
 
-    final int distanceMeters =
-        (route['distanceMeters'] as num?)?.round() ?? 0;
+    final int distanceMeters = (route['distanceMeters'] as num?)?.round() ?? 0;
     final Duration duration = _parseDuration(route['duration']?.toString());
 
     return DrivingRoute(

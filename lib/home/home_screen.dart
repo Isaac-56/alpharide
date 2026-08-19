@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/location_selection.dart';
 import '../models/ride_option.dart';
 import '../services/firestore_service.dart';
+import '../services/session_service.dart';
 import '../widgets/custom_drawer.dart';
 import '../widgets/location_permission_request.dart';
 import 'destination_search.dart';
@@ -365,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut() async {
-    await _auth.signOut();
+    await SessionService.instance.signOutCurrentDevice();
 
     if (!mounted) return;
 

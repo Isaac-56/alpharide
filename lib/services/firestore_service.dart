@@ -1,30 +1,78 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final CollectionReference<Map<String, dynamic>> _users =
       FirebaseFirestore.instance.collection('users');
 
+  User _requireUser() {
+    final User? user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('A signed-in user is required for private data.');
+    }
+
+    return user;
+  }
+
   DocumentReference<Map<String, dynamic>> userReference(
-    String phoneNumber,
-  ) =>
-      _users.doc(phoneNumber);
+    String _,
+  ) {
+    return _users.doc(_requireUser().uid);
+  }
 
   Future<bool> checkUserExists(
     String phoneNumber,
   ) async {
     try {
-      final DocumentSnapshot<Map<String, dynamic>> snapshot =
-          await _users.doc(phoneNumber).get();
+      final User user = _requireUser();
+      final DocumentReference<Map<String, dynamic>> currentReference =
+          _users.doc(user.uid);
+      final DocumentSnapshot<Map<String, dynamic>> currentSnapshot =
+          await currentReference.get();
 
-      return snapshot.exists;
-    } catch (error) {
-      debugPrint(
-        'Unable to check whether the user exists: $error',
+      if (currentSnapshot.exists) {
+        return true;
+      }
+
+      final String legacyKey = phoneNumber.trim();
+
+      if (legacyKey.isEmpty || legacyKey == user.uid) {
+        return false;
+      }
+
+      final DocumentReference<Map<String, dynamic>> legacyReference =
+          _users.doc(legacyKey);
+      final DocumentSnapshot<Map<String, dynamic>> legacySnapshot =
+          await legacyReference.get();
+
+      if (!legacySnapshot.exists) {
+        return false;
+      }
+
+      await currentReference.set(
+        <String, dynamic>{
+          ...?legacySnapshot.data(),
+          'uid': user.uid,
+          'phoneNumber': user.phoneNumber ?? legacyKey,
+          'migratedFromPhoneKey': legacyKey,
+          'migratedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
       );
 
+      await _migrateKnownSubcollections(
+        legacyReference,
+        currentReference,
+      );
+
+      return true;
+    } catch (error) {
+      debugPrint('Unable to check whether the user exists: $error');
       rethrow;
     }
   }
@@ -36,9 +84,12 @@ class FirestoreService {
     String? referralCode,
   }) async {
     try {
-      await _users.doc(phoneNumber).set(
-        {
-          'phoneNumber': phoneNumber,
+      final User user = _requireUser();
+
+      await _users.doc(user.uid).set(
+        <String, dynamic>{
+          'uid': user.uid,
+          'phoneNumber': user.phoneNumber ?? phoneNumber,
           'name': name.trim(),
           'photoUrl': photoUrl,
           'referralCode': referralCode?.trim(),
@@ -47,10 +98,7 @@ class FirestoreService {
         SetOptions(merge: true),
       );
     } catch (error) {
-      debugPrint(
-        'Unable to save the user profile: $error',
-      );
-
+      debugPrint('Unable to save the user profile: $error');
       rethrow;
     }
   }
@@ -60,14 +108,11 @@ class FirestoreService {
   ) async {
     try {
       final DocumentSnapshot<Map<String, dynamic>> snapshot =
-          await _users.doc(phoneNumber).get();
+          await userReference(phoneNumber).get();
 
       return snapshot.data();
     } catch (error) {
-      debugPrint(
-        'Unable to retrieve the user profile: $error',
-      );
-
+      debugPrint('Unable to retrieve the user profile: $error');
       rethrow;
     }
   }
@@ -87,9 +132,12 @@ class FirestoreService {
     String? emergencyPhone,
     String? photoUrl,
   }) async {
+    final User user = _requireUser();
+
     await userReference(phoneNumber).set(
       <String, dynamic>{
-        'phoneNumber': phoneNumber,
+        'uid': user.uid,
+        'phoneNumber': user.phoneNumber ?? phoneNumber,
         'name': name.trim(),
         'email': email?.trim(),
         'emergencyPhone': emergencyPhone?.trim(),
@@ -111,9 +159,12 @@ class FirestoreService {
     required String topic,
     required String message,
   }) async {
+    final User user = _requireUser();
+
     await _firestore.collection('app_feedback').add(
       <String, dynamic>{
-        'phoneNumber': phoneNumber,
+        'userId': user.uid,
+        'phoneNumber': user.phoneNumber ?? phoneNumber,
         'topic': topic,
         'message': message.trim(),
         'platform': 'passenger',
@@ -205,6 +256,31 @@ class FirestoreService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map(_documentsToMaps);
+  }
+
+  Future<void> _migrateKnownSubcollections(
+    DocumentReference<Map<String, dynamic>> legacyReference,
+    DocumentReference<Map<String, dynamic>> currentReference,
+  ) async {
+    const List<String> subcollections = <String>[
+      'saved_places',
+      'notifications',
+      'orders',
+      'wallet_transactions',
+    ];
+
+    for (final String subcollection in subcollections) {
+      final QuerySnapshot<Map<String, dynamic>> snapshot =
+          await legacyReference.collection(subcollection).get();
+
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> document
+          in snapshot.docs) {
+        await currentReference.collection(subcollection).doc(document.id).set(
+              document.data(),
+              SetOptions(merge: true),
+            );
+      }
+    }
   }
 
   List<Map<String, dynamic>> _documentsToMaps(
