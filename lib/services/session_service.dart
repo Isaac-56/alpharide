@@ -62,7 +62,10 @@ class SessionService {
     }
   }
 
-  Future<bool> validateExistingSession(User user) async {
+  Future<bool> validateExistingSession(
+    User user, {
+    bool forceServer = false,
+  }) async {
     await _waitForSignInTransition();
 
     final SharedPreferences preferences = await SharedPreferences.getInstance();
@@ -70,8 +73,11 @@ class SessionService {
     final String? localSessionId = preferences.getString(key);
 
     try {
-      final DocumentSnapshot<Map<String, dynamic>> snapshot =
-          await _sessionReference(user.uid).get();
+      final DocumentSnapshot<Map<String, dynamic>> snapshot = forceServer
+          ? await _sessionReference(user.uid).get(
+              const GetOptions(source: Source.server),
+            )
+          : await _sessionReference(user.uid).get();
       final String? remoteSessionId =
           snapshot.data()?['activeSessionId'] as String?;
 
@@ -104,28 +110,48 @@ class SessionService {
   }
 
   Stream<bool> watchSession(User user) async* {
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
+    final String? localSessionId = preferences.getString(
+      _localSessionKey(user.uid),
+    );
+
+    if (localSessionId == null) {
+      yield false;
+      return;
+    }
+
     while (_auth.currentUser?.uid == user.uid) {
       try {
         await for (final DocumentSnapshot<Map<String, dynamic>> snapshot
-            in _sessionReference(user.uid).snapshots()) {
-          final SharedPreferences preferences =
-              await SharedPreferences.getInstance();
-          final String? localSessionId = preferences.getString(
-            _localSessionKey(user.uid),
-          );
+            in _sessionReference(user.uid).snapshots(
+          includeMetadataChanges: true,
+        )) {
           final String? remoteSessionId =
               snapshot.data()?['activeSessionId'] as String?;
 
-          yield snapshot.exists &&
-              localSessionId != null &&
-              localSessionId == remoteSessionId;
+          final bool isValid =
+              snapshot.exists && localSessionId == remoteSessionId;
+
+          yield isValid;
+
+          if (!isValid) return;
         }
 
         return;
       } on FirebaseException catch (error) {
         debugPrint('Active-session listener paused: $error');
-        yield true;
-        await Future<void>.delayed(const Duration(seconds: 5));
+
+        final bool isValid = await validateExistingSession(
+          user,
+          forceServer: true,
+        );
+
+        if (!isValid) {
+          yield false;
+          return;
+        }
+
+        await Future<void>.delayed(const Duration(seconds: 1));
       }
     }
   }

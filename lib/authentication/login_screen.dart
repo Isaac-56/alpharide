@@ -220,9 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
             _setLoading(false);
 
-            Navigator.pushReplacementNamed(
-              context,
-              '/home',
+            Navigator.of(context, rootNavigator: true).popUntil(
+              (Route<dynamic> route) => route.isFirst,
             );
           } on FirebaseAuthException catch (error) {
             _setLoading(false);

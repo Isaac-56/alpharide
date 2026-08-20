@@ -392,9 +392,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (!mounted) return;
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/home',
-        (Route<dynamic> route) => false,
+      Navigator.of(context, rootNavigator: true).popUntil(
+        (Route<dynamic> route) => route.isFirst,
       );
     } catch (error) {
       debugPrint('Error during registration: $error');

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
@@ -106,7 +108,6 @@ class MyApp extends StatelessWidget {
           home: const AuthWrapper(),
           routes: {
             '/login': (_) => const LoginScreen(),
-            '/home': (_) => const HomeScreen(),
           },
           onGenerateRoute: (RouteSettings settings) {
             switch (settings.name) {
@@ -216,14 +217,47 @@ class ActiveSessionGate extends StatefulWidget {
   State<ActiveSessionGate> createState() => _ActiveSessionGateState();
 }
 
-class _ActiveSessionGateState extends State<ActiveSessionGate> {
+class _ActiveSessionGateState extends State<ActiveSessionGate>
+    with WidgetsBindingObserver {
   late final Future<bool> _validation;
   bool _signOutScheduled = false;
+  bool _resumeCheckInProgress = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _validation = SessionService.instance.validateExistingSession(widget.user);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_validateAfterResume());
+    }
+  }
+
+  Future<void> _validateAfterResume() async {
+    if (_resumeCheckInProgress || _signOutScheduled) return;
+
+    _resumeCheckInProgress = true;
+
+    try {
+      final bool isValid = await SessionService.instance
+          .validateExistingSession(widget.user, forceServer: true);
+
+      if (!isValid && mounted) {
+        _scheduleForcedSignOut();
+      }
+    } finally {
+      _resumeCheckInProgress = false;
+    }
   }
 
   void _scheduleForcedSignOut() {

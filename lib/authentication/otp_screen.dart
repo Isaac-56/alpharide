@@ -249,16 +249,13 @@ class _OTPScreenState extends State<OTPScreen>
       _timer?.cancel();
 
       if (userExists) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/home',
-          (Route<dynamic> route) => false,
+        Navigator.of(context, rootNavigator: true).popUntil(
+          (Route<dynamic> route) => route.isFirst,
         );
       } else {
-        Navigator.pushNamedAndRemoveUntil(
+        Navigator.pushReplacementNamed(
           context,
           '/signup',
-          (Route<dynamic> route) => false,
           arguments: widget.phoneNumber,
         );
       }
