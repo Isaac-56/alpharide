@@ -84,15 +84,49 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   Set<Polyline> get _polylines {
     if (_routePoints.length < 2) return <Polyline>{};
 
-    return {
+    return <Polyline>{
       Polyline(
-        polylineId: const PolylineId('route-preview'),
-        color: primaryColor,
-        width: 5,
+        polylineId: const PolylineId('route-preview-shadow'),
+        color: Colors.black.withValues(alpha: 0.28),
+        width: 15,
         jointType: JointType.round,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
         geodesic: false,
+        zIndex: 1,
+        points: _routePoints,
+      ),
+      Polyline(
+        polylineId: const PolylineId('route-preview-edge'),
+        color: const Color(0xFF12300F),
+        width: 11,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        geodesic: false,
+        zIndex: 2,
+        points: _routePoints,
+      ),
+      Polyline(
+        polylineId: const PolylineId('route-preview'),
+        color: primaryColor,
+        width: 8,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        geodesic: false,
+        zIndex: 3,
+        points: _routePoints,
+      ),
+      Polyline(
+        polylineId: const PolylineId('route-preview-highlight'),
+        color: Colors.white.withValues(alpha: 0.30),
+        width: 2,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        geodesic: false,
+        zIndex: 4,
         points: _routePoints,
       ),
     };

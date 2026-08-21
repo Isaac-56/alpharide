@@ -521,17 +521,53 @@ class _HomeScreenState extends State<HomeScreen> {
         _routePoints = route.points;
         _polylines
           ..clear()
-          ..add(
-            Polyline(
-              polylineId: const PolylineId('road-route'),
-              color: primaryColor,
-              width: 6,
-              jointType: JointType.round,
-              startCap: Cap.roundCap,
-              endCap: Cap.roundCap,
-              geodesic: false,
-              points: route.points,
-            ),
+          ..addAll(
+            <Polyline>[
+              Polyline(
+                polylineId: const PolylineId('road-route-shadow'),
+                color: Colors.black.withValues(alpha: 0.28),
+                width: 15,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                geodesic: false,
+                zIndex: 1,
+                points: route.points,
+              ),
+              Polyline(
+                polylineId: const PolylineId('road-route-edge'),
+                color: const Color(0xFF12300F),
+                width: 11,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                geodesic: false,
+                zIndex: 2,
+                points: route.points,
+              ),
+              Polyline(
+                polylineId: const PolylineId('road-route'),
+                color: primaryColor,
+                width: 8,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                geodesic: false,
+                zIndex: 3,
+                points: route.points,
+              ),
+              Polyline(
+                polylineId: const PolylineId('road-route-highlight'),
+                color: Colors.white.withValues(alpha: 0.30),
+                width: 2,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                geodesic: false,
+                zIndex: 4,
+                points: route.points,
+              ),
+            ],
           );
       });
 
