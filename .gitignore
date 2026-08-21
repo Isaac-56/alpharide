@@ -44,3 +44,6 @@ app.*.map.json
 
 # Local API-key configuration (never commit secrets)
 config/routes.json
+
+# Android Kotlin build cache
+android/.kotlin/
