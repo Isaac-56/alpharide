@@ -15,6 +15,8 @@ class OrderPanel extends StatefulWidget {
   final VoidCallback onPickupTap;
   final VoidCallback onDestinationTap;
   final RideSelectionCallback onConfirmRide;
+  final bool collapsed;
+  final VoidCallback onExpand;
 
   const OrderPanel({
     super.key,
@@ -23,6 +25,8 @@ class OrderPanel extends StatefulWidget {
     required this.onPickupTap,
     required this.onDestinationTap,
     required this.onConfirmRide,
+    required this.collapsed,
+    required this.onExpand,
   });
 
   @override
@@ -217,6 +221,10 @@ class _OrderPanelState extends State<OrderPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.collapsed) {
+      return _compactPanel();
+    }
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOut,
@@ -430,6 +438,166 @@ class _OrderPanelState extends State<OrderPanel> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _compactPanel() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      color: backgroundColor,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 42,
+            height: 4,
+            decoration: BoxDecoration(
+              color: _isDarkMode
+                  ? const Color(0xFF4B4F4B)
+                  : const Color(0xFFC7CCC7),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              SizedBox(
+                width: 66,
+                height: 42,
+                child: Image.asset(
+                  _selectedRide.assetPath,
+                  fit: BoxFit.contain,
+                  cacheWidth: 220,
+                  filterQuality: FilterQuality.low,
+                  gaplessPlayback: true,
+                  errorBuilder: (
+                    BuildContext context,
+                    Object error,
+                    StackTrace? stackTrace,
+                  ) {
+                    return Icon(
+                      Icons.directions_car_filled_rounded,
+                      color: mutedColor,
+                      size: 36,
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      _selectedRide.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_selectedRide.seats} seats • $_paymentLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Material(
+                color: surfaceColor,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: widget.onExpand,
+                  customBorder: const CircleBorder(),
+                  child: SizedBox(
+                    width: 38,
+                    height: 38,
+                    child: Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isInteractionLocked ? null : _confirmRide,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: const Color(0xFF071007),
+                disabledBackgroundColor: primaryColor.withValues(alpha: 0.52),
+                disabledForegroundColor:
+                    const Color(0xFF071007).withValues(alpha: 0.62),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
+                child: _isConfirmingRide
+                    ? const SizedBox(
+                        key: ValueKey<String>('compact-confirming-ride'),
+                        width: 21,
+                        height: 21,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.3,
+                          color: Color(0xFF071007),
+                        ),
+                      )
+                    : Row(
+                        key: const ValueKey<String>('compact-confirm-ride'),
+                        children: <Widget>[
+                          const Expanded(
+                            child: Text(
+                              'Set pick-up point',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.15,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '~ ${_selectedRide.estimatedFareLabel}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

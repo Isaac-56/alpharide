@@ -469,6 +469,10 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
+    await _collapseOrderPanel();
+
+    if (!mounted) return;
+
     if (_destinationLocation != null) {
       await _refreshRoadRoute(
         showFailureMessage: true,
@@ -658,93 +662,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _collapsedCard() {
-    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+  Future<void> _collapseOrderPanel() async {
+    if (!_sheetController.isAttached) return;
 
-    final Color panelTextColor =
-        isDarkMode ? Colors.white : const Color(0xFF111311);
-
-    final Color secondaryTextColor =
-        isDarkMode ? const Color(0xFF9A9F9A) : const Color(0xFF687068);
-
-    final Color controlColor =
-        isDarkMode ? const Color(0xFF242724) : const Color(0xFFF0F3F0);
-
-    return SizedBox(
-      height: 90,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 19,
-          vertical: 11,
-        ),
-        child: Row(
-          children: <Widget>[
-            Container(
-              width: 76,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: primaryColor.withValues(
-                  alpha: 0.10,
-                ),
-                borderRadius: BorderRadius.circular(17),
-                border: Border.all(
-                  color: primaryColor.withValues(
-                    alpha: 0.28,
-                  ),
-                ),
-              ),
-              child: Image.asset(
-                'assets/images/vehicles/alpha_standard.png',
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Order now',
-                    style: TextStyle(
-                      color: panelTextColor,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Choose a ride that fits you',
-                    style: TextStyle(
-                      color: secondaryTextColor,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Material(
-              color: controlColor,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: _expandOrderPanel,
-                customBorder: const CircleBorder(),
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Icon(
-                    Icons.keyboard_arrow_up_rounded,
-                    color: panelTextColor,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    await _sheetController.animateTo(
+      0.20,
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -828,12 +752,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           DraggableScrollableSheet(
             controller: _sheetController,
-            initialChildSize: 0.13,
-            minChildSize: 0.13,
+            initialChildSize: 0.20,
+            minChildSize: 0.20,
             maxChildSize: 0.68,
             snap: true,
             snapSizes: const <double>[
-              0.13,
+              0.20,
               0.68,
             ],
             builder: (
@@ -844,7 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onNotification: (
                   DraggableScrollableNotification notification,
                 ) {
-                  final bool collapsed = notification.extent < 0.20;
+                  final bool collapsed = notification.extent < 0.30;
 
                   if (collapsed != _isSheetCollapsed) {
                     setState(() {
@@ -875,23 +799,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   clipBehavior: Clip.antiAlias,
                   child: SingleChildScrollView(
                     controller: scrollController,
-                    child: _isSheetCollapsed
-                        ? _collapsedCard()
-                        : OrderPanel(
-                            pickupAddress: pickupAddress,
-                            destinationAddress: destinationAddress,
-                            onPickupTap: () {
-                              _openDestinationSearch(
-                                isPickup: true,
-                              );
-                            },
-                            onDestinationTap: () {
-                              _openDestinationSearch(
-                                isPickup: false,
-                              );
-                            },
-                            onConfirmRide: _openBookingConfirmation,
-                          ),
+                    child: OrderPanel(
+                      pickupAddress: pickupAddress,
+                      destinationAddress: destinationAddress,
+                      onPickupTap: () {
+                        _openDestinationSearch(
+                          isPickup: true,
+                        );
+                      },
+                      onDestinationTap: () {
+                        _openDestinationSearch(
+                          isPickup: false,
+                        );
+                      },
+                      onConfirmRide: _openBookingConfirmation,
+                      collapsed: _isSheetCollapsed,
+                      onExpand: _expandOrderPanel,
+                    ),
                   ),
                 ),
               );
