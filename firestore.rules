@@ -12,26 +12,57 @@ service cloud.firestore {
            request.auth.token.phone_number == userKey);
     }
 
+    function ownsDriverProfile(driverId) {
+      return signedIn() && request.auth.uid == driverId;
+    }
+
+    function hasSafeDriverFields(driverId) {
+      return request.resource.data.uid == driverId
+          && request.resource.data.phoneNumber ==
+              request.auth.token.phone_number
+          && request.resource.data.reviewStatus in [
+            'draft',
+            'pending'
+          ];
+    }
+
+    // Passenger accounts and private passenger data.
     match /users/{userKey} {
-      allow read, create, update, delete: if ownsUserDocument(userKey);
+      allow read, create, update, delete:
+          if ownsUserDocument(userKey);
 
       match /{privateDocument=**} {
-        allow read, write: if ownsUserDocument(userKey);
+        allow read, write:
+            if ownsUserDocument(userKey);
       }
     }
 
+    // Driver registration and verification profiles.
+    match /drivers/{driverId} {
+      allow read, delete:
+          if ownsDriverProfile(driverId);
+
+      allow create, update:
+          if ownsDriverProfile(driverId) &&
+             hasSafeDriverFields(driverId);
+    }
+
+    // Passenger single-device session control.
     match /user_sessions/{uid} {
       allow read, create, update, delete:
           if signedIn() && request.auth.uid == uid;
     }
 
+    // Feedback can be submitted but not read from the app.
     match /app_feedback/{feedbackId} {
       allow create:
           if signedIn() &&
              request.resource.data.userId == request.auth.uid;
+
       allow read, update, delete: if false;
     }
 
+    // Everything else remains private.
     match /{document=**} {
       allow read, write: if false;
     }
