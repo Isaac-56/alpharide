@@ -65,6 +65,23 @@ class RideOption {
     return roundedFare < minimumFare ? minimumFare : roundedFare;
   }
 
+  RideOption withEstimatedFare(int fare) {
+    return RideOption(
+      id: id,
+      name: name,
+      description: description,
+      assetPath: assetPath,
+      seats: seats,
+      estimatedFare: fare,
+      minimumFare: minimumFare,
+      baseFare: baseFare,
+      perMinute: perMinute,
+      perKilometer: perKilometer,
+      isElectric: isElectric,
+      isCorporate: isCorporate,
+    );
+  }
+
   static String formatAmount(int amount) {
     final String digits = amount.abs().toString();
     final StringBuffer formatted = StringBuffer();

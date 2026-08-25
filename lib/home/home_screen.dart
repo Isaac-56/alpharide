@@ -48,6 +48,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<Polyline> _polylines = <Polyline>{};
 
   List<LatLng> _routePoints = const <LatLng>[];
+  int? _routeDistanceMeters;
+  Duration? _routeDuration;
   int _routeRequestId = 0;
 
   StreamSubscription<Position>? _positionStream;
@@ -420,6 +422,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     setState(() {
+      _routePoints = const <LatLng>[];
+      _routeDistanceMeters = null;
+      _routeDuration = null;
+      _polylines.clear();
+
       if (isPickup) {
         _pickupManuallySelected = true;
         _pickupLocation = selectedLocation;
@@ -500,6 +507,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _routePoints = const <LatLng>[];
+        _routeDistanceMeters = null;
+        _routeDuration = null;
         _polylines.clear();
       });
 
@@ -519,6 +528,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _routePoints = route.points;
+        _routeDistanceMeters = route.distanceMeters;
+        _routeDuration = route.duration;
         _polylines
           ..clear()
           ..addAll(
@@ -579,6 +590,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _routePoints = const <LatLng>[];
+        _routeDistanceMeters = null;
+        _routeDuration = null;
         _polylines.clear();
       });
 
@@ -851,6 +864,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       onConfirmRide: _openBookingConfirmation,
                       collapsed: _isSheetCollapsed,
                       onExpand: _expandOrderPanel,
+                      routeDistanceMeters: _routeDistanceMeters,
+                      routeDuration: _routeDuration,
                     ),
                   ),
                 ),

@@ -17,6 +17,8 @@ class OrderPanel extends StatefulWidget {
   final RideSelectionCallback onConfirmRide;
   final bool collapsed;
   final VoidCallback onExpand;
+  final int? routeDistanceMeters;
+  final Duration? routeDuration;
 
   const OrderPanel({
     super.key,
@@ -27,6 +29,8 @@ class OrderPanel extends StatefulWidget {
     required this.onConfirmRide,
     required this.collapsed,
     required this.onExpand,
+    this.routeDistanceMeters,
+    this.routeDuration,
   });
 
   @override
@@ -69,6 +73,40 @@ class _OrderPanelState extends State<OrderPanel> {
   Color get dividerColor =>
       _isDarkMode ? const Color(0xFF303330) : const Color(0xFFE1E6E1);
 
+  bool get _hasRouteEstimate =>
+      (widget.routeDistanceMeters ?? 0) > 0 && widget.routeDuration != null;
+
+  int _fareFor(RideOption ride) {
+    if (!_hasRouteEstimate) {
+      return ride.estimatedFare;
+    }
+
+    return ride.calculateFare(
+      distanceKilometers: widget.routeDistanceMeters! / 1000,
+      durationMinutes: widget.routeDuration!.inSeconds / 60,
+    );
+  }
+
+  String _fareLabelFor(RideOption ride) =>
+      '${RideOption.formatAmount(_fareFor(ride))} '
+      '${RideOption.currencyCode}';
+
+  RideOption _pricedRide(RideOption ride) =>
+      ride.withEstimatedFare(_fareFor(ride));
+
+  String? get _routeSummary {
+    if (!_hasRouteEstimate) return null;
+
+    final double kilometers = widget.routeDistanceMeters! / 1000;
+    final int calculatedMinutes = (widget.routeDuration!.inSeconds / 60).ceil();
+    final int minutes = calculatedMinutes < 1 ? 1 : calculatedMinutes;
+    final String distance = kilometers < 10
+        ? kilometers.toStringAsFixed(1)
+        : kilometers.toStringAsFixed(0);
+
+    return '$distance km • $minutes min';
+  }
+
   Future<void> _handleRideTap(
     RideOption ride,
   ) async {
@@ -90,7 +128,7 @@ class _OrderPanelState extends State<OrderPanel> {
         context,
         MaterialPageRoute<void>(
           builder: (_) => RideOptionDetailsScreen(
-            ride: ride,
+            ride: _pricedRide(ride),
           ),
         ),
       );
@@ -176,7 +214,7 @@ class _OrderPanelState extends State<OrderPanel> {
 
     try {
       widget.onConfirmRide(
-        _selectedRide,
+        _pricedRide(_selectedRide),
         _paymentMethod,
       );
     } catch (error) {
@@ -224,6 +262,8 @@ class _OrderPanelState extends State<OrderPanel> {
     if (widget.collapsed) {
       return _compactPanel();
     }
+
+    final String? routeSummary = _routeSummary;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 260),
@@ -277,6 +317,31 @@ class _OrderPanelState extends State<OrderPanel> {
               ),
               child: _routeCard(),
             ),
+            if (routeSummary != null) ...<Widget>[
+              const SizedBox(height: 7),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    Icon(
+                      Icons.route_rounded,
+                      size: 15,
+                      color: mutedColor,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      routeSummary,
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(
@@ -406,7 +471,7 @@ class _OrderPanelState extends State<OrderPanel> {
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    '~ ${_selectedRide.estimatedFareLabel}',
+                                    '~ ${_fareLabelFor(_selectedRide)}',
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
@@ -475,21 +540,26 @@ class _OrderPanelState extends State<OrderPanel> {
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
                     children: <Widget>[
-                      Container(
-                        width: 50,
+                      SizedBox(
+                        width: 68,
                         height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: primaryColor.withValues(alpha: 0.11),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: primaryColor.withValues(alpha: 0.30),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.local_taxi_rounded,
-                          color: Color(0xFF111311),
-                          size: 28,
+                        child: Image.asset(
+                          'assets/images/vehicles/alpha_standard.png',
+                          fit: BoxFit.contain,
+                          cacheWidth: 240,
+                          filterQuality: FilterQuality.high,
+                          gaplessPlayback: true,
+                          errorBuilder: (
+                            BuildContext context,
+                            Object error,
+                            StackTrace? stackTrace,
+                          ) {
+                            return Icon(
+                              Icons.directions_car_filled_rounded,
+                              color: mutedColor,
+                              size: 30,
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -591,7 +661,7 @@ class _OrderPanelState extends State<OrderPanel> {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerRight,
                               child: Text(
-                                '~ ${_selectedRide.estimatedFareLabel}',
+                                '~ ${_fareLabelFor(_selectedRide)}',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
@@ -748,8 +818,7 @@ class _OrderPanelState extends State<OrderPanel> {
     return Semantics(
       button: true,
       selected: selected,
-      label:
-          '${ride.name}, about ${ride.estimatedFareLabel}, ${ride.seats} seats',
+      label: '${ride.name}, about ${_fareLabelFor(ride)}, ${ride.seats} seats',
       hint: selected
           ? 'Tap again to open ride details'
           : 'Tap to select this ride',
@@ -929,7 +998,7 @@ class _OrderPanelState extends State<OrderPanel> {
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerRight,
                                   child: Text(
-                                    '~ ${ride.estimatedFareLabel}',
+                                    '~ ${_fareLabelFor(ride)}',
                                     style: TextStyle(
                                       color: selected || corporate
                                           ? accentColor

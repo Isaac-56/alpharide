@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:passengerapp/account/wallet_screens.dart';
 import 'package:passengerapp/home/order_panel.dart';
+import 'package:passengerapp/models/ride_option.dart';
 
 void main() {
   testWidgets(
@@ -22,8 +23,10 @@ void main() {
   );
 
   testWidgets(
-    'collapsed order panel shows a generic order prompt',
+    'collapsed order panel shows the car and route-based fare',
     (WidgetTester tester) async {
+      RideOption? confirmedRide;
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -32,9 +35,13 @@ void main() {
               destinationAddress: '',
               onPickupTap: () {},
               onDestinationTap: () {},
-              onConfirmRide: (_, __) {},
+              onConfirmRide: (RideOption ride, _) {
+                confirmedRide = ride;
+              },
               collapsed: true,
               onExpand: () {},
+              routeDistanceMeters: 10000,
+              routeDuration: const Duration(minutes: 20),
             ),
           ),
         ),
@@ -42,9 +49,55 @@ void main() {
 
       expect(find.text('Order now'), findsOneWidget);
       expect(find.text('Choose a ride that fits you'), findsOneWidget);
-      expect(find.byIcon(Icons.local_taxi_rounded), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName ==
+                  'assets/images/vehicles/alpha_standard.png',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Set pick-up point'), findsOneWidget);
+      expect(find.text('~ 21,500 SSP'), findsOneWidget);
       expect(find.text('Alpha Boda'), findsNothing);
+
+      await tester.tap(find.text('Set pick-up point'));
+      await tester.pump();
+
+      expect(confirmedRide?.estimatedFare, 21500);
     },
   );
+
+  test('ride fare applies minimums and SSP rounding', () {
+    final RideOption boda = RideOption.options.firstWhere(
+      (RideOption ride) => ride.id == 'boda',
+    );
+    final RideOption standard = RideOption.options.firstWhere(
+      (RideOption ride) => ride.id == 'standard',
+    );
+
+    expect(
+      boda.calculateFare(
+        distanceKilometers: 0,
+        durationMinutes: 0,
+      ),
+      boda.minimumFare,
+    );
+    expect(
+      boda.calculateFare(
+        distanceKilometers: 1,
+        durationMinutes: 1,
+      ),
+      4500,
+    );
+    expect(
+      standard.calculateFare(
+        distanceKilometers: 10,
+        durationMinutes: 20,
+      ),
+      51000,
+    );
+  });
 }
