@@ -462,77 +462,84 @@ class _OrderPanelState extends State<OrderPanel> {
             ),
           ),
           const SizedBox(height: 6),
-          Row(
-            children: <Widget>[
-              SizedBox(
-                width: 66,
-                height: 42,
-                child: Image.asset(
-                  _selectedRide.assetPath,
-                  fit: BoxFit.contain,
-                  cacheWidth: 220,
-                  filterQuality: FilterQuality.low,
-                  gaplessPlayback: true,
-                  errorBuilder: (
-                    BuildContext context,
-                    Object error,
-                    StackTrace? stackTrace,
-                  ) {
-                    return Icon(
-                      Icons.directions_car_filled_rounded,
-                      color: mutedColor,
-                      size: 36,
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      _selectedRide.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
+          Semantics(
+            button: true,
+            label: 'Order now. Choose a ride that fits you.',
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: widget.onExpand,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: <Widget>[
+                      Container(
+                        width: 50,
+                        height: 44,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.11),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: primaryColor.withValues(alpha: 0.30),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.local_taxi_rounded,
+                          color: Color(0xFF111311),
+                          size: 28,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_selectedRide.seats} seats • $_paymentLabel',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: mutedColor,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Order now',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Choose a ride that fits you',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: mutedColor,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              Material(
-                color: surfaceColor,
-                shape: const CircleBorder(),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: widget.onExpand,
-                  customBorder: const CircleBorder(),
-                  child: SizedBox(
-                    width: 38,
-                    height: 38,
-                    child: Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      color: textColor,
-                    ),
+                      Container(
+                        width: 38,
+                        height: 38,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: surfaceColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          color: textColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 7),
           SizedBox(
