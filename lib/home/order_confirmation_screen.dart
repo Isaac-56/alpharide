@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../account/account_ui.dart';
+import '../models/ride_backend.dart';
+import '../models/ride_contract.dart';
 import '../models/ride_option.dart';
+import '../services/ride_service.dart';
 import 'driver_search_screen.dart';
 import 'services/directions_service.dart';
 
@@ -41,10 +44,17 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
       Completer<GoogleMapController>();
 
   final DirectionsService _directionsService = const DirectionsService();
+  final RideService _rideService = RideService.instance;
 
   late List<LatLng> _routePoints;
   bool _isRouteLoading = false;
+  bool _isSubmittingRide = false;
   String? _routeError;
+
+  bool get _isLiveBooking {
+    return RideContract.isLiveRideOption(widget.ride.id) &&
+        RideContract.livePaymentMethods.contains(widget.paymentMethod.name);
+  }
 
   @override
   void initState() {
@@ -212,21 +222,90 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
     );
   }
 
-  void _confirmOrder() {
-    Navigator.pushReplacement<void, void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DriverSearchScreen(
-          pickupLocation: widget.pickupLocation,
-          pickupAddress: widget.pickupAddress,
-          destinationLocation: widget.destinationLocation,
-          destinationAddress: widget.destinationAddress,
-          initialRoutePoints: _routePoints,
-          ride: widget.ride,
-          paymentMethod: widget.paymentMethod,
+  Future<void> _confirmOrder() async {
+    if (_isSubmittingRide) return;
+
+    if (!_isLiveBooking) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This ride or payment option is not available for live booking yet.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    setState(() {
+      _isSubmittingRide = true;
+    });
+
+    try {
+      final RideCreationResult result = await _rideService.createRide(
+        pickupAddress: widget.pickupAddress,
+        pickupLatitude: widget.pickupLocation.latitude,
+        pickupLongitude: widget.pickupLocation.longitude,
+        destinationAddress: widget.destinationAddress,
+        destinationLatitude: widget.destinationLocation.latitude,
+        destinationLongitude: widget.destinationLocation.longitude,
+        rideOptionId: widget.ride.id,
+        paymentMethod: widget.paymentMethod.name,
+      );
+
+      if (!mounted) return;
+
+      final RideOption trustedRide = widget.ride.withEstimatedFare(
+        result.estimatedFare,
+      );
+
+      Navigator.pushReplacement<void, void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DriverSearchScreen(
+            rideId: result.rideId,
+            pickupLocation: widget.pickupLocation,
+            pickupAddress: widget.pickupAddress,
+            destinationLocation: widget.destinationLocation,
+            destinationAddress: widget.destinationAddress,
+            initialRoutePoints: _routePoints,
+            ride: trustedRide,
+            paymentMethod: widget.paymentMethod,
+          ),
         ),
-      ),
-    );
+      );
+    } on RideBackendException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(error.message),
+          ),
+        );
+    } catch (error) {
+      debugPrint('Unable to create ride: $error');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The ride could not be created. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingRide = false;
+        });
+      }
+    }
   }
 
   @override
@@ -519,7 +598,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
               width: double.infinity,
               height: 58,
               child: ElevatedButton(
-                onPressed: _confirmOrder,
+                onPressed: _isSubmittingRide ? null : _confirmOrder,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: const Color(0xFF071007),
@@ -528,26 +607,35 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                     borderRadius: BorderRadius.circular(17),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Confirm order',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
+                child: _isSubmittingRide
+                    ? const SizedBox(
+                        width: 23,
+                        height: 23,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Color(0xFF071007),
                         ),
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _isLiveBooking ? 'Confirm order' : 'Coming soon',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '~ ${widget.ride.estimatedFareLabel}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    Text(
-                      '~ ${widget.ride.estimatedFareLabel}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
           ],

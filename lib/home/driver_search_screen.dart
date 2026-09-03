@@ -11,6 +11,7 @@ import 'services/directions_service.dart';
 import 'services/live_driver_marker_controller.dart';
 
 class DriverSearchScreen extends StatefulWidget {
+  final String rideId;
   final LatLng pickupLocation;
   final String pickupAddress;
   final LatLng destinationLocation;
@@ -21,6 +22,7 @@ class DriverSearchScreen extends StatefulWidget {
 
   const DriverSearchScreen({
     super.key,
+    required this.rideId,
     required this.pickupLocation,
     required this.pickupAddress,
     required this.destinationLocation,
