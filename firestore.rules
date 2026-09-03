@@ -26,7 +26,12 @@ service cloud.firestore {
           ];
     }
 
-    // Passenger accounts and private passenger data.
+    function isRideParticipant() {
+      return signedIn() &&
+          (resource.data.passengerId == request.auth.uid ||
+           resource.data.driverId == request.auth.uid);
+    }
+
     match /users/{userKey} {
       allow read, create, update, delete:
           if ownsUserDocument(userKey);
@@ -37,7 +42,6 @@ service cloud.firestore {
       }
     }
 
-    // Driver registration and verification profiles.
     match /drivers/{driverId} {
       allow read, delete:
           if ownsDriverProfile(driverId);
@@ -47,13 +51,61 @@ service cloud.firestore {
              hasSafeDriverFields(driverId);
     }
 
-    // Passenger single-device session control.
     match /user_sessions/{uid} {
       allow read, create, update, delete:
           if signedIn() && request.auth.uid == uid;
     }
 
-    // Feedback can be submitted but not read from the app.
+    match /driver_sessions/{uid} {
+      allow read, create, update, delete:
+          if signedIn() && request.auth.uid == uid;
+    }
+
+    match /driver_photo_checks/{driverId} {
+      allow read:
+          if ownsDriverProfile(driverId);
+
+      allow create:
+          if ownsDriverProfile(driverId) &&
+             request.resource.data.keys().hasOnly([
+               'driverId',
+               'storagePath',
+               'status',
+               'automatedScreeningPassed',
+               'submittedAt',
+               'updatedAt'
+             ]) &&
+             request.resource.data.driverId == driverId &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.automatedScreeningPassed == true;
+
+      allow update:
+          if ownsDriverProfile(driverId) &&
+             request.resource.data.driverId == driverId &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.automatedScreeningPassed == true &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'storagePath',
+               'status',
+               'automatedScreeningPassed',
+               'submittedAt',
+               'updatedAt'
+             ]);
+
+      allow delete: if false;
+    }
+
+    match /rides/{rideId} {
+      allow read: if isRideParticipant();
+      allow create, update, delete: if false;
+    }
+
+    match /driver_ride_offers/{driverId}/offers/{rideId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+    }
+
     match /app_feedback/{feedbackId} {
       allow create:
           if signedIn() &&
@@ -62,7 +114,6 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
-    // Everything else remains private.
     match /{document=**} {
       allow read, write: if false;
     }

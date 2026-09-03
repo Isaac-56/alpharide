@@ -51,11 +51,24 @@ void main() {
       expect(find.text('Choose a ride that fits you'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
-          (Widget widget) =>
-              widget is Image &&
-              widget.image is AssetImage &&
-              (widget.image as AssetImage).assetName ==
-                  'assets/images/vehicles/alpha_standard.png',
+          (Widget widget) {
+            if (widget is! Image) return false;
+
+            final ImageProvider<Object> provider = widget.image;
+
+            if (provider is AssetImage) {
+              return provider.assetName ==
+                  'assets/images/vehicles/alpha_standard.png';
+            }
+
+            if (provider is ResizeImage &&
+                provider.imageProvider is AssetImage) {
+              return (provider.imageProvider as AssetImage).assetName ==
+                  'assets/images/vehicles/alpha_standard.png';
+            }
+
+            return false;
+          },
         ),
         findsOneWidget,
       );
@@ -67,6 +80,9 @@ void main() {
       await tester.pump();
 
       expect(confirmedRide?.estimatedFare, 21500);
+
+      // Let the OrderPanel confirmation lock timer finish before the test ends.
+      await tester.pump(const Duration(milliseconds: 701));
     },
   );
 
