@@ -47,3 +47,7 @@ config/routes.json
 
 # Android Kotlin build cache
 android/.kotlin/
+
+# Firebase Functions
+functions/node_modules/
+functions/.runtimeconfig.json
