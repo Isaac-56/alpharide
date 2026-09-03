@@ -1,22 +1,17 @@
 "use strict";
 
 const { initializeApp } = require("firebase-admin/app");
-const {
-  FieldValue,
-  getFirestore,
-} = require("firebase-admin/firestore");
-const { defineSecret } = require("firebase-functions/params");
-const {
-  HttpsError,
-  onCall,
-} = require("firebase-functions/v2/https");
+const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
+const { defineSecret } = require("firebase-functions/params");
+const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const {
   CURRENCY_CODE,
   calculateFare,
   isCancellableBeforePickup,
   parseGoogleDurationSeconds,
+  validateCancellationReason,
   validateCreateRideInput,
 } = require("./ride_logic");
 
@@ -37,21 +32,17 @@ const ACTIVE_RIDE_STATUSES = new Set([
 
 function requireAuthenticatedUser(request) {
   const uid = request.auth?.uid;
-
   if (!uid) {
     throw new HttpsError(
       "unauthenticated",
       "Sign in before requesting a ride.",
     );
   }
-
   return uid;
 }
 
 function callableError(error, fallbackMessage) {
-  if (error instanceof HttpsError) {
-    return error;
-  }
+  if (error instanceof HttpsError) return error;
 
   if (error instanceof TypeError || error instanceof RangeError) {
     return new HttpsError("invalid-argument", error.message);
@@ -111,7 +102,6 @@ async function computeTrustedRoute(pickup, destination) {
 
   const payload = await response.json();
   const route = payload?.routes?.[0];
-
   if (
     !route ||
     typeof route.distanceMeters !== "number" ||
@@ -140,10 +130,7 @@ exports.createRide = onCall(
     try {
       const passengerId = requireAuthenticatedUser(request);
       const input = validateCreateRideInput(request.data);
-      const route = await computeTrustedRoute(
-        input.pickup,
-        input.destination,
-      );
+      const route = await computeTrustedRoute(input.pickup, input.destination);
       const estimatedFare = calculateFare({
         rideOptionId: input.rideOptionId,
         distanceMeters: route.distanceMeters,
@@ -181,7 +168,6 @@ exports.createRide = onCall(
         }
 
         const now = FieldValue.serverTimestamp();
-
         transaction.create(rideRef, {
           schemaVersion: 1,
           passengerId,
@@ -198,6 +184,7 @@ exports.createRide = onCall(
           routeDistanceMeters: Math.round(route.distanceMeters),
           routeDurationSeconds: Math.round(route.durationSeconds),
           cancelledBy: null,
+          cancellationReason: null,
           requestedAt: now,
           updatedAt: now,
           acceptedAt: null,
@@ -247,6 +234,9 @@ exports.cancelRide = onCall(
         throw new HttpsError("invalid-argument", "A valid ride ID is required.");
       }
 
+      const cancellationReason = validateCancellationReason(
+        request.data?.reason,
+      );
       const rideRef = db.collection("rides").doc(rideId);
       const activeRideRef = db
         .collection("active_passenger_rides")
@@ -268,7 +258,6 @@ exports.cancelRide = onCall(
         }
 
         const status = rideSnapshot.get("status");
-
         if (status === "cancelled") {
           if (
             activeSnapshot.exists &&
@@ -289,6 +278,7 @@ exports.cancelRide = onCall(
         transaction.update(rideRef, {
           status: "cancelled",
           cancelledBy: "passenger",
+          cancellationReason,
           cancelledAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
@@ -301,10 +291,7 @@ exports.cancelRide = onCall(
         }
       });
 
-      return {
-        rideId,
-        status: "cancelled",
-      };
+      return { rideId, status: "cancelled" };
     } catch (error) {
       throw callableError(error, "Unable to cancel the ride.");
     }

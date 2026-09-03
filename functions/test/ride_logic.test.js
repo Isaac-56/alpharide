@@ -7,6 +7,7 @@ const {
   calculateFare,
   isCancellableBeforePickup,
   parseGoogleDurationSeconds,
+  validateCancellationReason,
   validateCreateRideInput,
 } = require("../ride_logic");
 
@@ -95,4 +96,21 @@ test("only pre-assignment request states cancel in Step 2", () => {
   assert.equal(isCancellableBeforePickup("offered"), true);
   assert.equal(isCancellableBeforePickup("accepted"), false);
   assert.equal(isCancellableBeforePickup("in_progress"), false);
+});
+
+test("cancellation reasons are validated and normalized", () => {
+  assert.equal(
+    validateCancellationReason("  Pickup point is incorrect  "),
+    "Pickup point is incorrect",
+  );
+
+  assert.throws(
+    () => validateCancellationReason("   "),
+    /between 1 and 120 characters/,
+  );
+
+  assert.throws(
+    () => validateCancellationReason("x".repeat(121)),
+    /between 1 and 120 characters/,
+  );
 });

@@ -32,7 +32,6 @@ class RideService {
   }) async {
     try {
       final HttpsCallable callable = _functions.httpsCallable('createRide');
-
       final HttpsCallableResult<dynamic> result = await callable.call<dynamic>(
         <String, dynamic>{
           'pickup': <String, dynamic>{
@@ -60,13 +59,14 @@ class RideService {
 
   Future<void> cancelRide({
     required String rideId,
+    required String reason,
   }) async {
     try {
       final HttpsCallable callable = _functions.httpsCallable('cancelRide');
-
       await callable.call<dynamic>(
         <String, dynamic>{
           'rideId': rideId,
+          'reason': reason,
         },
       );
     } on FirebaseFunctionsException catch (error) {
@@ -82,10 +82,7 @@ class RideService {
         .map<RideLiveState?>(
       (DocumentSnapshot<Map<String, dynamic>> snapshot) {
         final Map<String, dynamic>? data = snapshot.data();
-
-        if (!snapshot.exists || data == null) {
-          return null;
-        }
+        if (!snapshot.exists || data == null) return null;
 
         return RideLiveState.fromFirestore(
           rideId: snapshot.id,
@@ -103,7 +100,6 @@ class RideService {
 
     if (rawDetails is Map) {
       final Object? rawRideId = rawDetails['rideId'];
-
       if (rawRideId is String && rawRideId.trim().isNotEmpty) {
         existingRideId = rawRideId;
       }

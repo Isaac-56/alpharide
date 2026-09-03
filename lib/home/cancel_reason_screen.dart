@@ -7,7 +7,7 @@ class CancelReasonScreen extends StatelessWidget {
 
   static const Color primaryColor = Color(0xFF39FF14);
 
-  static const List<String> reasons = [
+  static const List<String> reasons = <String>[
     'Fare is too high',
     'Just trying the app',
     'Changed my mind',
@@ -38,9 +38,7 @@ class CancelReasonScreen extends StatelessWidget {
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: () {
-                    Navigator.pop(context, false);
-                  },
+                  onTap: () => Navigator.pop(context),
                   child: SizedBox(
                     width: 54,
                     height: 54,
@@ -74,16 +72,7 @@ class CancelReasonScreen extends StatelessWidget {
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
                       child: InkWell(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Order cancelled: $reason',
-                              ),
-                            ),
-                          );
-                          Navigator.pop(context, true);
-                        },
+                        onTap: () => Navigator.pop(context, reason),
                         borderRadius: BorderRadius.circular(16),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
@@ -116,12 +105,12 @@ class CancelReasonScreen extends StatelessWidget {
               ),
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.info_outline_rounded,
                     color: primaryColor,
                     size: 18,
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Choose the reason that best describes your cancellation.',

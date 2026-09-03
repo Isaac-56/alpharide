@@ -32,7 +32,6 @@ function normalizeRideOption(value) {
   }
 
   const normalized = value.trim().toLowerCase();
-
   if (!LIVE_RIDE_OPTIONS.has(normalized)) {
     throw new RangeError("ride option is not enabled for live dispatch");
   }
@@ -46,7 +45,6 @@ function normalizePaymentMethod(value) {
   }
 
   const normalized = value.trim().toLowerCase();
-
   if (!LIVE_PAYMENT_METHODS.has(normalized)) {
     throw new RangeError("payment method is not enabled for live rides");
   }
@@ -71,9 +69,7 @@ function validatePoint(raw, fieldName) {
     throw new TypeError(`${fieldName} must be an object`);
   }
 
-  const address =
-    typeof raw.address === "string" ? raw.address.trim() : "";
-
+  const address = typeof raw.address === "string" ? raw.address.trim() : "";
   if (!address || address.length > 240) {
     throw new RangeError(
       `${fieldName}.address must contain between 1 and 240 characters`,
@@ -120,11 +116,7 @@ function validateCreateRideInput(raw) {
   });
 }
 
-function calculateFare({
-  rideOptionId,
-  distanceMeters,
-  durationSeconds,
-}) {
+function calculateFare({ rideOptionId, distanceMeters, durationSeconds }) {
   const normalizedRide = normalizeRideOption(rideOptionId);
   const pricing = FARES[normalizedRide];
 
@@ -148,12 +140,10 @@ function calculateFare({
 
   const distanceKilometers = distanceMeters / 1000;
   const durationMinutes = durationSeconds / 60;
-
   const raw =
     pricing.baseFare +
     distanceKilometers * pricing.perKilometer +
     durationMinutes * pricing.perMinute;
-
   const rounded = Math.ceil(raw / FARE_ROUNDING) * FARE_ROUNDING;
 
   return Math.max(rounded, pricing.minimumFare);
@@ -165,12 +155,26 @@ function parseGoogleDurationSeconds(value) {
   }
 
   const seconds = Number(value.slice(0, -1));
-
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new RangeError("Google route duration is invalid");
   }
 
   return seconds;
+}
+
+function validateCancellationReason(value) {
+  if (typeof value !== "string") {
+    throw new TypeError("cancellation reason must be a string");
+  }
+
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 120) {
+    throw new RangeError(
+      "cancellation reason must contain between 1 and 120 characters",
+    );
+  }
+
+  return normalized;
 }
 
 function isCancellableBeforePickup(status) {
@@ -188,6 +192,7 @@ module.exports = {
   normalizePaymentMethod,
   normalizeRideOption,
   parseGoogleDurationSeconds,
+  validateCancellationReason,
   validateCreateRideInput,
   validatePoint,
 };

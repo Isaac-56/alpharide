@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../account/account_ui.dart';
+import '../models/ride_backend.dart';
 import '../models/ride_option.dart';
+import '../services/ride_service.dart';
 import 'cancel_reason_screen.dart';
 import 'services/directions_service.dart';
 import 'services/live_driver_marker_controller.dart';
@@ -40,16 +42,26 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     with SingleTickerProviderStateMixin {
   static const Color primaryColor = Color(0xFF39FF14);
 
-  late final AnimationController _progressController;
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
   final DirectionsService _directionsService = const DirectionsService();
-  final Set<Marker> _markers = {};
+  final RideService _rideService = RideService.instance;
+  final Set<Marker> _markers = <Marker>{};
+
+  late final AnimationController _progressController;
   late final LiveDriverMarkerController _liveDrivers;
+  StreamSubscription<RideLiveState?>? _rideSubscription;
 
   late List<LatLng> _routePoints;
   bool _isRouteLoading = false;
+  bool _isCancelling = false;
+  bool _terminalHandled = false;
+  String _rideStatus = 'requested';
   String? _routeError;
+
+  bool get _canPassengerCancel =>
+      !_isCancelling &&
+      (_rideStatus == 'requested' || _rideStatus == 'offered');
 
   @override
   void initState() {
@@ -61,22 +73,83 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     )..repeat();
 
     _routePoints = List<LatLng>.of(widget.initialRoutePoints);
-
-    _liveDrivers = LiveDriverMarkerController(
-      center: widget.pickupLocation,
-    )
+    _liveDrivers = LiveDriverMarkerController(center: widget.pickupLocation)
       ..addListener(_refreshDriverMarkers)
       ..start();
 
     _buildStaticMarkers();
+    _listenToRide();
 
     if (_routePoints.length < 2) {
       _loadRoadRoute();
     }
   }
 
+  void _listenToRide() {
+    _rideSubscription = _rideService.watchRide(widget.rideId).listen(
+      _handleRideState,
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Unable to watch ride ${widget.rideId}: $error');
+      },
+    );
+  }
+
+  void _handleRideState(RideLiveState? state) {
+    if (!mounted || state == null) return;
+
+    if (_rideStatus != state.status) {
+      setState(() {
+        _rideStatus = state.status;
+      });
+    }
+
+    final bool externallyTerminal =
+        state.status == 'cancelled' || state.status == 'expired';
+
+    if (externallyTerminal && !_terminalHandled && !_isCancelling) {
+      _terminalHandled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        final String message = state.status == 'expired'
+            ? 'Your ride request expired.'
+            : 'Your ride was cancelled.';
+
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
+        Navigator.pop(context);
+      });
+    }
+  }
+
+  String get _statusLabel => switch (_rideStatus) {
+        'requested' => 'Request sent',
+        'offered' => 'Contacting drivers',
+        'accepted' => 'Driver assigned',
+        'driver_arriving' => 'Driver on the way',
+        'arrived' => 'Driver arrived',
+        'in_progress' => 'Trip in progress',
+        'completed' => 'Completed',
+        'cancelled' => 'Cancelled',
+        'expired' => 'Expired',
+        _ => 'Updating ride',
+      };
+
+  String get _searchTitle => switch (_rideStatus) {
+        'requested' || 'offered' => 'Looking for a driver',
+        'accepted' => 'Driver assigned',
+        'driver_arriving' => 'Driver on the way',
+        'arrived' => 'Driver arrived',
+        'in_progress' => 'Trip in progress',
+        'completed' => 'Ride completed',
+        'cancelled' => 'Ride cancelled',
+        'expired' => 'Request expired',
+        _ => 'Ride update',
+      };
+
   Set<Polyline> get _polylines {
-    if (_routePoints.length < 2) return <Polyline>{};
+    if (_routePoints.length < 2) return const <Polyline>{};
 
     return <Polyline>{
       Polyline(
@@ -86,19 +159,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         jointType: JointType.round,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
-        geodesic: false,
         zIndex: 1,
-        points: _routePoints,
-      ),
-      Polyline(
-        polylineId: const PolylineId('active-trip-route-edge'),
-        color: const Color(0xFF12300F),
-        width: 11,
-        jointType: JointType.round,
-        startCap: Cap.roundCap,
-        endCap: Cap.roundCap,
-        geodesic: false,
-        zIndex: 2,
         points: _routePoints,
       ),
       Polyline(
@@ -108,19 +169,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         jointType: JointType.round,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
-        geodesic: false,
-        zIndex: 3,
-        points: _routePoints,
-      ),
-      Polyline(
-        polylineId: const PolylineId('active-trip-route-highlight'),
-        color: Colors.white.withValues(alpha: 0.30),
-        width: 2,
-        jointType: JointType.round,
-        startCap: Cap.roundCap,
-        endCap: Cap.roundCap,
-        geodesic: false,
-        zIndex: 4,
+        zIndex: 2,
         points: _routePoints,
       ),
     };
@@ -142,18 +191,14 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       );
 
       if (!mounted) return;
-
       setState(() {
         _routePoints = route.points;
         _isRouteLoading = false;
       });
-
       await _fitRoute();
     } catch (error) {
       debugPrint('Unable to load driver-search route: $error');
-
       if (!mounted) return;
-
       setState(() {
         _isRouteLoading = false;
         _routeError = error is DirectionsException
@@ -166,20 +211,17 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   Future<void> _fitRoute() async {
     if (!_mapController.isCompleted) return;
 
-    final List<LatLng> boundsPoints = _routePoints.length >= 2
+    final List<LatLng> points = _routePoints.length >= 2
         ? _routePoints
-        : <LatLng>[
-            widget.pickupLocation,
-            widget.destinationLocation,
-          ];
+        : <LatLng>[widget.pickupLocation, widget.destinationLocation];
     final GoogleMapController controller = await _mapController.future;
 
-    double south = boundsPoints.first.latitude;
-    double north = boundsPoints.first.latitude;
-    double west = boundsPoints.first.longitude;
-    double east = boundsPoints.first.longitude;
+    double south = points.first.latitude;
+    double north = points.first.latitude;
+    double west = points.first.longitude;
+    double east = points.first.longitude;
 
-    for (final LatLng point in boundsPoints.skip(1)) {
+    for (final LatLng point in points.skip(1)) {
       south = math.min(south, point.latitude);
       north = math.max(north, point.latitude);
       west = math.min(west, point.longitude);
@@ -204,19 +246,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     );
   }
 
-  @override
-  void dispose() {
-    _liveDrivers
-      ..removeListener(_refreshDriverMarkers)
-      ..dispose();
-    _progressController.dispose();
-    super.dispose();
-  }
-
-  void _refreshDriverMarkers() {
-    if (mounted) setState(() {});
-  }
-
   void _buildStaticMarkers() {
     _markers
       ..clear()
@@ -227,9 +256,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueGreen,
           ),
-          infoWindow: const InfoWindow(
-            title: 'Your pickup',
-          ),
+          infoWindow: const InfoWindow(title: 'Your pickup'),
         ),
       )
       ..add(
@@ -247,7 +274,53 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       );
   }
 
+  void _refreshDriverMarkers() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _cancelRide(String reason) async {
+    if (!_canPassengerCancel) return;
+
+    setState(() {
+      _isCancelling = true;
+    });
+
+    bool cancelled = false;
+    try {
+      await _rideService.cancelRide(rideId: widget.rideId, reason: reason);
+      cancelled = true;
+    } on RideBackendException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      debugPrint('Unable to cancel ride ${widget.rideId}: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('The ride could not be cancelled. Please try again.'),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCancelling = false;
+        });
+      }
+    }
+
+    if (cancelled && mounted) {
+      _terminalHandled = true;
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _showCancelConfirmation() async {
+    if (!_canPassengerCancel) return;
+
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -271,33 +344,23 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Align(
-                  alignment: Alignment.center,
-                  child: Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AlphaColors.border(sheetContext),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () async {
-                      Navigator.pop(sheetContext);
-
-                      final bool? cancelled = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CancelReasonScreen(),
-                        ),
-                      );
-
-                      if (cancelled == true && mounted) {
-                        Navigator.pop(context);
-                      }
-                    },
+                    onPressed: _canPassengerCancel
+                        ? () async {
+                            Navigator.pop(sheetContext);
+                            final String? reason =
+                                await Navigator.push<String>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const CancelReasonScreen(),
+                              ),
+                            );
+                            if (reason != null && mounted) {
+                              await _cancelRide(reason);
+                            }
+                          }
+                        : null,
                     child: Text(
                       'Cancel order',
                       style: TextStyle(
@@ -314,7 +377,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                     color: textColor,
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.6,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -331,9 +393,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                    },
+                    onPressed: () => Navigator.pop(sheetContext),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: const Color(0xFF071007),
@@ -360,17 +420,24 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   @override
+  void dispose() {
+    _rideSubscription?.cancel();
+    _liveDrivers
+      ..removeListener(_refreshDriverMarkers)
+      ..dispose();
+    _progressController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final Color backgroundColor = AlphaColors.background(context);
-    final Color textColor = AlphaColors.text(context);
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) {
-        if (!didPop) {
-          _showCancelConfirmation();
-        }
+        if (!didPop) _showCancelConfirmation();
       },
       child: Scaffold(
         backgroundColor: backgroundColor,
@@ -382,17 +449,12 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   target: widget.pickupLocation,
                   zoom: 15.7,
                 ),
-                markers: <Marker>{
-                  ..._markers,
-                  ..._liveDrivers.markers,
-                },
+                markers: <Marker>{..._markers, ..._liveDrivers.markers},
                 polylines: _polylines,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
                 mapToolbarEnabled: false,
-                padding: const EdgeInsets.only(
-                  bottom: 260,
-                ),
+                padding: const EdgeInsets.only(bottom: 275),
                 onMapCreated: (GoogleMapController controller) {
                   if (!_mapController.isCompleted) {
                     _mapController.complete(controller);
@@ -413,50 +475,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 ),
               ),
             ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: backgroundColor.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.location_on_rounded,
-                          color: primaryColor,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 7),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: 230,
-                          ),
-                          child: Text(
-                            widget.pickupAddress,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
             if (_isRouteLoading)
               const SafeArea(
                 child: Align(
@@ -470,58 +488,30 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
               ),
             if (_routeError != null)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 78,
+                top: MediaQuery.paddingOf(context).top + 18,
                 left: 18,
                 right: 18,
-                child: _routeErrorBanner(),
+                child: Material(
+                  color: AlphaColors.surface(context),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: _loadRoadRoute,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        _routeError!,
+                        style: TextStyle(color: AlphaColors.text(context)),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             Align(
               alignment: Alignment.bottomCenter,
               child: _searchPanel(),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _routeErrorBanner() {
-    return Material(
-      color: AlphaColors.surface(context).withValues(alpha: 0.96),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: _loadRoadRoute,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 13,
-            vertical: 10,
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.route_rounded,
-                color: primaryColor,
-                size: 20,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  _routeError!,
-                  style: TextStyle(
-                    color: AlphaColors.text(context),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.refresh_rounded,
-                color: AlphaColors.text(context),
-                size: 19,
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -540,9 +530,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(28),
-          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -555,20 +543,25 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Looking for a driver',
+                        _searchTitle,
                         style: TextStyle(
                           color: textColor,
                           fontSize: 25,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
                         ),
                       ),
                       const SizedBox(height: 5),
                       Text(
                         '${widget.ride.name} • ~ ${widget.ride.estimatedFareLabel}',
-                        style: TextStyle(
-                          color: mutedColor,
-                          fontSize: 13,
+                        style: TextStyle(color: mutedColor, fontSize: 13),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _statusLabel,
+                        style: const TextStyle(
+                          color: primaryColor,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -577,10 +570,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 SizedBox(
                   width: 86,
                   height: 58,
-                  child: Image.asset(
-                    widget.ride.assetPath,
-                    fit: BoxFit.contain,
-                  ),
+                  child: Image.asset(widget.ride.assetPath, fit: BoxFit.contain),
                 ),
               ],
             ),
@@ -593,9 +583,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   minHeight: 4,
                   borderRadius: BorderRadius.circular(99),
                   backgroundColor: surfaceColor,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    primaryColor,
-                  ),
+                  valueColor: const AlwaysStoppedAnimation<Color>(primaryColor),
                 );
               },
             ),
@@ -610,14 +598,18 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
             ),
             const SizedBox(height: 18),
             TextButton(
-              onPressed: _showCancelConfirmation,
+              onPressed: _canPassengerCancel ? _showCancelConfirmation : null,
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
                 foregroundColor: textColor,
               ),
-              child: const Text(
-                'Cancel order',
-                style: TextStyle(
+              child: Text(
+                _isCancelling
+                    ? 'Cancelling...'
+                    : _canPassengerCancel
+                        ? 'Cancel order'
+                        : 'Cancellation unavailable',
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
