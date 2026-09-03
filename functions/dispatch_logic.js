@@ -39,6 +39,32 @@ function haversineDistanceMeters(first, second) {
   return earthRadiusMeters * c;
 }
 
+function presenceAllowsAcceptance({
+  presence,
+  driverId,
+  requiredVehicleType,
+  nowMs = Date.now(),
+}) {
+  if (!presence || typeof presence !== "object" || Array.isArray(presence)) {
+    return false;
+  }
+  if (presence.isOnline !== true) return false;
+
+  const updatedAt = Number(presence.updatedAt);
+  if (!Number.isFinite(updatedAt)) return false;
+  const ageMs = nowMs - updatedAt;
+  if (ageMs < 0 || ageMs > PRESENCE_FRESH_MS) return false;
+
+  const storedDriverId =
+    typeof presence.driverId === "string" ? presence.driverId.trim() : "";
+  if (storedDriverId && storedDriverId !== driverId) return false;
+
+  return (
+    normalizeVehicleType(presence.vehicleType) ===
+    normalizeVehicleType(requiredVehicleType)
+  );
+}
+
 function selectPresenceCandidates({
   presenceMap,
   pickup,
@@ -53,28 +79,27 @@ function selectPresenceCandidates({
   const candidates = [];
 
   for (const [presenceKey, raw] of Object.entries(presenceMap)) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    if (raw.isOnline !== true) continue;
+    const driverId =
+      raw && typeof raw.driverId === "string" && raw.driverId.trim()
+        ? raw.driverId.trim()
+        : presenceKey;
 
-    const updatedAt = Number(raw.updatedAt);
-    if (!Number.isFinite(updatedAt)) continue;
-    const ageMs = nowMs - updatedAt;
-    if (ageMs < 0 || ageMs > PRESENCE_FRESH_MS) continue;
-
-    const vehicleType = normalizeVehicleType(raw.vehicleType);
-    if (!vehicleType || vehicleType !== required) continue;
+    if (
+      !presenceAllowsAcceptance({
+        presence: raw,
+        driverId,
+        requiredVehicleType: required,
+        nowMs,
+      })
+    ) {
+      continue;
+    }
 
     const latitude = Number(raw.latitude);
     const longitude = Number(raw.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
     if (latitude < -90 || latitude > 90) continue;
     if (longitude < -180 || longitude > 180) continue;
-
-    const driverId =
-      typeof raw.driverId === "string" && raw.driverId.trim()
-        ? raw.driverId.trim()
-        : presenceKey;
-    if (!driverId) continue;
 
     const distanceToPickupMeters = haversineDistanceMeters(pickup, {
       latitude,
@@ -84,11 +109,11 @@ function selectPresenceCandidates({
 
     candidates.push({
       driverId,
-      vehicleType,
+      vehicleType: normalizeVehicleType(raw.vehicleType),
       latitude,
       longitude,
       distanceToPickupMeters: Math.round(distanceToPickupMeters),
-      updatedAt,
+      updatedAt: Number(raw.updatedAt),
     });
   }
 
@@ -139,6 +164,7 @@ module.exports = {
   PRESENCE_FRESH_MS,
   haversineDistanceMeters,
   normalizeVehicleType,
+  presenceAllowsAcceptance,
   profileAllowsDispatch,
   selectPresenceCandidates,
   validateRideId,

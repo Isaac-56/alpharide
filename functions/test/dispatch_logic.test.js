@@ -8,6 +8,7 @@ const {
   PRESENCE_FRESH_MS,
   haversineDistanceMeters,
   normalizeVehicleType,
+  presenceAllowsAcceptance,
   profileAllowsDispatch,
   selectPresenceCandidates,
   validateRideId,
@@ -74,13 +75,63 @@ test("candidate selection keeps fresh matching nearby drivers sorted", () => {
     candidates.map((candidate) => candidate.driverId),
     ["near", "farther"],
   );
-  assert.ok(candidates[0].distanceToPickupMeters < candidates[1].distanceToPickupMeters);
+  assert.ok(
+    candidates[0].distanceToPickupMeters <
+      candidates[1].distanceToPickupMeters,
+  );
 });
 
 test("drivers outside the dispatch radius are excluded", () => {
   const pickup = { latitude: 4.8517, longitude: 31.5825 };
   const distant = { latitude: 5.1, longitude: 31.9 };
   assert.ok(haversineDistanceMeters(pickup, distant) > DISPATCH_RADIUS_METERS);
+});
+
+test("acceptance requires current online matching presence", () => {
+  const nowMs = 1_800_000_000_000;
+  const valid = {
+    driverId: "driver-1",
+    isOnline: true,
+    vehicleType: "Car",
+    updatedAt: nowMs - 1000,
+  };
+
+  assert.equal(
+    presenceAllowsAcceptance({
+      presence: valid,
+      driverId: "driver-1",
+      requiredVehicleType: "standard",
+      nowMs,
+    }),
+    true,
+  );
+  assert.equal(
+    presenceAllowsAcceptance({
+      presence: { ...valid, isOnline: false },
+      driverId: "driver-1",
+      requiredVehicleType: "standard",
+      nowMs,
+    }),
+    false,
+  );
+  assert.equal(
+    presenceAllowsAcceptance({
+      presence: { ...valid, updatedAt: nowMs - PRESENCE_FRESH_MS - 1 },
+      driverId: "driver-1",
+      requiredVehicleType: "standard",
+      nowMs,
+    }),
+    false,
+  );
+  assert.equal(
+    presenceAllowsAcceptance({
+      presence: { ...valid, vehicleType: "Boda" },
+      driverId: "driver-1",
+      requiredVehicleType: "standard",
+      nowMs,
+    }),
+    false,
+  );
 });
 
 test("driver profile must be approved and vehicle matched", () => {

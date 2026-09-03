@@ -9,10 +9,12 @@ const {
 } = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const {
   OFFER_WINDOW_MS,
+  presenceAllowsAcceptance,
   profileAllowsDispatch,
   selectPresenceCandidates,
   validateRideId,
@@ -55,11 +57,9 @@ function requireAuthenticatedUser(request) {
 
 function callableError(error, fallbackMessage) {
   if (error instanceof HttpsError) return error;
-
   if (error instanceof TypeError || error instanceof RangeError) {
     return new HttpsError("invalid-argument", error.message);
   }
-
   logger.error(fallbackMessage, error);
   return new HttpsError("internal", fallbackMessage);
 }
@@ -141,9 +141,9 @@ function offerReference(driverId, rideId) {
 
 async function markOffers(rideId, driverIds, status) {
   if (!Array.isArray(driverIds) || driverIds.length === 0) return;
-
   const batch = db.batch();
   const now = FieldValue.serverTimestamp();
+
   for (const driverId of driverIds) {
     if (typeof driverId !== "string" || !driverId) continue;
     batch.set(
@@ -167,11 +167,8 @@ async function dispatchRide({
 }) {
   const rideRef = db.collection("rides").doc(rideId);
   const presenceSnapshot = await realtimeDb.ref("driver_locations").get();
-  const presenceMap = presenceSnapshot.exists()
-    ? presenceSnapshot.val()
-    : null;
   const presenceCandidates = selectPresenceCandidates({
-    presenceMap,
+    presenceMap: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
     pickup,
     requiredVehicleType,
   });
@@ -245,8 +242,52 @@ async function dispatchRide({
     updatedAt: FieldValue.serverTimestamp(),
   });
   await batch.commit();
-
   return "offered";
+}
+
+async function expireOfferedRide(rideRef) {
+  let offeredDriverIds = [];
+  let expired = false;
+
+  await db.runTransaction(async (transaction) => {
+    const rideSnapshot = await transaction.get(rideRef);
+    if (!rideSnapshot.exists || rideSnapshot.get("status") !== "offered") {
+      return;
+    }
+
+    const expiresAt = rideSnapshot.get("offerExpiresAt");
+    if (!(expiresAt instanceof Timestamp) || expiresAt.toMillis() > Date.now()) {
+      return;
+    }
+
+    const passengerId = rideSnapshot.get("passengerId");
+    const activePassengerRef = db
+      .collection("active_passenger_rides")
+      .doc(passengerId);
+    const activePassengerSnapshot = await transaction.get(activePassengerRef);
+    offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+      ? rideSnapshot.get("offeredDriverIds")
+      : [];
+    const now = FieldValue.serverTimestamp();
+
+    transaction.update(rideRef, {
+      status: "expired",
+      offerExpiresAt: null,
+      expiredAt: now,
+      updatedAt: now,
+    });
+    if (
+      activePassengerSnapshot.exists &&
+      activePassengerSnapshot.get("rideId") === rideRef.id
+    ) {
+      transaction.delete(activePassengerRef);
+    }
+    expired = true;
+  });
+
+  if (expired) {
+    await markOffers(rideRef.id, offeredDriverIds, "expired");
+  }
 }
 
 exports.createRide = onCall(
@@ -274,7 +315,6 @@ exports.createRide = onCall(
 
       await db.runTransaction(async (transaction) => {
         const activeSnapshot = await transaction.get(activeRideRef);
-
         if (activeSnapshot.exists) {
           const activeRideId = activeSnapshot.get("rideId");
           if (typeof activeRideId === "string" && activeRideId) {
@@ -322,7 +362,6 @@ exports.createRide = onCall(
           completedAt: null,
           cancelledAt: null,
         });
-
         transaction.set(activeRideRef, {
           passengerId,
           rideId: rideRef.id,
@@ -372,11 +411,7 @@ exports.createRide = onCall(
 );
 
 exports.cancelRide = onCall(
-  {
-    region: REGION,
-    timeoutSeconds: 15,
-    memory: "256MiB",
-  },
+  { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
   async (request) => {
     try {
       const passengerId = requireAuthenticatedUser(request);
@@ -393,7 +428,6 @@ exports.cancelRide = onCall(
       await db.runTransaction(async (transaction) => {
         const rideSnapshot = await transaction.get(rideRef);
         const activeSnapshot = await transaction.get(activeRideRef);
-
         if (!rideSnapshot.exists) {
           throw new HttpsError("not-found", "The ride no longer exists.");
         }
@@ -408,7 +442,6 @@ exports.cancelRide = onCall(
           ? rideSnapshot.get("offeredDriverIds")
           : [];
         const status = rideSnapshot.get("status");
-
         if (status === "cancelled") {
           if (
             activeSnapshot.exists &&
@@ -418,7 +451,6 @@ exports.cancelRide = onCall(
           }
           return;
         }
-
         if (!isCancellableBeforePickup(status)) {
           throw new HttpsError(
             "failed-precondition",
@@ -428,12 +460,12 @@ exports.cancelRide = onCall(
 
         transaction.update(rideRef, {
           status: "cancelled",
+          offerExpiresAt: null,
           cancelledBy: "passenger",
           cancellationReason,
           cancelledAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
-
         if (
           activeSnapshot.exists &&
           activeSnapshot.get("rideId") === rideId
@@ -442,15 +474,14 @@ exports.cancelRide = onCall(
         }
       });
 
-      try {
-        await markOffers(rideId, offeredDriverIds, "cancelled");
-      } catch (cleanupError) {
-        logger.warn("Could not close cancelled ride offers", {
-          rideId,
-          error: cleanupError,
-        });
-      }
-
+      await markOffers(rideId, offeredDriverIds, "cancelled").catch(
+        (cleanupError) => {
+          logger.warn("Could not close cancelled ride offers", {
+            rideId,
+            error: cleanupError,
+          });
+        },
+      );
       return { rideId, status: "cancelled" };
     } catch (error) {
       throw callableError(error, "Unable to cancel the ride.");
@@ -459,11 +490,7 @@ exports.cancelRide = onCall(
 );
 
 exports.acceptRideOffer = onCall(
-  {
-    region: REGION,
-    timeoutSeconds: 15,
-    memory: "256MiB",
-  },
+  { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
   async (request) => {
     try {
       const driverId = requireAuthenticatedUser(request);
@@ -474,8 +501,31 @@ exports.acceptRideOffer = onCall(
       const activeDriverRef = db
         .collection("active_driver_rides")
         .doc(driverId);
-      let competingDriverIds = [];
 
+      const preOffer = await offerRef.get();
+      if (!preOffer.exists || preOffer.get("status") !== "pending") {
+        throw new HttpsError(
+          "failed-precondition",
+          "This ride offer is no longer active.",
+        );
+      }
+      const presenceSnapshot = await realtimeDb
+        .ref(`driver_locations/${driverId}`)
+        .get();
+      if (
+        !presenceAllowsAcceptance({
+          presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
+          driverId,
+          requiredVehicleType: preOffer.get("requiredVehicleType"),
+        })
+      ) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Go online with your approved vehicle before accepting this ride.",
+        );
+      }
+
+      let competingDriverIds = [];
       await db.runTransaction(async (transaction) => {
         const offerSnapshot = await transaction.get(offerRef);
         const rideSnapshot = await transaction.get(rideRef);
@@ -483,30 +533,42 @@ exports.acceptRideOffer = onCall(
         const activeDriverSnapshot = await transaction.get(activeDriverRef);
 
         if (!offerSnapshot.exists || !rideSnapshot.exists) {
-          throw new HttpsError("not-found", "This ride offer is no longer available.");
+          throw new HttpsError(
+            "not-found",
+            "This ride offer is no longer available.",
+          );
         }
-
         if (
           rideSnapshot.get("status") === "accepted" &&
           rideSnapshot.get("driverId") === driverId
         ) {
           return;
         }
-
         if (offerSnapshot.get("status") !== "pending") {
-          throw new HttpsError("failed-precondition", "This offer is no longer active.");
+          throw new HttpsError(
+            "failed-precondition",
+            "This offer is no longer active.",
+          );
         }
 
         const expiresAt = offerSnapshot.get("expiresAt");
-        if (!(expiresAt instanceof Timestamp) || expiresAt.toMillis() <= Date.now()) {
-          throw new HttpsError("failed-precondition", "This ride offer has expired.");
+        if (
+          !(expiresAt instanceof Timestamp) ||
+          expiresAt.toMillis() <= Date.now()
+        ) {
+          throw new HttpsError(
+            "failed-precondition",
+            "This ride offer has expired.",
+          );
         }
-
         if (
           rideSnapshot.get("status") !== "offered" ||
           rideSnapshot.get("driverId") != null
         ) {
-          throw new HttpsError("already-exists", "Another driver already accepted this ride.");
+          throw new HttpsError(
+            "already-exists",
+            "Another driver already accepted this ride.",
+          );
         }
 
         const requiredVehicleType = rideSnapshot.get("requiredVehicleType");
@@ -519,7 +581,6 @@ exports.acceptRideOffer = onCall(
             "Your approved vehicle is not eligible for this ride.",
           );
         }
-
         if (
           activeDriverSnapshot.exists &&
           activeDriverSnapshot.get("rideId") !== rideId
@@ -534,10 +595,10 @@ exports.acceptRideOffer = onCall(
           ? rideSnapshot.get("offeredDriverIds")
           : [];
         const now = FieldValue.serverTimestamp();
-
         transaction.update(rideRef, {
           status: "accepted",
           driverId,
+          offerExpiresAt: null,
           acceptedAt: now,
           updatedAt: now,
         });
@@ -553,18 +614,17 @@ exports.acceptRideOffer = onCall(
         });
       });
 
-      const competingOffers = competingDriverIds.filter(
-        (candidateId) => candidateId !== driverId,
-      );
-      try {
-        await markOffers(rideId, competingOffers, "expired");
-      } catch (cleanupError) {
+      await markOffers(
+        rideId,
+        competingDriverIds.filter((candidateId) => candidateId !== driverId),
+        "expired",
+      ).catch((cleanupError) => {
         logger.warn("Could not expire competing ride offers", {
           rideId,
           driverId,
           error: cleanupError,
         });
-      }
+      });
 
       return { rideId, status: "accepted", driverId };
     } catch (error) {
@@ -574,47 +634,136 @@ exports.acceptRideOffer = onCall(
 );
 
 exports.rejectRideOffer = onCall(
-  {
-    region: REGION,
-    timeoutSeconds: 15,
-    memory: "256MiB",
-  },
+  { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
   async (request) => {
     try {
       const driverId = requireAuthenticatedUser(request);
       const rideId = validateRideId(request.data?.rideId);
       const rideRef = db.collection("rides").doc(rideId);
       const offerRef = offerReference(driverId, rideId);
+      let rideExpired = false;
+      let allDriverIds = [];
 
       await db.runTransaction(async (transaction) => {
         const offerSnapshot = await transaction.get(offerRef);
         const rideSnapshot = await transaction.get(rideRef);
-
         if (!offerSnapshot.exists) {
-          throw new HttpsError("not-found", "This ride offer is no longer available.");
+          throw new HttpsError(
+            "not-found",
+            "This ride offer is no longer available.",
+          );
         }
 
         const currentOfferStatus = offerSnapshot.get("status");
-        if (currentOfferStatus === "rejected" || currentOfferStatus === "expired") {
+        if (
+          currentOfferStatus === "rejected" ||
+          currentOfferStatus === "expired"
+        ) {
           return;
         }
         if (currentOfferStatus !== "pending") {
-          throw new HttpsError("failed-precondition", "This offer is no longer active.");
+          throw new HttpsError(
+            "failed-precondition",
+            "This offer is no longer active.",
+          );
+        }
+        if (!rideSnapshot.exists || rideSnapshot.get("status") !== "offered") {
+          transaction.update(offerRef, {
+            status: "expired",
+            respondedAt: FieldValue.serverTimestamp(),
+          });
+          return;
         }
 
-        const status =
-          rideSnapshot.exists && rideSnapshot.get("status") === "offered"
-            ? "rejected"
-            : "expired";
-        transaction.update(offerRef, {
-          status,
-          respondedAt: FieldValue.serverTimestamp(),
+        allDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+          ? rideSnapshot.get("offeredDriverIds")
+          : [];
+        const otherRefs = allDriverIds
+          .filter((candidateId) => candidateId !== driverId)
+          .map((candidateId) => offerReference(candidateId, rideId));
+        const otherSnapshots = [];
+        for (const otherRef of otherRefs) {
+          otherSnapshots.push(await transaction.get(otherRef));
+        }
+        const nowMs = Date.now();
+        const anotherOfferActive = otherSnapshots.some((snapshot) => {
+          if (!snapshot.exists || snapshot.get("status") !== "pending") {
+            return false;
+          }
+          const expiresAt = snapshot.get("expiresAt");
+          return expiresAt instanceof Timestamp && expiresAt.toMillis() > nowMs;
         });
+
+        let activePassengerRef = null;
+        let activePassengerSnapshot = null;
+        if (!anotherOfferActive) {
+          activePassengerRef = db
+            .collection("active_passenger_rides")
+            .doc(rideSnapshot.get("passengerId"));
+          activePassengerSnapshot = await transaction.get(activePassengerRef);
+        }
+
+        const now = FieldValue.serverTimestamp();
+        transaction.update(offerRef, {
+          status: "rejected",
+          respondedAt: now,
+        });
+
+        if (!anotherOfferActive) {
+          transaction.update(rideRef, {
+            status: "expired",
+            offerExpiresAt: null,
+            expiredAt: now,
+            updatedAt: now,
+          });
+          if (
+            activePassengerRef != null &&
+            activePassengerSnapshot.exists &&
+            activePassengerSnapshot.get("rideId") === rideId
+          ) {
+            transaction.delete(activePassengerRef);
+          }
+          rideExpired = true;
+        }
       });
 
-      return { rideId, status: "rejected", driverId };
+      if (rideExpired) {
+        await markOffers(rideId, allDriverIds, "expired").catch(() => {});
+      }
+      return {
+        rideId,
+        status: rideExpired ? "expired" : "rejected",
+        driverId,
+      };
     } catch (error) {
       throw callableError(error, "Unable to reject the ride offer.");
+    }
+  },
+);
+
+exports.expireRideOffers = onSchedule(
+  {
+    region: REGION,
+    schedule: "every 1 minutes",
+    timeZone: "UTC",
+    memory: "256MiB",
+  },
+  async () => {
+    const snapshot = await db
+      .collection("rides")
+      .where("offerExpiresAt", "<=", Timestamp.now())
+      .limit(50)
+      .get();
+
+    for (const rideSnapshot of snapshot.docs) {
+      try {
+        await expireOfferedRide(rideSnapshot.ref);
+      } catch (error) {
+        logger.error("Could not expire a ride offer window", {
+          rideId: rideSnapshot.id,
+          error,
+        });
+      }
     }
   },
 );
