@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check index.js && node --check ride_logic.js"
+    "check": "node --check index.js && node --check ride_logic.js && node --check dispatch_logic.js"
   },
   "dependencies": {
     "firebase-admin": "^14.3.0",
