@@ -48,6 +48,9 @@ config/routes.json
 # Android Kotlin build cache
 android/.kotlin/
 
+# Firebase CLI cache and local emulator state
+.firebase/
+
 # Firebase Functions
 functions/node_modules/
 functions/.runtimeconfig.json
