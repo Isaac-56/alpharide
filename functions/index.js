@@ -743,7 +743,7 @@ exports.rejectRideOffer = onCall(
 
 exports.expireRideOffers = onSchedule(
   {
-    region: REGION,
+    region: "europe-west1",
     schedule: "every 1 minutes",
     timeZone: "UTC",
     memory: "256MiB",
