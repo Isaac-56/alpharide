@@ -26,6 +26,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
   final Map<String, _VisualDriver> _visualDrivers = <String, _VisualDriver>{};
 
   LatLng _center;
+  String? _driverIdFilter;
   bool _started = false;
   bool _disposed = false;
 
@@ -51,8 +52,10 @@ class LiveDriverMarkerController extends ChangeNotifier {
             flat: true,
             rotation: driver.heading,
             alpha: driver.alpha.clamp(0.0, 1.0).toDouble(),
-            infoWindow: const InfoWindow(
-              title: 'Alpha driver nearby',
+            infoWindow: InfoWindow(
+              title: _driverIdFilter == null
+                  ? 'Alpha driver nearby'
+                  : 'Your Alpha driver',
             ),
           ),
         )
@@ -79,6 +82,17 @@ class LiveDriverMarkerController extends ChangeNotifier {
   void updateCenter(LatLng center) {
     if (_samePoint(_center, center)) return;
     _center = center;
+    _applyLocations(_latestDrivers);
+  }
+
+  void showOnlyDriver(String? driverId) {
+    final String? normalized = driverId?.trim();
+    final String? nextFilter = normalized == null || normalized.isEmpty
+        ? null
+        : normalized;
+    if (_driverIdFilter == nextFilter) return;
+
+    _driverIdFilter = nextFilter;
     _applyLocations(_latestDrivers);
   }
 
@@ -122,8 +136,13 @@ class LiveDriverMarkerController extends ChangeNotifier {
   void _applyLocations(List<DriverLocationModel> locations) {
     if (_disposed || _markerIcon == null) return;
 
-    final List<DriverLocationModel> nearbyDrivers = locations.where(
+    final List<DriverLocationModel> visibleDrivers = locations.where(
       (DriverLocationModel driver) {
+        final String? filter = _driverIdFilter;
+        if (filter != null) {
+          return driver.driverId == filter;
+        }
+
         final double distanceMeters = Geolocator.distanceBetween(
           _center.latitude,
           _center.longitude,
@@ -135,7 +154,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
       },
     ).toList(growable: false);
 
-    final Set<String> incomingIds = nearbyDrivers
+    final Set<String> incomingIds = visibleDrivers
         .map((DriverLocationModel driver) => driver.driverId)
         .toSet();
 
@@ -152,7 +171,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
       }
     }
 
-    for (final DriverLocationModel driver in nearbyDrivers) {
+    for (final DriverLocationModel driver in visibleDrivers) {
       final LatLng destination = LatLng(
         driver.latitude,
         driver.longitude,
