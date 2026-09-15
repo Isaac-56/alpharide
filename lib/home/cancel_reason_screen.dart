@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../account/account_ui.dart';
 
+const Color primaryColor = Color(0xFF39FF14);
+
 class CancelReasonScreen extends StatelessWidget {
   const CancelReasonScreen({super.key});
 
@@ -124,7 +126,7 @@ class CancelReasonScreen extends StatelessWidget {
                 ],
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
