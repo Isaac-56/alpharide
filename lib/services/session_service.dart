@@ -7,6 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'account_role_service.dart';
+
 class SessionService {
   SessionService._();
 
@@ -37,6 +39,8 @@ class SessionService {
     _signInInProgress = true;
 
     try {
+      await AccountRoleService.instance.claimPassengerRole();
+
       final String sessionId = _createSessionId();
       final SharedPreferences preferences =
           await SharedPreferences.getInstance();
@@ -57,6 +61,9 @@ class SessionService {
         },
         SetOptions(merge: true),
       );
+    } on FirebaseAuthException {
+      await _auth.signOut();
+      rethrow;
     } finally {
       _signInInProgress = false;
     }

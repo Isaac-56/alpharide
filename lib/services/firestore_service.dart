@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import 'account_role_service.dart';
+
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -29,6 +31,8 @@ class FirestoreService {
     String phoneNumber,
   ) async {
     try {
+      await AccountRoleService.instance.claimPassengerRole();
+
       final User user = _requireUser();
       final DocumentReference<Map<String, dynamic>> currentReference =
           _users.doc(user.uid);
@@ -84,6 +88,8 @@ class FirestoreService {
     String? referralCode,
   }) async {
     try {
+      await AccountRoleService.instance.claimPassengerRole();
+
       final User user = _requireUser();
 
       await _users.doc(user.uid).set(

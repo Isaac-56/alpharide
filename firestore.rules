@@ -16,6 +16,13 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == driverId;
     }
 
+    function hasAccountRole(role) {
+      return signedIn() &&
+          exists(/databases/$(database)/documents/account_roles/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/account_roles/$(request.auth.uid))
+              .data.role == role;
+    }
+
     function hasSafeDriverFields(driverId) {
       return request.resource.data.uid == driverId
           && request.resource.data.phoneNumber ==
@@ -33,7 +40,14 @@ service cloud.firestore {
     }
 
     match /users/{userKey} {
-      allow read, create, update, delete:
+      allow read:
+          if ownsUserDocument(userKey);
+
+      allow create:
+          if ownsUserDocument(userKey) &&
+             hasAccountRole('passenger');
+
+      allow update, delete:
           if ownsUserDocument(userKey);
 
       match /{privateDocument=**} {
@@ -46,9 +60,22 @@ service cloud.firestore {
       allow read, delete:
           if ownsDriverProfile(driverId);
 
-      allow create, update:
+      allow create:
+          if ownsDriverProfile(driverId) &&
+             hasAccountRole('driver') &&
+             hasSafeDriverFields(driverId);
+
+      allow update:
           if ownsDriverProfile(driverId) &&
              hasSafeDriverFields(driverId);
+    }
+
+    match /account_roles/{uid} {
+      allow read, write: if false;
+    }
+
+    match /identity_registry/{phoneHash} {
+      allow read, write: if false;
     }
 
     match /user_sessions/{uid} {

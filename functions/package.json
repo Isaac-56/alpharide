@@ -2,13 +2,13 @@
   "name": "alpha-ride-functions",
   "version": "1.0.0",
   "private": true,
-  "main": "index.js",
+  "main": "role_index.js",
   "engines": {
     "node": "22"
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check index.js && node --check ride_logic.js && node --check dispatch_logic.js"
+    "check": "node --check role_index.js && node --check index.js && node --check ride_logic.js && node --check dispatch_logic.js && node --check account_role_logic.js && node --check role_functions.js"
   },
   "dependencies": {
     "firebase-admin": "^14.3.0",
