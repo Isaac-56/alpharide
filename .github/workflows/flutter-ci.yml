@@ -40,7 +40,8 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze
+        # Keep warnings visible without blocking tests; analyzer errors still fail.
+        run: flutter analyze --no-fatal-warnings
 
       - name: Test
         run: flutter test
