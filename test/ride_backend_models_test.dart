@@ -22,12 +22,20 @@ void main() {
     expect(result.routeDurationSeconds, 1200);
   });
 
-  test('live ride state parses driver assignment fields', () {
+  test('live ride state parses safe assigned driver details', () {
     final RideLiveState state = RideLiveState.fromFirestore(
       rideId: 'ride-123',
       data: <String, dynamic>{
         'status': 'accepted',
         'driverId': 'driver-7',
+        'driverSummary': <String, dynamic>{
+          'displayName': 'Daniel Driver',
+          'vehicleType': 'Car',
+          'make': 'Toyota',
+          'model': 'Corolla',
+          'color': 'White',
+          'plateNumber': 'SSD 1234',
+        },
         'estimatedFare': 21500,
         'finalFare': null,
         'currencyCode': 'SSP',
@@ -37,7 +45,28 @@ void main() {
     expect(state.rideId, 'ride-123');
     expect(state.driverId, 'driver-7');
     expect(state.status, 'accepted');
+    expect(state.driver?.displayName, 'Daniel Driver');
+    expect(state.driver?.vehicleLabel, 'White Toyota Corolla');
+    expect(state.driver?.plateNumber, 'SSD 1234');
+    expect(state.fare, 21500);
     expect(state.isTerminal, false);
+  });
+
+  test('driver summary falls back cleanly when optional fields are absent', () {
+    final RideLiveState state = RideLiveState.fromFirestore(
+      rideId: 'ride-123',
+      data: <String, dynamic>{
+        'status': 'accepted',
+        'driverId': 'driver-7',
+        'driverSummary': <String, dynamic>{},
+        'estimatedFare': 21500,
+        'finalFare': null,
+        'currencyCode': 'SSP',
+      },
+    );
+
+    expect(state.driver?.displayName, 'Alpha driver');
+    expect(state.driver?.vehicleLabel, 'Vehicle details unavailable');
   });
 
   test('terminal ride states are recognized', () {
@@ -51,6 +80,7 @@ void main() {
         data: <String, dynamic>{
           'status': status,
           'driverId': null,
+          'driverSummary': null,
           'estimatedFare': 21500,
           'finalFare': status == 'completed' ? 22000 : null,
           'currencyCode': 'SSP',
@@ -58,6 +88,7 @@ void main() {
       );
 
       expect(state.isTerminal, true);
+      expect(state.fare, status == 'completed' ? 22000 : 21500);
     }
   });
 }
