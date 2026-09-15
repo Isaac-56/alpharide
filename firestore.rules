@@ -133,6 +133,18 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /active_driver_rides/{driverId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+    }
+
+    match /active_passenger_rides/{passengerId} {
+      allow read:
+          if signedIn() && request.auth.uid == passengerId;
+      allow create, update, delete: if false;
+    }
+
     match /app_feedback/{feedbackId} {
       allow create:
           if signedIn() &&
