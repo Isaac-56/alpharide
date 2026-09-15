@@ -41,110 +41,135 @@ function authenticatedIdentity(request) {
   };
 }
 
-exports.claimAccountRole = onCall(
-  {
-    region: REGION,
-    timeoutSeconds: 15,
-    memory: "256MiB",
-  },
-  async (request) => {
-    try {
-      const { uid, phoneNumber } = authenticatedIdentity(request);
-      const desiredRole = normalizeAccountRole(request.data?.role);
-      const phoneHash = hashPhoneNumber(phoneNumber);
+async function evaluateAccountRole(request, { claimIfUnassigned }) {
+  const { uid, phoneNumber } = authenticatedIdentity(request);
+  const desiredRole = normalizeAccountRole(request.data?.role);
+  const phoneHash = hashPhoneNumber(phoneNumber);
 
-      const accountRoleRef = db.collection("account_roles").doc(uid);
-      const identityRef = db.collection("identity_registry").doc(phoneHash);
-      const passengerRef = db.collection("users").doc(uid);
-      const legacyPassengerRef = db.collection("users").doc(phoneNumber);
-      const driverRef = db.collection("drivers").doc(uid);
+  const accountRoleRef = db.collection("account_roles").doc(uid);
+  const identityRef = db.collection("identity_registry").doc(phoneHash);
+  const passengerRef = db.collection("users").doc(uid);
+  const legacyPassengerRef = db.collection("users").doc(phoneNumber);
+  const driverRef = db.collection("drivers").doc(uid);
 
-      let resolvedRole = null;
-      let migrated = false;
+  let resolvedRole = null;
+  let claimed = false;
+  let migrated = false;
 
-      await db.runTransaction(async (transaction) => {
-        const accountRoleSnapshot = await transaction.get(accountRoleRef);
-        const identitySnapshot = await transaction.get(identityRef);
-        const passengerSnapshot = await transaction.get(passengerRef);
-        const legacyPassengerSnapshot = await transaction.get(
-          legacyPassengerRef,
-        );
-        const driverSnapshot = await transaction.get(driverRef);
+  await db.runTransaction(async (transaction) => {
+    const accountRoleSnapshot = await transaction.get(accountRoleRef);
+    const identitySnapshot = await transaction.get(identityRef);
+    const passengerSnapshot = await transaction.get(passengerRef);
+    const legacyPassengerSnapshot = await transaction.get(legacyPassengerRef);
+    const driverSnapshot = await transaction.get(driverRef);
 
-        const existingRole = inferExistingRole({
-          accountRole: accountRoleSnapshot.data()?.role ?? null,
-          identityRole: identitySnapshot.data()?.role ?? null,
-          passengerExists: passengerSnapshot.exists,
-          legacyPassengerExists:
-            legacyPassengerRef.path !== passengerRef.path &&
-            legacyPassengerSnapshot.exists,
-          driverExists: driverSnapshot.exists,
-        });
+    const existingRole = inferExistingRole({
+      accountRole: accountRoleSnapshot.data()?.role ?? null,
+      identityRole: identitySnapshot.data()?.role ?? null,
+      passengerExists: passengerSnapshot.exists,
+      legacyPassengerExists:
+        legacyPassengerRef.path !== passengerRef.path &&
+        legacyPassengerSnapshot.exists,
+      driverExists: driverSnapshot.exists,
+    });
 
-        if (existingRole != null && existingRole !== desiredRole) {
+    if (existingRole != null && existingRole !== desiredRole) {
+      throw new HttpsError(
+        "failed-precondition",
+        roleConflictMessage(existingRole, desiredRole),
+        {
+          existingRole,
+          desiredRole,
+        },
+      );
+    }
+
+    resolvedRole = existingRole ?? (claimIfUnassigned ? desiredRole : null);
+    claimed = resolvedRole != null;
+
+    if (resolvedRole == null) {
+      return;
+    }
+
+    migrated =
+      existingRole != null &&
+      (!accountRoleSnapshot.exists || !identitySnapshot.exists);
+
+    const now = FieldValue.serverTimestamp();
+    const accountRoleData = {
+      role: resolvedRole,
+      phoneHash,
+      updatedAt: now,
+    };
+    if (!accountRoleSnapshot.exists) {
+      accountRoleData.createdAt = now;
+    }
+
+    const identityData = {
+      role: resolvedRole,
+      uid,
+      updatedAt: now,
+    };
+    if (!identitySnapshot.exists) {
+      identityData.createdAt = now;
+    }
+
+    transaction.set(accountRoleRef, accountRoleData, { merge: true });
+    transaction.set(identityRef, identityData, { merge: true });
+  });
+
+  return {
+    role: resolvedRole,
+    eligible: true,
+    claimed,
+    migrated,
+  };
+}
+
+function roleCallable(claimIfUnassigned) {
+  return onCall(
+    {
+      region: REGION,
+      timeoutSeconds: 15,
+      memory: "256MiB",
+    },
+    async (request) => {
+      try {
+        return await evaluateAccountRole(request, { claimIfUnassigned });
+      } catch (error) {
+        if (error instanceof HttpsError) {
+          throw error;
+        }
+
+        if (error instanceof TypeError) {
+          throw new HttpsError("invalid-argument", error.message);
+        }
+
+        if (error instanceof RangeError) {
+          logger.error("Conflicting Alpha account-role records", error);
           throw new HttpsError(
             "failed-precondition",
-            roleConflictMessage(existingRole, desiredRole),
-            {
-              existingRole,
-              desiredRole,
-            },
+            "This phone number has conflicting Alpha account records. Contact support before continuing.",
           );
         }
 
-        resolvedRole = existingRole ?? desiredRole;
-        migrated = existingRole != null;
-
-        const now = FieldValue.serverTimestamp();
-        const accountRoleData = {
-          role: resolvedRole,
-          phoneHash,
-          updatedAt: now,
-        };
-        if (!accountRoleSnapshot.exists) {
-          accountRoleData.createdAt = now;
-        }
-
-        const identityData = {
-          role: resolvedRole,
-          uid,
-          updatedAt: now,
-        };
-        if (!identitySnapshot.exists) {
-          identityData.createdAt = now;
-        }
-
-        transaction.set(accountRoleRef, accountRoleData, { merge: true });
-        transaction.set(identityRef, identityData, { merge: true });
-      });
-
-      return {
-        role: resolvedRole,
-        claimed: true,
-        migrated,
-      };
-    } catch (error) {
-      if (error instanceof HttpsError) {
-        throw error;
-      }
-
-      if (error instanceof TypeError) {
-        throw new HttpsError("invalid-argument", error.message);
-      }
-
-      if (error instanceof RangeError) {
-        logger.error("Conflicting Alpha account-role records", error);
+        logger.error("Unable to evaluate Alpha account role", error);
         throw new HttpsError(
-          "failed-precondition",
-          "This phone number has conflicting Alpha account records. Contact support before continuing.",
+          "internal",
+          "Unable to confirm this Alpha account right now. Please try again.",
         );
       }
+    },
+  );
+}
 
-      logger.error("Unable to claim Alpha account role", error);
-      throw new HttpsError(
-        "internal",
-        "Unable to confirm this Alpha account right now. Please try again.",
-      );
-    }
-  },
-);
+// Checks whether the signed-in phone may use the requested app. For a brand-new
+// phone it does not reserve a role, so abandoning OTP/onboarding cannot lock the
+// person into an app they never actually registered for. Existing legacy
+// profiles are lazily migrated into the role registry here.
+exports.checkAccountRole = roleCallable(false);
+
+// Called immediately before the first passenger/driver profile is created.
+// This is the authoritative, transactional "first completed registration wins"
+// operation used by both apps.
+exports.claimAccountRole = roleCallable(true);

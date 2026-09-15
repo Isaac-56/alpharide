@@ -31,7 +31,7 @@ class FirestoreService {
     String phoneNumber,
   ) async {
     try {
-      await AccountRoleService.instance.claimPassengerRole();
+      await AccountRoleService.instance.ensurePassengerEligible();
 
       final User user = _requireUser();
       final DocumentReference<Map<String, dynamic>> currentReference =

@@ -39,7 +39,7 @@ class SessionService {
     _signInInProgress = true;
 
     try {
-      await AccountRoleService.instance.claimPassengerRole();
+      await AccountRoleService.instance.ensurePassengerEligible();
 
       final String sessionId = _createSessionId();
       final SharedPreferences preferences =
