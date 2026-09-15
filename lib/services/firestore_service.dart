@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/ride_history.dart';
 import 'account_role_service.dart';
 
 class FirestoreService {
@@ -245,13 +246,28 @@ class FirestoreService {
   }
 
   Stream<List<Map<String, dynamic>>> watchOrders(
-    String phoneNumber,
+    String _,
   ) {
-    return userReference(phoneNumber)
-        .collection('orders')
-        .orderBy('createdAt', descending: true)
+    final String passengerId = _requireUser().uid;
+
+    return _firestore
+        .collection('rides')
+        .where('passengerId', isEqualTo: passengerId)
         .snapshots()
-        .map(_documentsToMaps);
+        .map((QuerySnapshot<Map<String, dynamic>> snapshot) {
+      final List<Map<String, dynamic>> history = <Map<String, dynamic>>[];
+
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> document
+          in snapshot.docs) {
+        final Map<String, dynamic>? item = liveRideToOrderHistory(
+          rideId: document.id,
+          data: document.data(),
+        );
+        if (item != null) history.add(item);
+      }
+
+      return sortRideHistoryNewestFirst(history);
+    });
   }
 
   Stream<List<Map<String, dynamic>>> watchWalletTransactions(
