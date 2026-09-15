@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const {
   DISPATCH_RADIUS_METERS,
   PRESENCE_FRESH_MS,
+  buildDriverPublicSummary,
   haversineDistanceMeters,
   normalizeVehicleType,
   presenceAllowsAcceptance,
@@ -165,6 +166,47 @@ test("driver profile must be approved and vehicle matched", () => {
     ),
     false,
   );
+});
+
+test("public driver summary exposes rider-safe identity and vehicle fields", () => {
+  assert.deepEqual(
+    buildDriverPublicSummary({
+      firstName: "  Daniel ",
+      lastName: " Driver ",
+      phoneNumber: "+211900000000",
+      registration: {
+        vehicleType: "Car",
+        make: "Toyota",
+        model: "Corolla",
+        color: "White",
+        plateNumber: "SSD 1234",
+        licenceNumber: "PRIVATE-LICENCE",
+      },
+    }),
+    {
+      displayName: "Daniel Driver",
+      firstName: "Daniel",
+      lastName: "Driver",
+      vehicleType: "Car",
+      make: "Toyota",
+      model: "Corolla",
+      color: "White",
+      plateNumber: "SSD 1234",
+    },
+  );
+});
+
+test("public driver summary falls back safely when profile data is absent", () => {
+  assert.deepEqual(buildDriverPublicSummary(null), {
+    displayName: "Alpha driver",
+    firstName: "",
+    lastName: "",
+    vehicleType: "",
+    make: "",
+    model: "",
+    color: "",
+    plateNumber: "",
+  });
 });
 
 test("ride ids are validated before callable actions", () => {

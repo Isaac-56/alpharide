@@ -23,6 +23,51 @@ function normalizeVehicleType(value) {
   return "standard";
 }
 
+function _publicText(value, maximumLength = 80) {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maximumLength);
+}
+
+function buildDriverPublicSummary(profile) {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+    return Object.freeze({
+      displayName: "Alpha driver",
+      firstName: "",
+      lastName: "",
+      vehicleType: "",
+      make: "",
+      model: "",
+      color: "",
+      plateNumber: "",
+    });
+  }
+
+  const registration =
+    profile.registration &&
+    typeof profile.registration === "object" &&
+    !Array.isArray(profile.registration)
+      ? profile.registration
+      : {};
+  const firstName = _publicText(profile.firstName, 60);
+  const lastName = _publicText(profile.lastName, 60);
+  const displayName = [firstName, lastName].filter(Boolean).join(" ") ||
+    "Alpha driver";
+
+  return Object.freeze({
+    displayName,
+    firstName,
+    lastName,
+    vehicleType: _publicText(
+      registration.vehicleType ?? profile.vehicleType,
+      60,
+    ),
+    make: _publicText(registration.make, 60),
+    model: _publicText(registration.model, 60),
+    color: _publicText(registration.color, 40),
+    plateNumber: _publicText(registration.plateNumber, 40),
+  });
+}
+
 function haversineDistanceMeters(first, second) {
   const earthRadiusMeters = 6371000;
   const toRadians = (degrees) => (degrees * Math.PI) / 180;
@@ -162,6 +207,7 @@ module.exports = {
   MAX_DRIVER_OFFERS,
   OFFER_WINDOW_MS,
   PRESENCE_FRESH_MS,
+  buildDriverPublicSummary,
   haversineDistanceMeters,
   normalizeVehicleType,
   presenceAllowsAcceptance,

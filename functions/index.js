@@ -14,6 +14,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const {
   OFFER_WINDOW_MS,
+  buildDriverPublicSummary,
   presenceAllowsAcceptance,
   profileAllowsDispatch,
   selectPresenceCandidates,
@@ -339,6 +340,7 @@ exports.createRide = onCall(
           schemaVersion: 1,
           passengerId,
           driverId: null,
+          driverSummary: null,
           status: "requested",
           pickup: input.pickup,
           destination: input.destination,
@@ -594,10 +596,12 @@ exports.acceptRideOffer = onCall(
         competingDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
           ? rideSnapshot.get("offeredDriverIds")
           : [];
+        const driverSummary = buildDriverPublicSummary(profileSnapshot.data());
         const now = FieldValue.serverTimestamp();
         transaction.update(rideRef, {
           status: "accepted",
           driverId,
+          driverSummary,
           offerExpiresAt: null,
           acceptedAt: now,
           updatedAt: now,
