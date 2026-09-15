@@ -126,7 +126,7 @@ class CancelReasonScreen extends StatelessWidget {
                 ],
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
