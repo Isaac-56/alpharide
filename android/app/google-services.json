@@ -2,6 +2,7 @@
   "project_info": {
     "project_number": "486103357366",
     "project_id": "alpha-ride-29708",
+    "firebase_url": "https://alpha-ride-29708-default-rtdb.europe-west1.firebasedatabase.app",
     "storage_bucket": "alpha-ride-29708.firebasestorage.app"
   },
   "client": [
