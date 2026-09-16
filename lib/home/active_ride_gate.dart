@@ -125,20 +125,32 @@ class _ResumableRide {
     final Map<String, dynamic> pickup = _requiredMap(data['pickup'], 'pickup');
     final Map<String, dynamic> destination =
         _requiredMap(data['destination'], 'destination');
-    final String rideOptionId = _requiredString(data['rideOptionId'], 'rideOptionId');
-    final int estimatedFare = _requiredInt(data['estimatedFare'], 'estimatedFare');
-    final String payment = _requiredString(data['paymentMethod'], 'paymentMethod');
+    final String rideOptionId = _requiredString(
+      data['rideOptionId'],
+      'rideOptionId',
+    );
+    final int estimatedFare = _requiredInt(
+      data['estimatedFare'],
+      'estimatedFare',
+    );
+    final String payment = _requiredString(
+      data['paymentMethod'],
+      'paymentMethod',
+    );
 
     final RideOption baseRide = RideOption.options.firstWhere(
       (RideOption option) => option.id == rideOptionId,
-      orElse: () => throw const FormatException('Unsupported active ride option.'),
+      orElse: () =>
+          throw const FormatException('Unsupported active ride option.'),
     );
 
     final PaymentMethod paymentMethod = switch (payment) {
       'cash' => PaymentMethod.cash,
       'card' => PaymentMethod.card,
       'wallet' => PaymentMethod.wallet,
-      _ => throw const FormatException('Unsupported active ride payment method.'),
+      _ => throw const FormatException(
+          'Unsupported active ride payment method.',
+        ),
     };
 
     return _ResumableRide(
@@ -152,8 +164,10 @@ class _ResumableRide {
         _requiredDouble(destination['latitude'], 'destination.latitude'),
         _requiredDouble(destination['longitude'], 'destination.longitude'),
       ),
-      destinationAddress:
-          _requiredString(destination['address'], 'destination.address'),
+      destinationAddress: _requiredString(
+        destination['address'],
+        'destination.address',
+      ),
       ride: baseRide.withEstimatedFare(estimatedFare),
       paymentMethod: paymentMethod,
     );
@@ -170,9 +184,7 @@ String _requiredString(Object? value, String field) {
   if (value is! String || value.trim().isEmpty) {
     throw FormatException('Active ride field "$field" is missing.');
   }
-  return value.trim().toLowerCase() == value.trim()
-      ? value.trim()
-      : value.trim();
+  return value.trim();
 }
 
 int _requiredInt(Object? value, String field) {
