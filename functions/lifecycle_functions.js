@@ -10,6 +10,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { validateRideId } = require("./dispatch_logic");
 const {
   normalizeDriverRideStatus,
+  resolveCompletedRideFare,
   validateDriverRideTransition,
 } = require("./lifecycle_logic");
 
@@ -44,6 +45,7 @@ exports.updateRideStatus = onCall(
         .doc(driverId);
 
       let resolvedStatus = requestedStatus;
+      let resolvedFinalFare = null;
 
       await db.runTransaction(async (transaction) => {
         const rideSnapshot = await transaction.get(rideRef);
@@ -60,6 +62,7 @@ exports.updateRideStatus = onCall(
         const currentStatus = rideSnapshot.get("status");
         if (currentStatus === requestedStatus) {
           resolvedStatus = currentStatus;
+          resolvedFinalFare = rideSnapshot.get("finalFare") ?? null;
           return;
         }
 
@@ -103,11 +106,21 @@ exports.updateRideStatus = onCall(
         }
 
         const now = FieldValue.serverTimestamp();
-        transaction.update(rideRef, {
+        const rideUpdate = {
           status: transition.status,
           [transition.timestampField]: now,
           updatedAt: now,
-        });
+        };
+
+        if (transition.completed) {
+          resolvedFinalFare = resolveCompletedRideFare({
+            estimatedFare: rideSnapshot.get("estimatedFare"),
+            finalFare: rideSnapshot.get("finalFare"),
+          });
+          rideUpdate.finalFare = resolvedFinalFare;
+        }
+
+        transaction.update(rideRef, rideUpdate);
 
         if (transition.completed) {
           if (
@@ -149,6 +162,7 @@ exports.updateRideStatus = onCall(
       return {
         rideId,
         status: resolvedStatus,
+        finalFare: resolvedFinalFare,
       };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
