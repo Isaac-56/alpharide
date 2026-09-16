@@ -146,7 +146,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         metadata,
       );
 
-      return snapshot.ref.getDownloadURL();
+      return await snapshot.ref.getDownloadURL();
     } catch (error) {
       debugPrint('Error uploading profile image: $error');
       rethrow;
@@ -483,8 +483,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   delegate: SliverChildListDelegate(
                     [
                       const SizedBox(height: 8),
-
-                      // Back button
                       Align(
                         alignment: Alignment.centerLeft,
                         child: SizedBox(
@@ -512,9 +510,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 28),
-
                       const Text(
                         'Complete your profile',
                         style: TextStyle(
@@ -525,9 +521,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           letterSpacing: -0.7,
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       const Text(
                         'Add a few personal details to finish setting up your AlphaRide account.',
                         style: TextStyle(
@@ -538,10 +532,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           letterSpacing: -0.1,
                         ),
                       ),
-
                       const SizedBox(height: 30),
-
-                      // Profile photo
                       Center(
                         child: Semantics(
                           button: true,
@@ -573,9 +564,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       ),
                                       child: CircleAvatar(
                                         backgroundColor:
-                                            primaryColor.withValues(
-                                          alpha: 0.14,
-                                        ),
+                                            primaryColor.withValues(alpha: 0.14),
                                         backgroundImage: _image == null
                                             ? null
                                             : FileImage(_image!),
@@ -607,8 +596,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                             ? const SizedBox(
                                                 width: 17,
                                                 height: 17,
-                                                child:
-                                                    CircularProgressIndicator(
+                                                child: CircularProgressIndicator(
                                                   strokeWidth: 2,
                                                   color: Colors.black,
                                                 ),
@@ -647,7 +635,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                       ),
-
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 220),
                         switchInCurve: Curves.easeOut,
@@ -716,9 +703,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 ),
                               ),
                       ),
-
                       const SizedBox(height: 30),
-
                       const Text(
                         'Full name',
                         style: TextStyle(
@@ -728,9 +713,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-
                       const SizedBox(height: 10),
-
                       TextFormField(
                         controller: _nameController,
                         enabled: !_isLoading,
@@ -762,9 +745,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           return null;
                         },
                       ),
-
                       const SizedBox(height: 20),
-
                       const Text(
                         'Referral code',
                         style: TextStyle(
@@ -774,9 +755,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-
                       const SizedBox(height: 4),
-
                       const Text(
                         'Optional',
                         style: TextStyle(
@@ -786,9 +765,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           fontWeight: FontWeight.w400,
                         ),
                       ),
-
                       const SizedBox(height: 10),
-
                       TextFormField(
                         controller: _referralCodeController,
                         enabled: !_isLoading,
@@ -811,10 +788,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           }
                         },
                       ),
-
                       const SizedBox(height: 20),
-
-                      // Verified phone number
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
@@ -872,9 +846,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 28),
-
                       SizedBox(
                         width: double.infinity,
                         height: 56,
@@ -917,9 +889,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 10),
-
                       Center(
                         child: TextButton(
                           onPressed: _isLoading ? null : _logOut,
@@ -934,7 +904,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 16),
                     ],
                   ),
