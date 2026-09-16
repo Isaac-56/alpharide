@@ -24,13 +24,13 @@ dependencies:
   geocoding: ^4.0.0
 
   # Firebase
-  firebase_core: ^4.2.1
+  firebase_core: 4.13.0
   firebase_auth: ^6.1.2
   firebase_database: ^12.1.0
   firebase_storage: ^13.0.4
-  firebase_app_check: ^0.4.1+2
+  firebase_app_check: 0.4.6
   cloud_firestore: ^6.0.0
-  cloud_functions: ^6.4.0
+  cloud_functions: 6.3.6
 
   # Maps & Media
   google_maps_flutter: ^2.13.1
