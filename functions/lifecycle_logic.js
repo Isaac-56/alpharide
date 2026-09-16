@@ -47,9 +47,22 @@ function validateDriverRideTransition(currentStatus, requestedStatus) {
   });
 }
 
+function resolveCompletedRideFare({ estimatedFare, finalFare }) {
+  if (Number.isInteger(finalFare) && finalFare > 0) {
+    return finalFare;
+  }
+
+  if (!Number.isInteger(estimatedFare) || estimatedFare <= 0) {
+    throw new RangeError("completed ride is missing a valid trusted fare");
+  }
+
+  return estimatedFare;
+}
+
 module.exports = {
   DRIVER_RIDE_TRANSITIONS,
   STATUS_TIMESTAMP_FIELDS,
   normalizeDriverRideStatus,
+  resolveCompletedRideFare,
   validateDriverRideTransition,
 };
