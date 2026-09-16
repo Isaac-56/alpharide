@@ -3,7 +3,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { validateDriverRideTransition } = require("../lifecycle_logic");
+const {
+  resolveCompletedRideFare,
+  validateDriverRideTransition,
+} = require("../lifecycle_logic");
 
 test("driver ride lifecycle advances in the required order", () => {
   assert.deepEqual(
@@ -51,5 +54,27 @@ test("passenger and dispatch statuses cannot be submitted by drivers", () => {
   assert.throws(
     () => validateDriverRideTransition("accepted", "offered"),
     /not a driver lifecycle transition/,
+  );
+});
+
+test("completed launch rides persist the trusted server-quoted fare", () => {
+  assert.equal(
+    resolveCompletedRideFare({ estimatedFare: 12500, finalFare: null }),
+    12500,
+  );
+  assert.equal(
+    resolveCompletedRideFare({ estimatedFare: 12500, finalFare: 13000 }),
+    13000,
+  );
+});
+
+test("completed rides reject missing or invalid trusted fares", () => {
+  assert.throws(
+    () => resolveCompletedRideFare({ estimatedFare: null, finalFare: null }),
+    /missing a valid trusted fare/,
+  );
+  assert.throws(
+    () => resolveCompletedRideFare({ estimatedFare: 0, finalFare: null }),
+    /missing a valid trusted fare/,
   );
 });
