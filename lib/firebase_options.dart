@@ -45,6 +45,8 @@ class DefaultFirebaseOptions {
     appId: '1:486103357366:android:c53f304752a76ab17f1317',
     messagingSenderId: '486103357366',
     projectId: 'alpha-ride-29708',
+    databaseURL:
+        'https://alpha-ride-29708-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'alpha-ride-29708.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
@@ -52,6 +54,8 @@ class DefaultFirebaseOptions {
     appId: '1:486103357366:ios:931a31f088a57d5f7f1317',
     messagingSenderId: '486103357366',
     projectId: 'alpha-ride-29708',
+    databaseURL:
+        'https://alpha-ride-29708-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'alpha-ride-29708.firebasestorage.app',
     iosBundleId: 'com.example.passengerApp',
   );
@@ -60,6 +64,8 @@ class DefaultFirebaseOptions {
     appId: '1:486103357366:web:98c3bd6fd18719067f1317',
     messagingSenderId: '486103357366',
     projectId: 'alpha-ride-29708',
+    databaseURL:
+        'https://alpha-ride-29708-default-rtdb.europe-west1.firebasedatabase.app',
     authDomain: 'alpha-ride-29708.firebaseapp.com',
     storageBucket: 'alpha-ride-29708.firebasestorage.app',
     measurementId: 'G-S0KV53726R',
@@ -70,6 +76,8 @@ class DefaultFirebaseOptions {
     appId: '1:486103357366:ios:931a31f088a57d5f7f1317',
     messagingSenderId: '486103357366',
     projectId: 'alpha-ride-29708',
+    databaseURL:
+        'https://alpha-ride-29708-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'alpha-ride-29708.firebasestorage.app',
     iosBundleId: 'com.example.passengerApp',
   );
@@ -79,6 +87,8 @@ class DefaultFirebaseOptions {
     appId: '1:486103357366:web:6d53a8689faacfee7f1317',
     messagingSenderId: '486103357366',
     projectId: 'alpha-ride-29708',
+    databaseURL:
+        'https://alpha-ride-29708-default-rtdb.europe-west1.firebasedatabase.app',
     authDomain: 'alpha-ride-29708.firebaseapp.com',
     storageBucket: 'alpha-ride-29708.firebasestorage.app',
     measurementId: 'G-5BC926PFRV',
