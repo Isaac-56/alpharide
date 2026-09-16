@@ -9,7 +9,7 @@ import 'authentication/login_screen.dart';
 import 'authentication/otp_screen.dart';
 import 'authentication/signup_screen.dart';
 import 'firebase_options.dart';
-import 'home/home_screen.dart';
+import 'home/active_ride_gate.dart';
 import 'services/session_service.dart';
 import 'theme_controller.dart';
 import 'widgets/loading_screen.dart';
@@ -301,7 +301,7 @@ class _ActiveSessionGateState extends State<ActiveSessionGate>
               );
             }
 
-            return const HomeScreen();
+            return const ActiveRideGate();
           },
         );
       },
