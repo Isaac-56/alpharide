@@ -47,3 +47,14 @@ recorded 10% fee. The first release records that liability transparently but
 does not automatically suspend drivers for unpaid balances. Balance enforcement
 should only be enabled after Alpha has an admin settlement workflow and a
 verified way to record cash or mobile-money deposits.
+
+## Pickup matching policy
+
+The dispatch service ranks fresh, online locations by straight-line distance
+to the passenger's pickup point. It scans beyond the final five offers before
+checking approval and active-trip records, preventing nearby ineligible or busy
+accounts from hiding the next valid driver. Only approved drivers with the
+requested vehicle category and no active ride can receive an offer. The five
+nearest eligible drivers receive the request, and the first valid acceptance
+wins atomically. Acceptance also rechecks live presence and pickup proximity so
+a stale offer cannot be accepted after the driver has moved far away.

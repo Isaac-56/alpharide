@@ -2,8 +2,11 @@
 
 const PRESENCE_FRESH_MS = 90 * 1000;
 const DISPATCH_RADIUS_METERS = 12 * 1000;
+const ACCEPTANCE_PICKUP_RADIUS_METERS = 15 * 1000;
+const PRESENCE_CANDIDATE_SCAN_LIMIT = 25;
 const MAX_DRIVER_OFFERS = 5;
 const OFFER_WINDOW_MS = 45 * 1000;
+const DISPATCH_ALGORITHM_VERSION = 2;
 
 function normalizeVehicleType(value) {
   if (typeof value !== "string") return "";
@@ -110,13 +113,56 @@ function presenceAllowsAcceptance({
   );
 }
 
+function presenceIsWithinPickupRadius({
+  presence,
+  pickup,
+  radiusMeters = ACCEPTANCE_PICKUP_RADIUS_METERS,
+}) {
+  if (!presence || typeof presence !== "object" || Array.isArray(presence)) {
+    return false;
+  }
+  if (!pickup || typeof pickup !== "object" || Array.isArray(pickup)) {
+    return false;
+  }
+
+  const latitude = Number(presence.latitude);
+  const longitude = Number(presence.longitude);
+  const pickupLatitude = Number(pickup.latitude);
+  const pickupLongitude = Number(pickup.longitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(pickupLatitude) ||
+    !Number.isFinite(pickupLongitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180 ||
+    pickupLatitude < -90 ||
+    pickupLatitude > 90 ||
+    pickupLongitude < -180 ||
+    pickupLongitude > 180 ||
+    !Number.isFinite(radiusMeters) ||
+    radiusMeters <= 0
+  ) {
+    return false;
+  }
+
+  return (
+    haversineDistanceMeters(
+      { latitude, longitude },
+      { latitude: pickupLatitude, longitude: pickupLongitude },
+    ) <= radiusMeters
+  );
+}
+
 function selectPresenceCandidates({
   presenceMap,
   pickup,
   requiredVehicleType,
   nowMs = Date.now(),
   radiusMeters = DISPATCH_RADIUS_METERS,
-  limit = MAX_DRIVER_OFFERS,
+  limit = PRESENCE_CANDIDATE_SCAN_LIMIT,
 }) {
   if (!presenceMap || typeof presenceMap !== "object") return [];
 
@@ -163,10 +209,48 @@ function selectPresenceCandidates({
   }
 
   candidates.sort(
-    (first, second) =>
-      first.distanceToPickupMeters - second.distanceToPickupMeters,
+    (first, second) => {
+      const distance =
+        first.distanceToPickupMeters - second.distanceToPickupMeters;
+      if (distance !== 0) return distance;
+
+      const freshness = second.updatedAt - first.updatedAt;
+      if (freshness !== 0) return freshness;
+
+      return first.driverId.localeCompare(second.driverId);
+    },
   );
   return candidates.slice(0, Math.max(0, limit));
+}
+
+function selectEligibleDispatchCandidates({
+  presenceCandidates,
+  profilesByDriverId,
+  busyDriverIds = [],
+  requiredVehicleType,
+  limit = MAX_DRIVER_OFFERS,
+}) {
+  if (!Array.isArray(presenceCandidates)) return [];
+
+  const profiles =
+    profilesByDriverId && typeof profilesByDriverId === "object"
+      ? profilesByDriverId
+      : {};
+  const busy = new Set(Array.isArray(busyDriverIds) ? busyDriverIds : []);
+
+  return presenceCandidates
+    .filter((candidate) => {
+      const driverId =
+        candidate && typeof candidate.driverId === "string"
+          ? candidate.driverId
+          : "";
+      return (
+        driverId &&
+        !busy.has(driverId) &&
+        profileAllowsDispatch(profiles[driverId], requiredVehicleType)
+      );
+    })
+    .slice(0, Math.max(0, limit));
 }
 
 function profileAllowsDispatch(profile, requiredVehicleType) {
@@ -203,15 +287,20 @@ function validateRideId(value) {
 }
 
 module.exports = {
+  ACCEPTANCE_PICKUP_RADIUS_METERS,
+  DISPATCH_ALGORITHM_VERSION,
   DISPATCH_RADIUS_METERS,
   MAX_DRIVER_OFFERS,
   OFFER_WINDOW_MS,
+  PRESENCE_CANDIDATE_SCAN_LIMIT,
   PRESENCE_FRESH_MS,
   buildDriverPublicSummary,
   haversineDistanceMeters,
   normalizeVehicleType,
   presenceAllowsAcceptance,
+  presenceIsWithinPickupRadius,
   profileAllowsDispatch,
+  selectEligibleDispatchCandidates,
   selectPresenceCandidates,
   validateRideId,
 };
