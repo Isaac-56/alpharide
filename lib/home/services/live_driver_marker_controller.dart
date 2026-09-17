@@ -10,10 +10,51 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/driver_location_model.dart';
 import 'driver_location_service.dart';
 
+class LiveDriverMarkerPolicy {
+  const LiveDriverMarkerPolicy._();
+
+  static const Map<String, String> markerAssets = <String, String>{
+    'standard': 'assets/images/vehicles/alpha_driver_top.png',
+    'boda': 'assets/images/vehicles/alpha_boda_top.png',
+    'rickshaw': 'assets/images/vehicles/alpha_rickshaw_top.png',
+  };
+
+  static String normalizedVehicleType(String vehicleType) {
+    final String normalized = vehicleType.trim().toLowerCase();
+
+    if (normalized.contains('boda') || normalized.contains('motor')) {
+      return 'boda';
+    }
+    if (normalized.contains('rickshaw') ||
+        normalized.contains('tuk') ||
+        normalized.contains('three')) {
+      return 'rickshaw';
+    }
+
+    return 'standard';
+  }
+
+  static String markerAssetForVehicle(String vehicleType) {
+    return markerAssets[normalizedVehicleType(vehicleType)] ??
+        markerAssets['standard']!;
+  }
+
+  static double normalizedHeading(double value) {
+    return ((value % 360) + 360) % 360;
+  }
+
+  static double interpolatedHeading(
+    double start,
+    double end,
+    double progress,
+  ) {
+    final double difference = ((end - start + 540) % 360) - 180;
+    return normalizedHeading(start + (difference * progress));
+  }
+}
+
 class LiveDriverMarkerController extends ChangeNotifier {
-  static const String markerAsset =
-      'assets/images/vehicles/alpha_driver_top.png';
-  static const Duration movementDuration = Duration(milliseconds: 950);
+  static const Duration movementDuration = Duration(milliseconds: 1600);
   static const Duration frameDuration = Duration(milliseconds: 33);
 
   final DriverLocationService _locationService;
@@ -21,7 +62,8 @@ class LiveDriverMarkerController extends ChangeNotifier {
 
   StreamSubscription<List<DriverLocationModel>>? _subscription;
   Timer? _movementTimer;
-  BitmapDescriptor? _markerIcon;
+  final Map<String, BitmapDescriptor> _markerIcons =
+      <String, BitmapDescriptor>{};
   List<DriverLocationModel> _latestDrivers = const <DriverLocationModel>[];
   final Map<String, _VisualDriver> _visualDrivers = <String, _VisualDriver>{};
 
@@ -38,28 +80,28 @@ class LiveDriverMarkerController extends ChangeNotifier {
         _locationService = locationService ?? DriverLocationService();
 
   Set<Marker> get markers {
-    final BitmapDescriptor? icon = _markerIcon;
+    final BitmapDescriptor? standardIcon = _markerIcons['standard'];
+    if (standardIcon == null) return const <Marker>{};
 
-    if (icon == null) return const <Marker>{};
+    return _visualDrivers.values.map((_VisualDriver driver) {
+      final BitmapDescriptor icon =
+          _markerIcons[driver.vehicleType] ?? standardIcon;
 
-    return _visualDrivers.values
-        .map(
-          (_VisualDriver driver) => Marker(
-            markerId: MarkerId('live-driver-${driver.driverId}'),
-            position: driver.position,
-            icon: icon,
-            anchor: const Offset(0.5, 0.5),
-            flat: true,
-            rotation: driver.heading,
-            alpha: driver.alpha.clamp(0.0, 1.0).toDouble(),
-            infoWindow: InfoWindow(
-              title: _driverIdFilter == null
-                  ? 'Alpha driver nearby'
-                  : 'Your Alpha driver',
-            ),
-          ),
-        )
-        .toSet();
+      return Marker(
+        markerId: MarkerId('live-driver-${driver.driverId}'),
+        position: driver.position,
+        icon: icon,
+        anchor: const Offset(0.5, 0.5),
+        flat: true,
+        rotation: driver.heading,
+        alpha: driver.alpha.clamp(0.0, 1.0).toDouble(),
+        infoWindow: InfoWindow(
+          title: _driverIdFilter == null
+              ? 'Alpha driver nearby'
+              : 'Your Alpha driver',
+        ),
+      );
+    }).toSet();
   }
 
   Future<void> start() async {
@@ -76,7 +118,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
       },
     );
 
-    await _loadMarkerIcon();
+    await _loadMarkerIcons();
   }
 
   void updateCenter(LatLng center) {
@@ -96,45 +138,58 @@ class LiveDriverMarkerController extends ChangeNotifier {
     _applyLocations(_latestDrivers);
   }
 
-  Future<void> _loadMarkerIcon() async {
-    try {
-      final ByteData data = await rootBundle.load(markerAsset);
-      final ui.Codec codec = await ui.instantiateImageCodec(
-        data.buffer.asUint8List(),
-        targetWidth: 96,
-      );
-      final ui.FrameInfo frame = await codec.getNextFrame();
-
+  Future<void> _loadMarkerIcons() async {
+    for (final MapEntry<String, String> entry
+        in LiveDriverMarkerPolicy.markerAssets.entries) {
       try {
-        final ByteData? bytes = await frame.image.toByteData(
-          format: ui.ImageByteFormat.png,
+        _markerIcons[entry.key] = await _loadMarkerIcon(entry.value);
+      } catch (error) {
+        debugPrint(
+          'Unable to load the ${entry.key} top-view driver marker: $error',
         );
-
-        if (bytes != null) {
-          _markerIcon = BitmapDescriptor.bytes(
-            bytes.buffer.asUint8List(
-              bytes.offsetInBytes,
-              bytes.lengthInBytes,
-            ),
-          );
-        }
-      } finally {
-        frame.image.dispose();
-        codec.dispose();
       }
-    } catch (error) {
-      debugPrint('Unable to load the top-view driver marker: $error');
-      _markerIcon = BitmapDescriptor.defaultMarkerWithHue(
-        BitmapDescriptor.hueGreen,
-      );
     }
+
+    final BitmapDescriptor standardIcon = _markerIcons['standard'] ??
+        BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+    _markerIcons['standard'] = standardIcon;
+    _markerIcons.putIfAbsent('boda', () => standardIcon);
+    _markerIcons.putIfAbsent('rickshaw', () => standardIcon);
 
     if (_disposed) return;
     _applyLocations(_latestDrivers);
   }
 
+  Future<BitmapDescriptor> _loadMarkerIcon(String assetPath) async {
+    final ByteData data = await rootBundle.load(assetPath);
+    final ui.Codec codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: 96,
+    );
+    final ui.FrameInfo frame = await codec.getNextFrame();
+
+    try {
+      final ByteData? bytes = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      if (bytes == null) {
+        throw StateError('Unable to decode $assetPath.');
+      }
+
+      return BitmapDescriptor.bytes(
+        bytes.buffer.asUint8List(
+          bytes.offsetInBytes,
+          bytes.lengthInBytes,
+        ),
+      );
+    } finally {
+      frame.image.dispose();
+      codec.dispose();
+    }
+  }
+
   void _applyLocations(List<DriverLocationModel> locations) {
-    if (_disposed || _markerIcon == null) return;
+    if (_disposed || _markerIcons.isEmpty) return;
 
     final List<DriverLocationModel> visibleDrivers = locations.where(
       (DriverLocationModel driver) {
@@ -181,12 +236,21 @@ class LiveDriverMarkerController extends ChangeNotifier {
       if (current == null) {
         _visualDrivers[driver.driverId] = _VisualDriver(
           driverId: driver.driverId,
+          vehicleType: LiveDriverMarkerPolicy.normalizedVehicleType(
+            driver.vehicleType,
+          ),
           position: destination,
           startPosition: destination,
           targetPosition: destination,
-          heading: _normalizeHeading(driver.heading ?? 0),
-          startHeading: _normalizeHeading(driver.heading ?? 0),
-          targetHeading: _normalizeHeading(driver.heading ?? 0),
+          heading: LiveDriverMarkerPolicy.normalizedHeading(
+            driver.heading ?? 0,
+          ),
+          startHeading: LiveDriverMarkerPolicy.normalizedHeading(
+            driver.heading ?? 0,
+          ),
+          targetHeading: LiveDriverMarkerPolicy.normalizedHeading(
+            driver.heading ?? 0,
+          ),
           alpha: 0,
           startAlpha: 0,
           targetAlpha: 1,
@@ -196,10 +260,13 @@ class LiveDriverMarkerController extends ChangeNotifier {
       }
 
       current
+        ..vehicleType = LiveDriverMarkerPolicy.normalizedVehicleType(
+          driver.vehicleType,
+        )
         ..startPosition = current.position
         ..targetPosition = destination
         ..startHeading = current.heading
-        ..targetHeading = _normalizeHeading(
+        ..targetHeading = LiveDriverMarkerPolicy.normalizedHeading(
           driver.heading ??
               (_samePoint(current.position, destination)
                   ? current.heading
@@ -250,7 +317,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
                 eased,
               ),
             )
-            ..heading = _lerpHeading(
+            ..heading = LiveDriverMarkerPolicy.interpolatedHeading(
               driver.startHeading,
               driver.targetHeading,
               eased,
@@ -290,15 +357,6 @@ class LiveDriverMarkerController extends ChangeNotifier {
     return start + ((end - start) * progress);
   }
 
-  static double _normalizeHeading(double value) {
-    return ((value % 360) + 360) % 360;
-  }
-
-  static double _lerpHeading(double start, double end, double progress) {
-    final double difference = ((end - start + 540) % 360) - 180;
-    return _normalizeHeading(start + (difference * progress));
-  }
-
   static double _bearingBetween(LatLng start, LatLng end) {
     if (_samePoint(start, end)) return 0;
 
@@ -313,7 +371,9 @@ class LiveDriverMarkerController extends ChangeNotifier {
             math.cos(endLatitude) *
             math.cos(longitudeDifference);
 
-    return _normalizeHeading(math.atan2(y, x) * 180 / math.pi);
+    return LiveDriverMarkerPolicy.normalizedHeading(
+      math.atan2(y, x) * 180 / math.pi,
+    );
   }
 
   @override
@@ -327,6 +387,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
 
 class _VisualDriver {
   final String driverId;
+  String vehicleType;
   LatLng position;
   LatLng startPosition;
   LatLng targetPosition;
@@ -340,6 +401,7 @@ class _VisualDriver {
 
   _VisualDriver({
     required this.driverId,
+    required this.vehicleType,
     required this.position,
     required this.startPosition,
     required this.targetPosition,
