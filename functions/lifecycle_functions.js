@@ -7,6 +7,7 @@ const {
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
+const { calculateCompletedRideAccounting } = require("./accounting_logic");
 const { validateRideId } = require("./dispatch_logic");
 const {
   normalizeDriverRideStatus,
@@ -43,9 +44,13 @@ exports.updateRideStatus = onCall(
       const activeDriverRef = db
         .collection("active_driver_rides")
         .doc(driverId);
+      const rideSummaryRef = db
+        .collection("driver_ride_summaries")
+        .doc(driverId);
 
       let resolvedStatus = requestedStatus;
       let resolvedFinalFare = null;
+      let resolvedAccounting = null;
 
       await db.runTransaction(async (transaction) => {
         const rideSnapshot = await transaction.get(rideRef);
@@ -63,6 +68,15 @@ exports.updateRideStatus = onCall(
         if (currentStatus === requestedStatus) {
           resolvedStatus = currentStatus;
           resolvedFinalFare = rideSnapshot.get("finalFare") ?? null;
+          if (currentStatus === "completed") {
+            resolvedAccounting = {
+              platformCommissionBps:
+                rideSnapshot.get("platformCommissionBps") ?? null,
+              platformFee: rideSnapshot.get("platformFee") ?? null,
+              driverNetFare: rideSnapshot.get("driverNetFare") ?? null,
+              settlementStatus: rideSnapshot.get("settlementStatus") ?? null,
+            };
+          }
           return;
         }
 
@@ -117,12 +131,45 @@ exports.updateRideStatus = onCall(
             estimatedFare: rideSnapshot.get("estimatedFare"),
             finalFare: rideSnapshot.get("finalFare"),
           });
-          rideUpdate.finalFare = resolvedFinalFare;
+          resolvedAccounting = calculateCompletedRideAccounting({
+            grossFare: resolvedFinalFare,
+            paymentMethod: rideSnapshot.get("paymentMethod"),
+          });
+          Object.assign(rideUpdate, resolvedAccounting, {
+            finalFare: resolvedFinalFare,
+          });
         }
 
         transaction.update(rideRef, rideUpdate);
 
         if (transition.completed) {
+          transaction.set(
+            rideSummaryRef,
+            {
+              schemaVersion: 1,
+              driverId,
+              completedRideCount: FieldValue.increment(1),
+              grossFareTotal: FieldValue.increment(
+                resolvedAccounting.grossFare,
+              ),
+              platformFeeTotal: FieldValue.increment(
+                resolvedAccounting.platformFee,
+              ),
+              driverNetFareTotal: FieldValue.increment(
+                resolvedAccounting.driverNetFare,
+              ),
+              cashCollectedTotal: FieldValue.increment(
+                resolvedAccounting.cashCollectedByDriver,
+              ),
+              unsettledPlatformFeeTotal: FieldValue.increment(
+                resolvedAccounting.platformFee,
+              ),
+              lastCompletedRideId: rideId,
+              lastCompletedAt: now,
+              updatedAt: now,
+            },
+            { merge: true },
+          );
           if (
             activeDriverSnapshot.exists &&
             activeDriverSnapshot.get("rideId") === rideId
@@ -163,6 +210,11 @@ exports.updateRideStatus = onCall(
         rideId,
         status: resolvedStatus,
         finalFare: resolvedFinalFare,
+        platformCommissionBps:
+          resolvedAccounting?.platformCommissionBps ?? null,
+        platformFee: resolvedAccounting?.platformFee ?? null,
+        driverNetFare: resolvedAccounting?.driverNetFare ?? null,
+        settlementStatus: resolvedAccounting?.settlementStatus ?? null,
       };
     } catch (error) {
       if (error instanceof HttpsError) throw error;

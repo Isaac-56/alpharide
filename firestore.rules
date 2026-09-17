@@ -145,6 +145,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /driver_ride_summaries/{driverId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+    }
+
     match /app_feedback/{feedbackId} {
       allow create:
           if signedIn() &&
