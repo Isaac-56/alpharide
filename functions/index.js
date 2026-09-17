@@ -13,10 +13,15 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const {
+  ACCEPTANCE_PICKUP_RADIUS_METERS,
+  DISPATCH_ALGORITHM_VERSION,
   OFFER_WINDOW_MS,
+  PRESENCE_CANDIDATE_SCAN_LIMIT,
   buildDriverPublicSummary,
   presenceAllowsAcceptance,
+  presenceIsWithinPickupRadius,
   profileAllowsDispatch,
+  selectEligibleDispatchCandidates,
   selectPresenceCandidates,
   validateRideId,
 } = require("./dispatch_logic");
@@ -172,36 +177,53 @@ async function dispatchRide({
     presenceMap: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
     pickup,
     requiredVehicleType,
+    limit: PRESENCE_CANDIDATE_SCAN_LIMIT,
   });
 
   if (presenceCandidates.length === 0) {
     await rideRef.update({
       dispatchState: "no_candidates",
       dispatchCandidateCount: 0,
+      dispatchScannedCandidateCount: 0,
+      dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
       dispatchAttemptedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     return "requested";
   }
 
-  const verifiedCandidates = [];
-  for (const candidate of presenceCandidates) {
-    const profileSnapshot = await db
-      .collection("drivers")
-      .doc(candidate.driverId)
-      .get();
-    if (
-      profileSnapshot.exists &&
-      profileAllowsDispatch(profileSnapshot.data(), requiredVehicleType)
-    ) {
-      verifiedCandidates.push(candidate);
-    }
-  }
+  const verificationResults = await Promise.all(
+    presenceCandidates.map(async (candidate) => {
+      const [profileSnapshot, activeRideSnapshot] = await Promise.all([
+        db.collection("drivers").doc(candidate.driverId).get(),
+        db.collection("active_driver_rides").doc(candidate.driverId).get(),
+      ]);
+      return {
+        driverId: candidate.driverId,
+        profile: profileSnapshot.exists ? profileSnapshot.data() : null,
+        busy: activeRideSnapshot.exists,
+      };
+    }),
+  );
+  const profilesByDriverId = Object.fromEntries(
+    verificationResults.map((result) => [result.driverId, result.profile]),
+  );
+  const busyDriverIds = verificationResults
+    .filter((result) => result.busy)
+    .map((result) => result.driverId);
+  const verifiedCandidates = selectEligibleDispatchCandidates({
+    presenceCandidates,
+    profilesByDriverId,
+    busyDriverIds,
+    requiredVehicleType,
+  });
 
   if (verifiedCandidates.length === 0) {
     await rideRef.update({
       dispatchState: "no_approved_candidates",
       dispatchCandidateCount: 0,
+      dispatchScannedCandidateCount: presenceCandidates.length,
+      dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
       dispatchAttemptedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -212,7 +234,7 @@ async function dispatchRide({
   const expiresAt = Timestamp.fromMillis(Date.now() + OFFER_WINDOW_MS);
   const batch = db.batch();
 
-  for (const candidate of verifiedCandidates) {
+  for (const [candidateIndex, candidate] of verifiedCandidates.entries()) {
     batch.set(offerReference(candidate.driverId, rideId), {
       schemaVersion: 1,
       rideId,
@@ -227,6 +249,8 @@ async function dispatchRide({
       estimatedFare,
       currencyCode: CURRENCY_CODE,
       distanceToPickupMeters: candidate.distanceToPickupMeters,
+      dispatchRank: candidateIndex + 1,
+      dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
       createdAt: FieldValue.serverTimestamp(),
       expiresAt,
       respondedAt: null,
@@ -239,6 +263,8 @@ async function dispatchRide({
     offerExpiresAt: expiresAt,
     dispatchState: "offers_created",
     dispatchCandidateCount: driverIds.length,
+    dispatchScannedCandidateCount: presenceCandidates.length,
+    dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
     dispatchAttemptedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -356,6 +382,7 @@ exports.createRide = onCall(
           cancellationReason: null,
           offeredDriverIds: [],
           dispatchState: "pending",
+          dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
           requestedAt: now,
           updatedAt: now,
           acceptedAt: null,
@@ -519,6 +546,11 @@ exports.acceptRideOffer = onCall(
           presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
           driverId,
           requiredVehicleType: preOffer.get("requiredVehicleType"),
+        }) ||
+        !presenceIsWithinPickupRadius({
+          presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
+          pickup: preOffer.get("pickup"),
+          radiusMeters: ACCEPTANCE_PICKUP_RADIUS_METERS,
         })
       ) {
         throw new HttpsError(

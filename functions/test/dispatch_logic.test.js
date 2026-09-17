@@ -4,13 +4,16 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  ACCEPTANCE_PICKUP_RADIUS_METERS,
   DISPATCH_RADIUS_METERS,
   PRESENCE_FRESH_MS,
   buildDriverPublicSummary,
   haversineDistanceMeters,
   normalizeVehicleType,
   presenceAllowsAcceptance,
+  presenceIsWithinPickupRadius,
   profileAllowsDispatch,
+  selectEligibleDispatchCandidates,
   selectPresenceCandidates,
   validateRideId,
 } = require("../dispatch_logic");
@@ -86,6 +89,26 @@ test("drivers outside the dispatch radius are excluded", () => {
   const pickup = { latitude: 4.8517, longitude: 31.5825 };
   const distant = { latitude: 5.1, longitude: 31.9 };
   assert.ok(haversineDistanceMeters(pickup, distant) > DISPATCH_RADIUS_METERS);
+});
+
+test("acceptance location must remain near the passenger pickup", () => {
+  const pickup = { latitude: 4.8517, longitude: 31.5825 };
+
+  assert.equal(
+    presenceIsWithinPickupRadius({
+      presence: { latitude: 4.852, longitude: 31.583 },
+      pickup,
+    }),
+    true,
+  );
+  assert.equal(
+    presenceIsWithinPickupRadius({
+      presence: { latitude: 5.1, longitude: 31.9 },
+      pickup,
+      radiusMeters: ACCEPTANCE_PICKUP_RADIUS_METERS,
+    }),
+    false,
+  );
 });
 
 test("acceptance requires current online matching presence", () => {
@@ -165,6 +188,65 @@ test("driver profile must be approved and vehicle matched", () => {
       "standard",
     ),
     false,
+  );
+});
+
+test("dispatch skips unapproved and busy drivers before applying offer limit", () => {
+  const presenceCandidates = Array.from({ length: 8 }, (_, index) => ({
+    driverId: `driver-${index + 1}`,
+    distanceToPickupMeters: (index + 1) * 100,
+    updatedAt: 1_800_000_000_000 - index,
+  }));
+  const profilesByDriverId = Object.fromEntries(
+    presenceCandidates.map((candidate, index) => [
+      candidate.driverId,
+      {
+        reviewStatus: index < 5 ? "pending" : "approved",
+        registration: { vehicleType: "Car" },
+      },
+    ]),
+  );
+
+  assert.deepEqual(
+    selectEligibleDispatchCandidates({
+      presenceCandidates,
+      profilesByDriverId,
+      busyDriverIds: ["driver-6"],
+      requiredVehicleType: "standard",
+    }).map((candidate) => candidate.driverId),
+    ["driver-7", "driver-8"],
+  );
+});
+
+test("equal-distance candidates prefer fresher presence deterministically", () => {
+  const pickup = { latitude: 4.8517, longitude: 31.5825 };
+  const candidates = selectPresenceCandidates({
+    nowMs: 1_800_000_000_000,
+    pickup,
+    requiredVehicleType: "standard",
+    presenceMap: {
+      older: {
+        driverId: "older",
+        isOnline: true,
+        vehicleType: "standard",
+        latitude: pickup.latitude,
+        longitude: pickup.longitude,
+        updatedAt: 1_799_999_999_000,
+      },
+      newer: {
+        driverId: "newer",
+        isOnline: true,
+        vehicleType: "standard",
+        latitude: pickup.latitude,
+        longitude: pickup.longitude,
+        updatedAt: 1_799_999_999_500,
+      },
+    },
+  });
+
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.driverId),
+    ["newer", "older"],
   );
 });
 

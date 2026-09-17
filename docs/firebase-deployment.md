@@ -38,6 +38,9 @@ firebase deploy --only firestore:rules,functions
 3. Use Cash as the payment method.
 4. Confirm the ride and verify a new `rides/{rideId}` document is created.
 5. Verify the server-computed fare is shown after creation.
+6. Complete a cash ride and verify `driver_ride_summaries/{driverId}` records
+   one completed ride, the gross fare, Alpha's 10% platform fee, the driver's
+   90% net fare, and the unsettled platform-fee balance.
 6. Cancel before driver assignment and confirm the ride stores `status=cancelled`, `cancelledBy=passenger`, and `cancellationReason`.
 7. Verify `active_passenger_rides/{passengerId}` is removed after cancellation.
 
