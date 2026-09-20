@@ -13,11 +13,23 @@ class LocationSelection {
 
   String get displayName {
     final String trimmedName = name.trim();
-
-    if (trimmedName.isNotEmpty) {
+    if (_isSpecificLabel(trimmedName)) {
       return trimmedName;
     }
 
-    return address.trim().isEmpty ? 'Selected location' : address.trim();
+    final String trimmedAddress = address.trim();
+    if (_isSpecificLabel(trimmedAddress)) {
+      return trimmedAddress;
+    }
+
+    return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
+  }
+
+  static bool _isSpecificLabel(String value) {
+    if (value.isEmpty) return false;
+    final String normalized = value.toLowerCase();
+    return normalized != 'current location' &&
+        normalized != 'selected location' &&
+        normalized != 'detecting current location...';
   }
 }
