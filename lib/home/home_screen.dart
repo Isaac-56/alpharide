@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final FirestoreService _firestoreService = FirestoreService();
 
-  final DirectionsService _directionsService = const DirectionsService();
+  final DirectionsService _directionsService = DirectionsService();
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 

@@ -43,7 +43,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
 
-  final DirectionsService _directionsService = const DirectionsService();
+  final DirectionsService _directionsService = DirectionsService();
   final RideService _rideService = RideService.instance;
 
   late List<LatLng> _routePoints;
