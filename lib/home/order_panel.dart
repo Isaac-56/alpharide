@@ -76,23 +76,29 @@ class _OrderPanelState extends State<OrderPanel> {
   bool get _hasRouteEstimate =>
       (widget.routeDistanceMeters ?? 0) > 0 && widget.routeDuration != null;
 
-  int _fareFor(RideOption ride) {
-    if (!_hasRouteEstimate) {
-      return ride.estimatedFare;
-    }
+  bool get _hasDestination => widget.destinationAddress.trim().isNotEmpty;
+
+  int? _fareFor(RideOption ride) {
+    if (!_hasRouteEstimate) return null;
 
     return ride.calculateFare(
       distanceKilometers: widget.routeDistanceMeters! / 1000,
-      durationMinutes: widget.routeDuration!.inSeconds / 60,
     );
   }
 
-  String _fareLabelFor(RideOption ride) =>
-      '${RideOption.formatAmount(_fareFor(ride))} '
-      '${RideOption.currencyCode}';
+  String _fareLabelFor(RideOption ride) {
+    final int? fare = _fareFor(ride);
+    if (fare == null) return 'Fare after destination';
+    return '${RideOption.formatAmount(fare)} ${RideOption.currencyCode}';
+  }
 
-  RideOption _pricedRide(RideOption ride) =>
-      ride.withEstimatedFare(_fareFor(ride));
+  String _displayFareFor(RideOption ride) =>
+      _hasRouteEstimate ? '~ ${_fareLabelFor(ride)}' : _fareLabelFor(ride);
+
+  RideOption _pricedRide(RideOption ride) {
+    final int? fare = _fareFor(ride);
+    return fare == null ? ride : ride.withEstimatedFare(fare);
+  }
 
   String? get _routeSummary {
     if (!_hasRouteEstimate) return null;
@@ -207,6 +213,12 @@ class _OrderPanelState extends State<OrderPanel> {
 
   void _confirmRide() {
     if (_isInteractionLocked) return;
+    if (!_hasRouteEstimate) {
+      if (!_hasDestination) {
+        _handleLocationTap(widget.onDestinationTap);
+      }
+      return;
+    }
 
     setState(() {
       _isConfirmingRide = true;
@@ -233,6 +245,12 @@ class _OrderPanelState extends State<OrderPanel> {
         },
       );
     }
+  }
+
+  String get _primaryActionLabel {
+    if (!_hasDestination) return 'Choose destination';
+    if (!_hasRouteEstimate) return 'Calculating fare...';
+    return 'Continue';
   }
 
   String get _paymentLabel {
@@ -416,7 +434,10 @@ class _OrderPanelState extends State<OrderPanel> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isInteractionLocked ? null : _confirmRide,
+                  onPressed: _isInteractionLocked ||
+                          (_hasDestination && !_hasRouteEstimate)
+                      ? null
+                      : _confirmRide,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: const Color(0xFF071007),
@@ -452,9 +473,9 @@ class _OrderPanelState extends State<OrderPanel> {
                               'confirm-ride',
                             ),
                             children: <Widget>[
-                              const Expanded(
+                              Expanded(
                                 child: Text(
-                                  'Set pick-up point',
+                                  _primaryActionLabel,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.end,
@@ -471,7 +492,7 @@ class _OrderPanelState extends State<OrderPanel> {
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    '~ ${_fareLabelFor(_selectedRide)}',
+                                    _displayFareFor(_selectedRide),
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
@@ -492,7 +513,9 @@ class _OrderPanelState extends State<OrderPanel> {
                   horizontal: 20,
                 ),
                 child: Text(
-                  'The final fare may change with time and distance',
+                  _hasRouteEstimate
+                      ? 'Distance fare shown. Customer waiting has 2 free minutes, then ${_selectedRide.waitingPerMinuteLabel}.'
+                      : 'Select pickup and destination to calculate your fare.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: mutedColor,
@@ -616,7 +639,10 @@ class _OrderPanelState extends State<OrderPanel> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _isInteractionLocked ? null : _confirmRide,
+              onPressed: _isInteractionLocked ||
+                      (_hasDestination && !_hasRouteEstimate)
+                  ? null
+                  : _confirmRide,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: const Color(0xFF071007),
@@ -643,9 +669,9 @@ class _OrderPanelState extends State<OrderPanel> {
                     : Row(
                         key: const ValueKey<String>('compact-confirm-ride'),
                         children: <Widget>[
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Set pick-up point',
+                              _primaryActionLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -661,7 +687,7 @@ class _OrderPanelState extends State<OrderPanel> {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerRight,
                               child: Text(
-                                '~ ${_fareLabelFor(_selectedRide)}',
+                                _displayFareFor(_selectedRide),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
@@ -818,7 +844,7 @@ class _OrderPanelState extends State<OrderPanel> {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${ride.name}, about ${_fareLabelFor(ride)}, ${ride.seats} seats',
+      label: '${ride.name}, ${_fareLabelFor(ride)}, ${ride.seats} seats',
       hint: selected
           ? 'Tap again to open ride details'
           : 'Tap to select this ride',
@@ -998,7 +1024,7 @@ class _OrderPanelState extends State<OrderPanel> {
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerRight,
                                   child: Text(
-                                    '~ ${_fareLabelFor(ride)}',
+                                    _displayFareFor(ride),
                                     style: TextStyle(
                                       color: selected || corporate
                                           ? accentColor

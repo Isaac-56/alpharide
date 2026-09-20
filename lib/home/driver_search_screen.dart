@@ -536,10 +536,24 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   child: Column(
                     children: <Widget>[
                       _ReceiptRow(
-                        label: 'Fare',
+                        label: 'Final fare',
                         value:
                             '${RideOption.formatAmount(state.fare)} ${state.currencyCode}',
                       ),
+                      if (state.waitingCharge > 0) ...<Widget>[
+                        const SizedBox(height: 10),
+                        _ReceiptRow(
+                          label: 'Distance fare',
+                          value:
+                              '${RideOption.formatAmount(state.estimatedFare)} ${state.currencyCode}',
+                        ),
+                        const SizedBox(height: 10),
+                        _ReceiptRow(
+                          label: 'Customer waiting',
+                          value:
+                              '${RideOption.formatAmount(state.waitingCharge)} ${state.currencyCode}',
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       const _ReceiptRow(label: 'Payment', value: 'Cash'),
                       const SizedBox(height: 16),
@@ -697,15 +711,19 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       top: false,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.68,
+        ),
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Row(
               children: [
                 Expanded(
@@ -722,7 +740,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        '${widget.ride.name} • ~ ${widget.ride.estimatedFareLabel}',
+                        '${widget.ride.name} • ~ ${RideOption.formatAmount(_liveState?.estimatedFare ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
                         style: TextStyle(color: mutedColor, fontSize: 13),
                       ),
                       const SizedBox(height: 4),
@@ -776,6 +794,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 height: 1.35,
               ),
             ),
+            if (_liveState?.isWaiting == true) ...<Widget>[
+              const SizedBox(height: 14),
+              _PassengerWaitingCard(state: _liveState!),
+            ],
             if (!_isSearching && driver != null) ...<Widget>[
               const SizedBox(height: 16),
               _AssignedDriverCard(driver: driver),
@@ -817,7 +839,8 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   ),
                 ],
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -894,6 +917,102 @@ class _AssignedDriverCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _PassengerWaitingCard extends StatelessWidget {
+  const _PassengerWaitingCard({required this.state});
+
+  final RideLiveState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: Stream<int>.periodic(
+        const Duration(seconds: 1),
+        (int tick) => tick,
+      ),
+      initialData: 0,
+      builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+        final DateTime now = DateTime.now();
+        final int totalSeconds = state.waitingSecondsAt(now);
+        final int activeSeconds = state.waitingStartedAt == null
+            ? 0
+            : now
+                .difference(state.waitingStartedAt!)
+                .inSeconds
+                .clamp(0, 4 * 60 * 60)
+                .toInt();
+        final int freeRemaining = (state.waitingGraceSeconds - activeSeconds)
+            .clamp(0, 999999)
+            .toInt();
+        final int projectedCharge = state.waitingChargeAt(now);
+        final int projectedFare = state.fareAt(now);
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF39FF14).withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFF39FF14).withValues(alpha: 0.55),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.timer_outlined,
+                    color: Color(0xFF39FF14),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Customer-requested waiting • ${_clock(totalSeconds)}',
+                      style: TextStyle(
+                        color: AlphaColors.text(context),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Text(
+                freeRemaining > 0
+                    ? '${_clock(freeRemaining)} free waiting remains.'
+                    : '${RideOption.formatAmount(projectedCharge)} ${state.currencyCode} waiting • Current fare ${RideOption.formatAmount(projectedFare)} ${state.currencyCode}',
+                style: TextStyle(
+                  color: AlphaColors.muted(context),
+                  fontSize: 12.5,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'This meter is for a stop requested by you; normal traffic is not charged as customer waiting.',
+                style: TextStyle(
+                  color: AlphaColors.muted(context),
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static String _clock(int totalSeconds) {
+    final int safeSeconds = totalSeconds < 0 ? 0 : totalSeconds;
+    final int minutes = safeSeconds ~/ 60;
+    final int seconds = safeSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
 

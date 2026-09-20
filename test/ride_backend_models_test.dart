@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:passengerapp/models/ride_backend.dart';
 
@@ -90,5 +91,33 @@ void main() {
       expect(state.isTerminal, true);
       expect(state.fare, status == 'completed' ? 22000 : 21500);
     }
+  });
+
+  test('passenger sees live customer waiting and projected fare', () {
+    final DateTime now = DateTime.utc(2026, 9, 20, 12, 5);
+    final RideLiveState state = RideLiveState.fromFirestore(
+      rideId: 'ride-waiting',
+      data: <String, dynamic>{
+        'status': 'in_progress',
+        'driverId': 'driver-7',
+        'driverSummary': null,
+        'estimatedFare': 42000,
+        'finalFare': null,
+        'currencyCode': 'SSP',
+        'isWaiting': true,
+        'waitingStartedAt': Timestamp.fromDate(
+          now.subtract(const Duration(minutes: 3)),
+        ),
+        'waitingSeconds': 0,
+        'billableWaitingSeconds': 0,
+        'waitingCharge': 0,
+        'waitingGraceSeconds': 120,
+        'waitingRatePerMinute': 450,
+      },
+    );
+
+    expect(state.waitingSecondsAt(now), 180);
+    expect(state.waitingChargeAt(now), 500);
+    expect(state.fareAt(now), 42500);
   });
 }

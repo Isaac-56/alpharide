@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class RideCreationResult {
   final String rideId;
   final String status;
@@ -78,6 +80,13 @@ class RideLiveState {
   final int estimatedFare;
   final int? finalFare;
   final String currencyCode;
+  final bool isWaiting;
+  final DateTime? waitingStartedAt;
+  final int waitingSeconds;
+  final int billableWaitingSeconds;
+  final int waitingCharge;
+  final int waitingGraceSeconds;
+  final int waitingRatePerMinute;
 
   const RideLiveState({
     required this.rideId,
@@ -87,12 +96,51 @@ class RideLiveState {
     required this.estimatedFare,
     required this.finalFare,
     required this.currencyCode,
+    this.isWaiting = false,
+    this.waitingStartedAt,
+    this.waitingSeconds = 0,
+    this.billableWaitingSeconds = 0,
+    this.waitingCharge = 0,
+    this.waitingGraceSeconds = 120,
+    this.waitingRatePerMinute = 0,
   });
 
   bool get isTerminal =>
       status == 'completed' || status == 'cancelled' || status == 'expired';
 
   int get fare => finalFare ?? estimatedFare;
+
+  int waitingSecondsAt(DateTime now) {
+    if (!isWaiting || waitingStartedAt == null) return waitingSeconds;
+    final int activeSeconds = now.difference(waitingStartedAt!).inSeconds;
+    return waitingSeconds + activeSeconds.clamp(0, 4 * 60 * 60).toInt();
+  }
+
+  int billableWaitingSecondsAt(DateTime now) {
+    if (!isWaiting || waitingStartedAt == null) {
+      return billableWaitingSeconds;
+    }
+    final int activeSeconds =
+        now
+            .difference(waitingStartedAt!)
+            .inSeconds
+            .clamp(0, 4 * 60 * 60)
+            .toInt();
+    return billableWaitingSeconds +
+        (activeSeconds - waitingGraceSeconds)
+            .clamp(0, 4 * 60 * 60)
+            .toInt();
+  }
+
+  int waitingChargeAt(DateTime now) {
+    final int seconds = billableWaitingSecondsAt(now);
+    if (seconds == 0 || waitingRatePerMinute <= 0) return waitingCharge;
+    final double raw = seconds / 60 * waitingRatePerMinute;
+    return (raw / 100).ceil() * 100;
+  }
+
+  int fareAt(DateTime now) =>
+      finalFare ?? (estimatedFare + waitingChargeAt(now));
 
   factory RideLiveState.fromFirestore({
     required String rideId,
@@ -122,6 +170,16 @@ class RideLiveState {
       finalFare:
           rawFinalFare == null ? null : _asInt(rawFinalFare, 'finalFare'),
       currencyCode: _requiredString(data, 'currencyCode'),
+      isWaiting: data['isWaiting'] == true,
+      waitingStartedAt: _optionalTimestamp(data['waitingStartedAt']),
+      waitingSeconds: _nonNegativeInt(data['waitingSeconds']),
+      billableWaitingSeconds:
+          _nonNegativeInt(data['billableWaitingSeconds']),
+      waitingCharge: _nonNegativeInt(data['waitingCharge']),
+      waitingGraceSeconds:
+          _nonNegativeInt(data['waitingGraceSeconds'], fallback: 120),
+      waitingRatePerMinute:
+          _nonNegativeInt(data['waitingRatePerMinute']),
     );
   }
 }
@@ -186,4 +244,17 @@ int _asInt(Object? raw, String field) {
   }
 
   throw FormatException('Backend response has an invalid $field.');
+}
+
+int _nonNegativeInt(Object? raw, {int fallback = 0}) {
+  if (raw == null) return fallback;
+  if (raw is int && raw >= 0) return raw;
+  if (raw is num && raw.isFinite && raw >= 0) return raw.round();
+  return fallback;
+}
+
+DateTime? _optionalTimestamp(Object? raw) {
+  if (raw is Timestamp) return raw.toDate();
+  if (raw is DateTime) return raw;
+  return null;
 }

@@ -13,10 +13,10 @@ class RideOption {
   final String description;
   final String assetPath;
   final int seats;
-  final int estimatedFare;
+  final int? estimatedFare;
   final int minimumFare;
   final int baseFare;
-  final int perMinute;
+  final int waitingPerMinute;
   final int perKilometer;
   final bool isElectric;
   final bool isCorporate;
@@ -27,37 +27,37 @@ class RideOption {
     required this.description,
     required this.assetPath,
     required this.seats,
-    required this.estimatedFare,
+    this.estimatedFare,
     required this.minimumFare,
     required this.baseFare,
-    required this.perMinute,
+    required this.waitingPerMinute,
     required this.perKilometer,
     this.isElectric = false,
     this.isCorporate = false,
   });
 
-  String get estimatedFareLabel =>
-      '${formatAmount(estimatedFare)} $currencyCode';
+  String get estimatedFareLabel => estimatedFare == null
+      ? 'Fare after destination'
+      : '${formatAmount(estimatedFare!)} $currencyCode';
 
   String get minimumFareLabel => '${formatAmount(minimumFare)} $currencyCode';
 
   String get baseFareLabel => '${formatAmount(baseFare)} $currencyCode';
 
-  String get perMinuteLabel => '${formatAmount(perMinute)} $currencyCode/min';
+  String get waitingPerMinuteLabel =>
+      '${formatAmount(waitingPerMinute)} $currencyCode/min';
 
   String get perKilometerLabel =>
       '${formatAmount(perKilometer)} $currencyCode/km';
 
   int calculateFare({
     required double distanceKilometers,
-    required double durationMinutes,
   }) {
     final double safeDistance =
         distanceKilometers < 0 ? 0.0 : distanceKilometers;
-    final double safeDuration = durationMinutes < 0 ? 0.0 : durationMinutes;
 
     final double calculatedFare =
-        baseFare + (safeDistance * perKilometer) + (safeDuration * perMinute);
+        baseFare + (safeDistance * perKilometer);
 
     final int roundedFare =
         (calculatedFare / fareRounding).ceil() * fareRounding;
@@ -66,6 +66,9 @@ class RideOption {
   }
 
   RideOption withEstimatedFare(int fare) {
+    if (fare <= 0) {
+      throw ArgumentError.value(fare, 'fare', 'Fare must be positive.');
+    }
     return RideOption(
       id: id,
       name: name,
@@ -75,7 +78,7 @@ class RideOption {
       estimatedFare: fare,
       minimumFare: minimumFare,
       baseFare: baseFare,
-      perMinute: perMinute,
+      waitingPerMinute: waitingPerMinute,
       perKilometer: perKilometer,
       isElectric: isElectric,
       isCorporate: isCorporate,
@@ -104,10 +107,9 @@ class RideOption {
       description: 'Fast and affordable for one passenger',
       assetPath: 'assets/images/vehicles/alpha_boda.png',
       seats: 1,
-      estimatedFare: 10500,
       minimumFare: 4000,
       baseFare: 2500,
-      perMinute: 200,
+      waitingPerMinute: 200,
       perKilometer: 1500,
     ),
     RideOption(
@@ -116,10 +118,9 @@ class RideOption {
       description: 'Practical city rides for small groups',
       assetPath: 'assets/images/vehicles/alpha_rickshaw.png',
       seats: 3,
-      estimatedFare: 14000,
       minimumFare: 6000,
       baseFare: 3500,
-      perMinute: 250,
+      waitingPerMinute: 250,
       perKilometer: 2100,
     ),
     RideOption(
@@ -128,10 +129,9 @@ class RideOption {
       description: 'Affordable everyday car rides',
       assetPath: 'assets/images/vehicles/alpha_standard.png',
       seats: 4,
-      estimatedFare: 24000,
       minimumFare: 10000,
       baseFare: 6000,
-      perMinute: 450,
+      waitingPerMinute: 450,
       perKilometer: 3600,
     ),
     RideOption(
@@ -140,10 +140,9 @@ class RideOption {
       description: 'Extra comfort and newer cars',
       assetPath: 'assets/images/vehicles/alpha_comfort.png',
       seats: 4,
-      estimatedFare: 30000,
       minimumFare: 12000,
       baseFare: 7500,
-      perMinute: 500,
+      waitingPerMinute: 500,
       perKilometer: 4600,
     ),
     RideOption(
@@ -152,10 +151,9 @@ class RideOption {
       description: 'A quiet, lower-emission ride',
       assetPath: 'assets/images/vehicles/alpha_ev.png',
       seats: 4,
-      estimatedFare: 32000,
       minimumFare: 13000,
       baseFare: 8000,
-      perMinute: 500,
+      waitingPerMinute: 500,
       perKilometer: 5000,
       isElectric: true,
     ),
@@ -165,10 +163,9 @@ class RideOption {
       description: 'Luxury vehicles and top drivers',
       assetPath: 'assets/images/vehicles/alpha_premium.png',
       seats: 5,
-      estimatedFare: 42000,
       minimumFare: 18000,
       baseFare: 11000,
-      perMinute: 700,
+      waitingPerMinute: 700,
       perKilometer: 6350,
     ),
     RideOption(
@@ -177,10 +174,9 @@ class RideOption {
       description: 'Executive rides for business and hotel transfers',
       assetPath: 'assets/images/vehicles/alpha_corporate.png',
       seats: 4,
-      estimatedFare: 48000,
       minimumFare: 20000,
       baseFare: 12000,
-      perMinute: 750,
+      waitingPerMinute: 750,
       perKilometer: 7500,
       isCorporate: true,
     ),
