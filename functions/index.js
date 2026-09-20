@@ -29,10 +29,14 @@ const {
   CURRENCY_CODE,
   calculateFare,
   isCancellableBeforePickup,
-  parseGoogleDurationSeconds,
   validateCancellationReason,
   validateCreateRideInput,
 } = require("./ride_logic");
+const {
+  advanceRoutePreviewLimit,
+  parseGoogleRouteResponse,
+  validateRoutePreviewInput,
+} = require("./route_logic");
 
 initializeApp();
 
@@ -41,6 +45,7 @@ const realtimeDb = getDatabase();
 const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
 
 const REGION = "africa-south1";
+const ROUTE_PREVIEW_LIMIT_COLLECTION = "route_preview_limits";
 const ACTIVE_RIDE_STATUSES = new Set([
   "requested",
   "offered",
@@ -70,41 +75,71 @@ function callableError(error, fallbackMessage) {
   return new HttpsError("internal", fallbackMessage);
 }
 
-async function computeTrustedRoute(pickup, destination) {
-  const response = await fetch(
-    "https://routes.googleapis.com/directions/v2:computeRoutes",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": googleRoutesApiKey.value(),
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+async function computeTrustedRoute(
+  pickup,
+  destination,
+  { includePolyline = false } = {},
+) {
+  const fieldMask = ["routes.distanceMeters", "routes.duration"];
+  if (includePolyline) {
+    fieldMask.push("routes.polyline.encodedPolyline");
+  }
+
+  let response;
+  try {
+    response = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": googleRoutesApiKey.value(),
+          "X-Goog-FieldMask": fieldMask.join(","),
+        },
+        body: JSON.stringify({
+          origin: {
+            location: {
+              latLng: {
+                latitude: pickup.latitude,
+                longitude: pickup.longitude,
+              },
+            },
+          },
+          destination: {
+            location: {
+              latLng: {
+                latitude: destination.latitude,
+                longitude: destination.longitude,
+              },
+            },
+          },
+          travelMode: "DRIVE",
+          routingPreference: "TRAFFIC_AWARE",
+          computeAlternativeRoutes: false,
+          ...(includePolyline
+            ? {
+                polylineQuality: "HIGH_QUALITY",
+                polylineEncoding: "ENCODED_POLYLINE",
+              }
+            : {}),
+          routeModifiers: {
+            avoidTolls: false,
+            avoidHighways: false,
+            avoidFerries: true,
+          },
+          languageCode: "en-US",
+          units: "METRIC",
+        }),
+        signal: AbortSignal.timeout(20000),
       },
-      body: JSON.stringify({
-        origin: {
-          location: {
-            latLng: {
-              latitude: pickup.latitude,
-              longitude: pickup.longitude,
-            },
-          },
-        },
-        destination: {
-          location: {
-            latLng: {
-              latitude: destination.latitude,
-              longitude: destination.longitude,
-            },
-          },
-        },
-        travelMode: "DRIVE",
-        routingPreference: "TRAFFIC_AWARE",
-        computeAlternativeRoutes: false,
-        languageCode: "en-US",
-        units: "METRIC",
-      }),
-    },
-  );
+    );
+  } catch (error) {
+    logger.error("Google Routes could not be reached", error);
+    throw new HttpsError(
+      "unavailable",
+      "The road route service is temporarily unavailable.",
+    );
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -119,22 +154,54 @@ async function computeTrustedRoute(pickup, destination) {
   }
 
   const payload = await response.json();
-  const route = payload?.routes?.[0];
-  if (
-    !route ||
-    typeof route.distanceMeters !== "number" ||
-    typeof route.duration !== "string"
-  ) {
+  try {
+    return parseGoogleRouteResponse(payload, { includePolyline });
+  } catch (error) {
+    logger.error("Google Routes returned an invalid route", error);
     throw new HttpsError(
       "unavailable",
       "No drivable route was returned for this trip.",
     );
   }
+}
 
-  return {
-    distanceMeters: route.distanceMeters,
-    durationSeconds: parseGoogleDurationSeconds(route.duration),
-  };
+async function enforceRoutePreviewLimit(userId) {
+  const limitRef = db
+    .collection(ROUTE_PREVIEW_LIMIT_COLLECTION)
+    .doc(userId);
+  const nowMillis = Date.now();
+  let limitResult;
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(limitRef);
+    const windowStart = snapshot.exists
+      ? snapshot.get("windowStart")
+      : null;
+    limitResult = advanceRoutePreviewLimit({
+      nowMillis,
+      windowStartMillis: windowStart instanceof Timestamp
+        ? windowStart.toMillis()
+        : null,
+      requestCount: snapshot.exists ? snapshot.get("requestCount") : 0,
+    });
+
+    if (!limitResult.allowed) return;
+
+    transaction.set(limitRef, {
+      userId,
+      windowStart: Timestamp.fromMillis(limitResult.windowStartMillis),
+      requestCount: limitResult.requestCount,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  if (!limitResult?.allowed) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Too many route requests. Please wait a moment and try again.",
+      { retryAfterSeconds: limitResult?.retryAfterSeconds ?? 60 },
+    );
+  }
 }
 
 function offerReference(driverId, rideId) {
@@ -316,6 +383,35 @@ async function expireOfferedRide(rideRef) {
     await markOffers(rideRef.id, offeredDriverIds, "expired");
   }
 }
+
+exports.calculateRoute = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const userId = requireAuthenticatedUser(request);
+      const input = validateRoutePreviewInput(request.data);
+      await enforceRoutePreviewLimit(userId);
+      const route = await computeTrustedRoute(
+        input.origin,
+        input.destination,
+        { includePolyline: true },
+      );
+
+      return {
+        distanceMeters: route.distanceMeters,
+        durationSeconds: route.durationSeconds,
+        encodedPolyline: route.encodedPolyline,
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to calculate the road route.");
+    }
+  },
+);
 
 exports.createRide = onCall(
   {

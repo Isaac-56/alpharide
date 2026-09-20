@@ -192,6 +192,7 @@ module.exports = {
   normalizePaymentMethod,
   normalizeRideOption,
   parseGoogleDurationSeconds,
+  validateCoordinate,
   validateCancellationReason,
   validateCreateRideInput,
   validatePoint,
