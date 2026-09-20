@@ -2,12 +2,9 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "AlphaRide (Android with routing)",
+      "name": "AlphaRide (Android)",
       "request": "launch",
-      "type": "dart",
-      "toolArgs": [
-        "--dart-define-from-file=config/routes.json"
-      ]
+      "type": "dart"
     }
   ]
 }
