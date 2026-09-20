@@ -23,7 +23,7 @@ void main() {
   );
 
   testWidgets(
-    'collapsed order panel shows the car and route-based fare',
+    'order panel requires an explicit ride choice before continuing',
     (WidgetTester tester) async {
       RideOption? confirmedRide;
 
@@ -38,7 +38,7 @@ void main() {
               onConfirmRide: (RideOption ride, _) {
                 confirmedRide = ride;
               },
-              collapsed: true,
+              collapsed: false,
               onExpand: () {},
               routeDistanceMeters: 10000,
               routeDuration: const Duration(minutes: 20),
@@ -47,34 +47,19 @@ void main() {
         ),
       );
 
-      expect(find.text('Order now'), findsOneWidget);
-      expect(find.text('Choose a ride that fits you'), findsOneWidget);
-      expect(
-        find.byWidgetPredicate(
-          (Widget widget) {
-            if (widget is! Image) return false;
+      expect(find.text('Choose your ride'), findsOneWidget);
+      expect(find.text('Boda'), findsOneWidget);
+      expect(find.text('Rickshaw'), findsOneWidget);
+      expect(find.text('Standard'), findsOneWidget);
+      expect(find.text('Choose a ride above'), findsOneWidget);
+      expect(find.text('Select ride'), findsOneWidget);
+      expect(confirmedRide, isNull);
 
-            final ImageProvider<Object> provider = widget.image;
+      await tester.tap(find.text('Boda'));
+      await tester.pump();
 
-            if (provider is AssetImage) {
-              return provider.assetName ==
-                  'assets/images/vehicles/alpha_standard.png';
-            }
-
-            if (provider is ResizeImage &&
-                provider.imageProvider is AssetImage) {
-              return (provider.imageProvider as AssetImage).assetName ==
-                  'assets/images/vehicles/alpha_standard.png';
-            }
-
-            return false;
-          },
-        ),
-        findsOneWidget,
-      );
       expect(find.text('Continue'), findsOneWidget);
       expect(find.text('~ 17,500 SSP'), findsOneWidget);
-      expect(find.text('Alpha Boda'), findsNothing);
 
       await tester.tap(find.text('Continue'));
       await tester.pump();
@@ -83,6 +68,41 @@ void main() {
 
       // Let the OrderPanel confirmation lock timer finish before the test ends.
       await tester.pump(const Duration(milliseconds: 701));
+    },
+  );
+
+  testWidgets(
+    'collapsed order panel opens ride choices instead of defaulting to Boda',
+    (WidgetTester tester) async {
+      bool expanded = false;
+      RideOption? confirmedRide;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OrderPanel(
+              pickupAddress: 'Airport Road, Juba',
+              destinationAddress: 'Gudele, Juba',
+              onPickupTap: () {},
+              onDestinationTap: () {},
+              onConfirmRide: (RideOption ride, _) => confirmedRide = ride,
+              collapsed: true,
+              onExpand: () => expanded = true,
+              routeDistanceMeters: 10000,
+              routeDuration: const Duration(minutes: 20),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('View ride options'), findsOneWidget);
+      expect(find.text('Select ride'), findsOneWidget);
+
+      await tester.tap(find.text('View ride options'));
+      await tester.pump();
+
+      expect(expanded, true);
+      expect(confirmedRide, isNull);
     },
   );
 
