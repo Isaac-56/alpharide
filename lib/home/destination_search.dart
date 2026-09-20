@@ -15,6 +15,9 @@ class DestinationSearch extends StatefulWidget {
   final String pickupAddress;
   final String initialAddress;
   final bool isPickup;
+  final double currentLatitude;
+  final double currentLongitude;
+  final String currentAddress;
 
   const DestinationSearch({
     super.key,
@@ -22,6 +25,9 @@ class DestinationSearch extends StatefulWidget {
     required this.longitude,
     required this.pickupAddress,
     required this.initialAddress,
+    required this.currentLatitude,
+    required this.currentLongitude,
+    required this.currentAddress,
     this.isPickup = false,
   });
 
@@ -260,6 +266,23 @@ class _DestinationSearchState extends State<DestinationSearch> {
     });
   }
 
+  void _useCurrentLocation() {
+    if (_isOpeningMap || _isResolvingPlace) return;
+
+    final String currentAddress = widget.currentAddress.trim();
+
+    Navigator.pop(
+      context,
+      LocationSelection(
+        latitude: widget.currentLatitude,
+        longitude: widget.currentLongitude,
+        address: currentAddress.isEmpty ? 'My location' : currentAddress,
+        name: '',
+        isCurrentLocation: true,
+      ),
+    );
+  }
+
   void _clearSearch() {
     _searchDebounce?.cancel();
     _searchRequestId++;
@@ -354,7 +377,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                     const SizedBox(height: 6),
                     Text(
                       widget.pickupAddress.trim().isEmpty
-                          ? 'Current location'
+                          ? 'My location'
                           : widget.pickupAddress,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -503,6 +526,76 @@ class _DestinationSearchState extends State<DestinationSearch> {
                         ),
                       ),
                     ),
+                    if (widget.isPickup) ...<Widget>[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: OutlinedButton(
+                          onPressed: _isResolvingPlace || _isOpeningMap
+                              ? null
+                              : _useCurrentLocation,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: textColor,
+                            disabledForegroundColor: secondaryTextColor,
+                            side: BorderSide(color: borderColor),
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(horizontal: 17),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              Container(
+                                width: 34,
+                                height: 34,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.my_location_rounded,
+                                  color: textColor,
+                                  size: 21,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    const Text(
+                                      'Use my current location',
+                                      style: TextStyle(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Updates automatically as you move',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: secondaryTextColor,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color: secondaryTextColor,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 180),
                       child: !_isSearching

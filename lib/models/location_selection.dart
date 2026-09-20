@@ -3,12 +3,14 @@ class LocationSelection {
   final double longitude;
   final String address;
   final String name;
+  final bool isCurrentLocation;
 
   const LocationSelection({
     required this.latitude,
     required this.longitude,
     required this.address,
     required this.name,
+    this.isCurrentLocation = false,
   });
 
   String get displayName {
@@ -22,7 +24,7 @@ class LocationSelection {
       return trimmedAddress;
     }
 
-    return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
+    return isCurrentLocation ? 'My location' : 'Pinned location';
   }
 
   static bool _isSpecificLabel(String value) {
@@ -30,6 +32,11 @@ class LocationSelection {
     final String normalized = value.toLowerCase();
     return normalized != 'current location' &&
         normalized != 'selected location' &&
-        normalized != 'detecting current location...';
+        normalized != 'detecting current location...' &&
+        !_looksLikeCoordinates(normalized);
+  }
+
+  static bool _looksLikeCoordinates(String value) {
+    return RegExp(r'^[-+\d\s.,]+$').hasMatch(value);
   }
 }
