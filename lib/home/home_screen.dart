@@ -327,7 +327,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _resolveCurrentAddress() async {
     final LatLng? currentLocation = _currentLocation;
 
-    if (currentLocation == null) return;
+    if (currentLocation == null || _pickupManuallySelected) return;
+
+    final String coordinateLabel = _coordinateLabel(currentLocation);
+    pickupAddress = coordinateLabel;
 
     try {
       final List<Placemark> places = await placemarkFromCoordinates(
@@ -335,15 +338,16 @@ class _HomeScreenState extends State<HomeScreen> {
         currentLocation.longitude,
       );
 
-      if (places.isEmpty || _pickupManuallySelected) {
-        return;
-      }
+      if (places.isEmpty || _pickupManuallySelected) return;
 
       final Placemark place = places.first;
 
       final List<String> addressParts = <String?>[
+        place.name,
         place.street,
+        place.subLocality,
         place.locality,
+        place.administrativeArea,
       ]
           .whereType<String>()
           .map(
@@ -352,20 +356,33 @@ class _HomeScreenState extends State<HomeScreen> {
           .where(
             (String part) => part.isNotEmpty,
           )
+          .fold<List<String>>(
+            <String>[],
+            (List<String> parts, String part) {
+              final bool alreadyIncluded = parts.any(
+                (String existing) =>
+                    existing.toLowerCase() == part.toLowerCase(),
+              );
+              if (!alreadyIncluded) parts.add(part);
+              return parts;
+            },
+          )
           .toList();
 
       pickupAddress =
-          addressParts.isEmpty ? 'Current location' : addressParts.join(', ');
+          addressParts.isEmpty ? coordinateLabel : addressParts.join(', ');
     } catch (error) {
       debugPrint(
         'Unable to resolve address: $error',
       );
 
-      if (!_pickupManuallySelected) {
-        pickupAddress = 'Current location';
-      }
+      if (!_pickupManuallySelected) pickupAddress = coordinateLabel;
     }
   }
+
+  static String _coordinateLabel(LatLng location) =>
+      '${location.latitude.toStringAsFixed(6)}, '
+      '${location.longitude.toStringAsFixed(6)}';
 
   Future<void> _signOut() async {
     await SessionService.instance.signOutCurrentDevice();

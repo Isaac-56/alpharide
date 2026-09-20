@@ -43,7 +43,7 @@ class _OrderPanelState extends State<OrderPanel> {
   static const Color corporateGoldDark = Color(0xFFFFD700);
   static const Color corporateGoldLight = Color(0xFFFFB800);
 
-  RideOption _selectedRide = RideOption.options.first;
+  RideOption? _selectedRide;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
 
   bool _isOpeningDetails = false;
@@ -118,7 +118,7 @@ class _OrderPanelState extends State<OrderPanel> {
   ) async {
     if (_isInteractionLocked) return;
 
-    if (_selectedRide.id != ride.id) {
+    if (_selectedRide?.id != ride.id) {
       setState(() {
         _selectedRide = ride;
       });
@@ -220,13 +220,27 @@ class _OrderPanelState extends State<OrderPanel> {
       return;
     }
 
+    final RideOption? selectedRide = _selectedRide;
+    if (selectedRide == null) {
+      if (widget.collapsed) {
+        widget.onExpand();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Choose a ride type before continuing.'),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() {
       _isConfirmingRide = true;
     });
 
     try {
       widget.onConfirmRide(
-        _pricedRide(_selectedRide),
+        _pricedRide(selectedRide),
         _paymentMethod,
       );
     } catch (error) {
@@ -250,7 +264,16 @@ class _OrderPanelState extends State<OrderPanel> {
   String get _primaryActionLabel {
     if (!_hasDestination) return 'Choose destination';
     if (!_hasRouteEstimate) return 'Calculating fare...';
+    if (_selectedRide == null) {
+      return widget.collapsed ? 'View ride options' : 'Choose a ride above';
+    }
     return 'Continue';
+  }
+
+  String get _selectedFareLabel {
+    if (!_hasRouteEstimate) return 'Fare after destination';
+    final RideOption? selectedRide = _selectedRide;
+    return selectedRide == null ? 'Select ride' : _displayFareFor(selectedRide);
   }
 
   String get _paymentLabel {
@@ -492,7 +515,7 @@ class _OrderPanelState extends State<OrderPanel> {
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    _displayFareFor(_selectedRide),
+                                    _selectedFareLabel,
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
@@ -513,9 +536,11 @@ class _OrderPanelState extends State<OrderPanel> {
                   horizontal: 20,
                 ),
                 child: Text(
-                  _hasRouteEstimate
-                      ? 'Distance fare shown. Customer waiting has 2 free minutes, then ${_selectedRide.waitingPerMinuteLabel}.'
-                      : 'Select pickup and destination to calculate your fare.',
+                  !_hasRouteEstimate
+                      ? 'Select pickup and destination to calculate your fare.'
+                      : _selectedRide == null
+                          ? 'Choose one of the ride options above before continuing.'
+                          : 'Distance fare shown. Customer waiting has 2 free minutes, then ${_selectedRide!.waitingPerMinuteLabel}.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: mutedColor,
@@ -687,7 +712,7 @@ class _OrderPanelState extends State<OrderPanel> {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerRight,
                               child: Text(
-                                _displayFareFor(_selectedRide),
+                                _selectedFareLabel,
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
@@ -830,7 +855,7 @@ class _OrderPanelState extends State<OrderPanel> {
   }
 
   Widget _rideCard(RideOption ride) {
-    final bool selected = ride.id == _selectedRide.id;
+    final bool selected = ride.id == _selectedRide?.id;
 
     final bool corporate = ride.isCorporate;
 
