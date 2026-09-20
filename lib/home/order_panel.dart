@@ -19,6 +19,10 @@ class OrderPanel extends StatefulWidget {
   final VoidCallback onExpand;
   final int? routeDistanceMeters;
   final Duration? routeDuration;
+  final bool isCalculatingFare;
+  final String? fareCalculationError;
+  final VoidCallback? onCancelFareCalculation;
+  final VoidCallback? onRetryFareCalculation;
 
   const OrderPanel({
     super.key,
@@ -31,6 +35,10 @@ class OrderPanel extends StatefulWidget {
     required this.onExpand,
     this.routeDistanceMeters,
     this.routeDuration,
+    this.isCalculatingFare = false,
+    this.fareCalculationError,
+    this.onCancelFareCalculation,
+    this.onRetryFareCalculation,
   });
 
   @override
@@ -213,9 +221,15 @@ class _OrderPanelState extends State<OrderPanel> {
 
   void _confirmRide() {
     if (_isInteractionLocked) return;
+    if (widget.isCalculatingFare) {
+      widget.onCancelFareCalculation?.call();
+      return;
+    }
     if (!_hasRouteEstimate) {
       if (!_hasDestination) {
         _handleLocationTap(widget.onDestinationTap);
+      } else {
+        widget.onRetryFareCalculation?.call();
       }
       return;
     }
@@ -263,7 +277,8 @@ class _OrderPanelState extends State<OrderPanel> {
 
   String get _primaryActionLabel {
     if (!_hasDestination) return 'Choose destination';
-    if (!_hasRouteEstimate) return 'Calculating fare...';
+    if (widget.isCalculatingFare) return 'Cancel fare calculation';
+    if (!_hasRouteEstimate) return 'Calculate fare';
     if (_selectedRide == null) {
       return widget.collapsed ? 'View ride options' : 'Choose a ride above';
     }
@@ -271,6 +286,8 @@ class _OrderPanelState extends State<OrderPanel> {
   }
 
   String get _selectedFareLabel {
+    if (widget.isCalculatingFare) return 'Please wait';
+    if (widget.fareCalculationError != null) return 'Try again';
     if (!_hasRouteEstimate) return 'Fare after destination';
     final RideOption? selectedRide = _selectedRide;
     return selectedRide == null ? 'Select ride' : _displayFareFor(selectedRide);
@@ -457,10 +474,7 @@ class _OrderPanelState extends State<OrderPanel> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isInteractionLocked ||
-                          (_hasDestination && !_hasRouteEstimate)
-                      ? null
-                      : _confirmRide,
+                  onPressed: _isInteractionLocked ? null : _confirmRide,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: const Color(0xFF071007),
@@ -537,7 +551,10 @@ class _OrderPanelState extends State<OrderPanel> {
                 ),
                 child: Text(
                   !_hasRouteEstimate
-                      ? 'Select pickup and destination to calculate your fare.'
+                      ? widget.isCalculatingFare
+                          ? 'Calculating the road distance and fare. Tap the button above to cancel.'
+                          : widget.fareCalculationError ??
+                              'Select pickup and destination to calculate your fare.'
                       : _selectedRide == null
                           ? 'Choose one of the ride options above before continuing.'
                           : 'Distance fare shown. Customer waiting has 2 free minutes, then ${_selectedRide!.waitingPerMinuteLabel}.',
@@ -664,10 +681,7 @@ class _OrderPanelState extends State<OrderPanel> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _isInteractionLocked ||
-                      (_hasDestination && !_hasRouteEstimate)
-                  ? null
-                  : _confirmRide,
+              onPressed: _isInteractionLocked ? null : _confirmRide,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: const Color(0xFF071007),

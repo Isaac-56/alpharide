@@ -113,11 +113,14 @@ test("Google duration strings are parsed", () => {
   assert.equal(parseGoogleDurationSeconds("1200.5s"), 1200.5);
 });
 
-test("only pre-assignment request states cancel in Step 2", () => {
+test("passengers can cancel until the trip starts", () => {
   assert.equal(isCancellableBeforePickup("requested"), true);
   assert.equal(isCancellableBeforePickup("offered"), true);
-  assert.equal(isCancellableBeforePickup("accepted"), false);
+  assert.equal(isCancellableBeforePickup("accepted"), true);
+  assert.equal(isCancellableBeforePickup("driver_arriving"), true);
+  assert.equal(isCancellableBeforePickup("arrived"), true);
   assert.equal(isCancellableBeforePickup("in_progress"), false);
+  assert.equal(isCancellableBeforePickup("completed"), false);
 });
 
 test("cancellation reasons are validated and normalized", () => {

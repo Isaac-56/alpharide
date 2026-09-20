@@ -558,6 +558,7 @@ exports.cancelRide = onCall(
         .collection("active_passenger_rides")
         .doc(passengerId);
       let offeredDriverIds = [];
+      let assignedDriverId = null;
 
       await db.runTransaction(async (transaction) => {
         const rideSnapshot = await transaction.get(rideRef);
@@ -575,6 +576,17 @@ exports.cancelRide = onCall(
         offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
           ? rideSnapshot.get("offeredDriverIds")
           : [];
+        const rawDriverId = rideSnapshot.get("driverId");
+        assignedDriverId =
+          typeof rawDriverId === "string" && rawDriverId.trim()
+            ? rawDriverId.trim()
+            : null;
+        const activeDriverRef = assignedDriverId
+          ? db.collection("active_driver_rides").doc(assignedDriverId)
+          : null;
+        const activeDriverSnapshot = activeDriverRef
+          ? await transaction.get(activeDriverRef)
+          : null;
         const status = rideSnapshot.get("status");
         if (status === "cancelled") {
           if (
@@ -582,6 +594,13 @@ exports.cancelRide = onCall(
             activeSnapshot.get("rideId") === rideId
           ) {
             transaction.delete(activeRideRef);
+          }
+          if (
+            activeDriverRef &&
+            activeDriverSnapshot?.exists &&
+            activeDriverSnapshot.get("rideId") === rideId
+          ) {
+            transaction.delete(activeDriverRef);
           }
           return;
         }
@@ -595,6 +614,8 @@ exports.cancelRide = onCall(
         transaction.update(rideRef, {
           status: "cancelled",
           offerExpiresAt: null,
+          isWaiting: false,
+          waitingStartedAt: null,
           cancelledBy: "passenger",
           cancellationReason,
           cancelledAt: FieldValue.serverTimestamp(),
@@ -606,7 +627,21 @@ exports.cancelRide = onCall(
         ) {
           transaction.delete(activeRideRef);
         }
+        if (
+          activeDriverRef &&
+          activeDriverSnapshot?.exists &&
+          activeDriverSnapshot.get("rideId") === rideId
+        ) {
+          transaction.delete(activeDriverRef);
+        }
       });
+
+      if (
+        assignedDriverId &&
+        !offeredDriverIds.includes(assignedDriverId)
+      ) {
+        offeredDriverIds.push(assignedDriverId);
+      }
 
       await markOffers(rideId, offeredDriverIds, "cancelled").catch(
         (cleanupError) => {

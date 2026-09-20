@@ -132,6 +132,59 @@ void main() {
     },
   );
 
+  testWidgets('slow fare calculation can be cancelled and retried', (
+    WidgetTester tester,
+  ) async {
+    int cancellations = 0;
+    int retries = 0;
+
+    Future<void> pumpPanel({
+      required bool calculating,
+      String? error,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OrderPanel(
+              pickupAddress: 'Airport Road, Juba',
+              destinationAddress: 'Gudele, Juba',
+              onPickupTap: () {},
+              onDestinationTap: () {},
+              onConfirmRide: (_, __) {},
+              collapsed: false,
+              onExpand: () {},
+              isCalculatingFare: calculating,
+              fareCalculationError: error,
+              onCancelFareCalculation: () => cancellations++,
+              onRetryFareCalculation: () => retries++,
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpPanel(calculating: true);
+
+    expect(find.text('Cancel fare calculation'), findsOneWidget);
+    await tester.tap(find.text('Cancel fare calculation'));
+    await tester.pump();
+    expect(cancellations, 1);
+
+    await pumpPanel(
+      calculating: false,
+      error: 'Fare calculation took too long. Please try again.',
+    );
+
+    expect(find.text('Calculate fare'), findsOneWidget);
+    expect(
+      find.text('Fare calculation took too long. Please try again.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Calculate fare'));
+    await tester.pump();
+    expect(retries, 1);
+  });
+
   test('ride fare applies minimums and SSP rounding', () {
     final RideOption boda = RideOption.options.firstWhere(
       (RideOption ride) => ride.id == 'boda',

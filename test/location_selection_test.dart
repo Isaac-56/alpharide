@@ -13,14 +13,27 @@ void main() {
     expect(selection.displayName, 'Imperial Plaza');
   });
 
-  test('generic current location falls back to exact coordinates', () {
+  test('generic current location stays readable instead of showing numbers', () {
     const LocationSelection selection = LocationSelection(
       latitude: 4.8517,
       longitude: 31.5825,
       address: 'Current location',
       name: '',
+      isCurrentLocation: true,
     );
 
-    expect(selection.displayName, '4.851700, 31.582500');
+    expect(selection.displayName, 'My location');
+  });
+
+  test('coordinate-like labels are hidden from the pickup UI', () {
+    const LocationSelection selection = LocationSelection(
+      latitude: 4.8517,
+      longitude: 31.5825,
+      address: '4.851700, 31.582500',
+      name: '',
+      isCurrentLocation: true,
+    );
+
+    expect(selection.displayName, 'My location');
   });
 }

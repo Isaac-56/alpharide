@@ -51,6 +51,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _routeDistanceMeters;
   Duration? _routeDuration;
   int _routeRequestId = 0;
+  bool _isCalculatingFare = false;
+  String? _fareCalculationError;
 
   StreamSubscription<Position>? _positionStream;
   Position? _lastProcessedPosition;
@@ -67,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
   LatLng? _destinationLocation;
 
   String pickupAddress = 'Detecting current location...';
+  String _currentAddress = 'My location';
 
   String destinationAddress = '';
 
@@ -327,10 +330,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _resolveCurrentAddress() async {
     final LatLng? currentLocation = _currentLocation;
 
-    if (currentLocation == null || _pickupManuallySelected) return;
+    if (currentLocation == null) return;
 
-    final String coordinateLabel = _coordinateLabel(currentLocation);
-    pickupAddress = coordinateLabel;
+    _currentAddress = 'My location';
+    if (!_pickupManuallySelected) pickupAddress = _currentAddress;
 
     try {
       final List<Placemark> places = await placemarkFromCoordinates(
@@ -338,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
         currentLocation.longitude,
       );
 
-      if (places.isEmpty || _pickupManuallySelected) return;
+      if (places.isEmpty) return;
 
       final Placemark place = places.first;
 
@@ -354,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
             (String part) => part.trim(),
           )
           .where(
-            (String part) => part.isNotEmpty,
+            (String part) => _isReadableAddressPart(part),
           )
           .fold<List<String>>(
             <String>[],
@@ -369,20 +372,32 @@ class _HomeScreenState extends State<HomeScreen> {
           )
           .toList();
 
-      pickupAddress =
-          addressParts.isEmpty ? coordinateLabel : addressParts.join(', ');
+      _currentAddress = addressParts.isEmpty
+          ? 'My location'
+          : addressParts.take(3).join(', ');
+      if (!_pickupManuallySelected) pickupAddress = _currentAddress;
     } catch (error) {
       debugPrint(
         'Unable to resolve address: $error',
       );
 
-      if (!_pickupManuallySelected) pickupAddress = coordinateLabel;
+      _currentAddress = 'My location';
+      if (!_pickupManuallySelected) pickupAddress = _currentAddress;
     }
   }
 
-  static String _coordinateLabel(LatLng location) =>
-      '${location.latitude.toStringAsFixed(6)}, '
-      '${location.longitude.toStringAsFixed(6)}';
+  static bool _isReadableAddressPart(String value) {
+    final String trimmed = value.trim();
+    if (trimmed.isEmpty) return false;
+    if (RegExp(r'^[-+\d\s.,]+$').hasMatch(trimmed)) return false;
+    if (RegExp(
+      r'^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}(?:\s.*)?$',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
+      return false;
+    }
+    return true;
+  }
 
   Future<void> _signOut() async {
     await SessionService.instance.signOutCurrentDevice();
@@ -427,6 +442,9 @@ class _HomeScreenState extends State<HomeScreen> {
           pickupAddress: pickupAddress,
           initialAddress: isPickup ? pickupAddress : destinationAddress,
           isPickup: isPickup,
+          currentLatitude: currentLocation.latitude,
+          currentLongitude: currentLocation.longitude,
+          currentAddress: _currentAddress,
         ),
       ),
     );
@@ -439,21 +457,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     setState(() {
+      _routeRequestId++;
       _routePoints = const <LatLng>[];
       _routeDistanceMeters = null;
       _routeDuration = null;
+      _isCalculatingFare = false;
+      _fareCalculationError = null;
       _polylines.clear();
 
       if (isPickup) {
-        _pickupManuallySelected = true;
+        _pickupManuallySelected = !result.isCurrentLocation;
         _pickupLocation = selectedLocation;
         pickupAddress = result.displayName;
 
-        _markers
-          ..removeWhere(
-            (Marker marker) => marker.markerId.value == 'pickup',
-          )
-          ..add(
+        _markers.removeWhere(
+          (Marker marker) => marker.markerId.value == 'pickup',
+        );
+        if (!result.isCurrentLocation) {
+          _markers.add(
             Marker(
               markerId: const MarkerId('pickup'),
               position: selectedLocation,
@@ -466,6 +487,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           );
+        }
       } else {
         _destinationLocation = selectedLocation;
 
@@ -526,6 +548,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _routePoints = const <LatLng>[];
         _routeDistanceMeters = null;
         _routeDuration = null;
+        _isCalculatingFare = false;
+        _fareCalculationError = null;
         _polylines.clear();
       });
 
@@ -534,11 +558,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final int requestId = ++_routeRequestId;
 
+    setState(() {
+      _isCalculatingFare = true;
+      _fareCalculationError = null;
+    });
+
     try {
       final DrivingRoute route =
           await _directionsService.getShortestDrivingRoute(
         origin: pickupLocation,
         destination: destinationLocation,
+      ).timeout(
+        const Duration(seconds: 18),
+        onTimeout: () => throw const DirectionsException(
+          'Fare calculation took too long. Please try again.',
+        ),
       );
 
       if (!mounted || requestId != _routeRequestId) return;
@@ -547,6 +581,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _routePoints = route.points;
         _routeDistanceMeters = route.distanceMeters;
         _routeDuration = route.duration;
+        _isCalculatingFare = false;
+        _fareCalculationError = null;
         _polylines
           ..clear()
           ..addAll(
@@ -605,18 +641,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted || requestId != _routeRequestId) return;
 
+      final String message = error is DirectionsException
+          ? error.message
+          : 'The road route could not be loaded. Please try again.';
+
       setState(() {
         _routePoints = const <LatLng>[];
         _routeDistanceMeters = null;
         _routeDuration = null;
+        _isCalculatingFare = false;
+        _fareCalculationError = message;
         _polylines.clear();
       });
 
       if (showFailureMessage) {
-        final String message = error is DirectionsException
-            ? error.message
-            : 'The road route could not be loaded. Please try again.';
-
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
@@ -628,6 +666,31 @@ class _HomeScreenState extends State<HomeScreen> {
           );
       }
     }
+  }
+
+  void _cancelFareCalculation() {
+    if (!_isCalculatingFare) return;
+
+    _routeRequestId++;
+    setState(() {
+      _isCalculatingFare = false;
+      _fareCalculationError = null;
+      _routePoints = const <LatLng>[];
+      _routeDistanceMeters = null;
+      _routeDuration = null;
+      _polylines.clear();
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('Fare calculation cancelled.')),
+      );
+  }
+
+  void _retryFareCalculation() {
+    if (_isCalculatingFare) return;
+    _refreshRoadRoute(showFailureMessage: true);
   }
 
   Future<void> _fitRoutePoints(List<LatLng> points) async {
@@ -883,6 +946,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       onExpand: _expandOrderPanel,
                       routeDistanceMeters: _routeDistanceMeters,
                       routeDuration: _routeDuration,
+                      isCalculatingFare: _isCalculatingFare,
+                      fareCalculationError: _fareCalculationError,
+                      onCancelFareCalculation: _cancelFareCalculation,
+                      onRetryFareCalculation: _retryFareCalculation,
                     ),
                   ),
                 ),
