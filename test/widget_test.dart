@@ -59,7 +59,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Continue'), findsOneWidget);
-      expect(find.text('~ 17,500 SSP'), findsOneWidget);
+      expect(find.text('~ 17,500 SSP'), findsNWidgets(2));
 
       await tester.tap(find.text('Continue'));
       await tester.pump();
