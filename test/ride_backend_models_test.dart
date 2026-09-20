@@ -120,4 +120,44 @@ void main() {
     expect(state.waitingChargeAt(now), 500);
     expect(state.fareAt(now), 42500);
   });
+
+  test('passenger cancellation remains available until a trip starts', () {
+    for (final String status in <String>[
+      'requested',
+      'offered',
+      'accepted',
+      'driver_arriving',
+      'arrived',
+    ]) {
+      final RideLiveState state = RideLiveState.fromFirestore(
+        rideId: 'ride-cancellable',
+        data: <String, dynamic>{
+          'status': status,
+          'driverId': null,
+          'driverSummary': null,
+          'estimatedFare': 10000,
+          'finalFare': null,
+          'currencyCode': 'SSP',
+        },
+      );
+
+      expect(state.canPassengerCancel, true, reason: status);
+    }
+
+    for (final String status in <String>['in_progress', 'completed']) {
+      final RideLiveState state = RideLiveState.fromFirestore(
+        rideId: 'ride-locked',
+        data: <String, dynamic>{
+          'status': status,
+          'driverId': null,
+          'driverSummary': null,
+          'estimatedFare': 10000,
+          'finalFare': null,
+          'currencyCode': 'SSP',
+        },
+      );
+
+      expect(state.canPassengerCancel, false, reason: status);
+    }
+  });
 }

@@ -204,7 +204,13 @@ function validateCancellationReason(value) {
 }
 
 function isCancellableBeforePickup(status) {
-  return status === "requested" || status === "offered";
+  return new Set([
+    "requested",
+    "offered",
+    "accepted",
+    "driver_arriving",
+    "arrived",
+  ]).has(status);
 }
 
 module.exports = {

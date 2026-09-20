@@ -108,6 +108,14 @@ class RideLiveState {
   bool get isTerminal =>
       status == 'completed' || status == 'cancelled' || status == 'expired';
 
+  bool get canPassengerCancel => const <String>{
+        'requested',
+        'offered',
+        'accepted',
+        'driver_arriving',
+        'arrived',
+      }.contains(status);
+
   int get fare => finalFare ?? estimatedFare;
 
   int waitingSecondsAt(DateTime now) {

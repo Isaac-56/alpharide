@@ -62,7 +62,14 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   bool get _canPassengerCancel =>
       !_isCancelling &&
-      (_rideStatus == 'requested' || _rideStatus == 'offered');
+      (_liveState?.canPassengerCancel ??
+          const <String>{
+            'requested',
+            'offered',
+            'accepted',
+            'driver_arriving',
+            'arrived',
+          }.contains(_rideStatus));
 
   bool get _isSearching =>
       _rideStatus == 'requested' || _rideStatus == 'offered';
@@ -332,7 +339,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   Future<void> _cancelRide(String reason) async {
-    if (!_canPassengerCancel) return;
+    if (_isCancelling) return;
 
     setState(() {
       _isCancelling = true;
@@ -374,7 +381,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   Future<void> _showCancelConfirmation() async {
     if (!_canPassengerCancel) return;
 
-    await showModalBottomSheet<void>(
+    final bool? continueCancellation = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (BuildContext sheetContext) {
@@ -400,19 +407,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: _canPassengerCancel
-                        ? () async {
-                            Navigator.pop(sheetContext);
-                            final String? reason =
-                                await Navigator.push<String>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const CancelReasonScreen(),
-                              ),
-                            );
-                            if (reason != null && mounted) {
-                              await _cancelRide(reason);
-                            }
-                          }
+                        ? () => Navigator.pop(sheetContext, true)
                         : null,
                     child: Text(
                       'Cancel order',
@@ -470,6 +465,19 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         );
       },
     );
+
+    if (continueCancellation != true || !mounted) return;
+
+    final String? reason = await Navigator.push<String>(
+      context,
+      MaterialPageRoute<String>(
+        builder: (_) => const CancelReasonScreen(),
+      ),
+    );
+
+    if (reason != null && mounted) {
+      await _cancelRide(reason);
+    }
   }
 
   Future<void> _showCompletedRide(RideLiveState state) async {
