@@ -32,7 +32,7 @@ void main() {
           home: Scaffold(
             body: OrderPanel(
               pickupAddress: 'Current location',
-              destinationAddress: '',
+              destinationAddress: 'Gudele, Juba',
               onPickupTap: () {},
               onDestinationTap: () {},
               onConfirmRide: (RideOption ride, _) {
