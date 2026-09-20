@@ -44,7 +44,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
-  final DirectionsService _directionsService = const DirectionsService();
+  final DirectionsService _directionsService = DirectionsService();
   final RideService _rideService = RideService.instance;
   final Set<Marker> _markers = <Marker>{};
 

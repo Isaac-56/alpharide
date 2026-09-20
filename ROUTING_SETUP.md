@@ -1,33 +1,44 @@
-# AlphaRide routing setup
+# AlphaRide server-side routing
 
-The Google Routes key is intentionally not committed to GitHub.
+AlphaRide route previews and trusted ride quotes are calculated by callable
+Cloud Functions in `africa-south1`. The Android app never receives the Google
+Routes API key.
 
-## One-time setup
+## One-time server secret
 
-From the project root in the VS Code PowerShell terminal:
-
-```powershell
-.	oolconfigure_routes.ps1
-```
-
-Paste the restricted Routes API key when the prompt is waiting for input. The script creates the ignored local file `config/routes.json`.
-
-## Run from VS Code
-
-Open **Run and Debug**, select **AlphaRide (Android with routing)**, then press **F5**.
-
-Or run:
+From the project root, authenticate the Firebase CLI and set the existing
+Google Routes API key in Secret Manager:
 
 ```powershell
-.	oolun_android.ps1
+firebase use alpha-ride-29708
+firebase functions:secrets:set GOOGLE_ROUTES_API_KEY
 ```
 
-## Release build
+The key should be restricted to the Routes API and the Firebase/Google Cloud
+project. Do not place it in Dart, Android resources, VS Code launch settings,
+or a committed configuration file.
 
-Update `GOOGLE_ANDROID_CERT_SHA1` in `config/routes.json` to the release certificate SHA-1, then run:
+## Deploy routing
 
 ```powershell
-.	ooluild_android.ps1
+cd functions
+npm ci
+npm run check
+npm test
+cd ..
+firebase deploy --only "functions:calculateRoute,functions:createRide"
 ```
 
-Never commit `config/routes.json` or paste the API key into Dart source.
+`calculateRoute` requires a signed-in Firebase user, validates coordinates,
+limits each account to 30 preview requests per minute, and returns only the
+encoded route polyline, distance, and duration. `createRide` independently
+recalculates the trusted route and fare before storing a ride.
+
+## Run and build
+
+No local route configuration is required:
+
+```powershell
+.\tool\run_android.ps1
+.\tool\build_android.ps1
+```

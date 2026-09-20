@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check role_index.js && node --check index.js && node --check ride_logic.js && node --check dispatch_logic.js && node --check accounting_logic.js && node --check account_role_logic.js && node --check role_functions.js && node --check lifecycle_logic.js && node --check lifecycle_functions.js"
+    "check": "node --check role_index.js && node --check index.js && node --check ride_logic.js && node --check route_logic.js && node --check dispatch_logic.js && node --check accounting_logic.js && node --check account_role_logic.js && node --check role_functions.js && node --check lifecycle_logic.js && node --check lifecycle_functions.js"
   },
   "dependencies": {
     "firebase-admin": "^14.3.0",

@@ -12,6 +12,11 @@ firebase functions:secrets:set GOOGLE_ROUTES_API_KEY
 
 The key should be restricted to the Google Routes API and to the server-side project where practical.
 
+The passenger app does not read this secret. Both map previews and final ride
+quotes call authenticated functions in `africa-south1`. Route previews are
+limited to 30 requests per signed-in account per minute; final ride creation
+always recalculates the trusted distance, duration, and fare.
+
 ## Pre-deploy checks
 
 ```bash
@@ -38,10 +43,12 @@ firebase deploy --only firestore:rules,functions
 3. Use Cash as the payment method.
 4. Confirm the ride and verify a new `rides/{rideId}` document is created.
 5. Verify the server-computed fare is shown after creation.
-6. Complete a cash ride and verify `driver_ride_summaries/{driverId}` records
+6. Install the APK without `routes.json` or any route-related Dart defines and
+   verify the map preview still displays a road polyline.
+7. Complete a cash ride and verify `driver_ride_summaries/{driverId}` records
    one completed ride, the gross fare, Alpha's 10% platform fee, the driver's
    90% net fare, and the unsettled platform-fee balance.
-6. Cancel before driver assignment and confirm the ride stores `status=cancelled`, `cancelledBy=passenger`, and `cancellationReason`.
-7. Verify `active_passenger_rides/{passengerId}` is removed after cancellation.
+8. Cancel before driver assignment and confirm the ride stores `status=cancelled`, `cancelledBy=passenger`, and `cancellationReason`.
+9. Verify `active_passenger_rides/{passengerId}` is removed after cancellation.
 
 Do not enable client writes to trusted ride assignment, final fare, approval, or completion fields.
