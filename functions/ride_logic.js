@@ -4,25 +4,27 @@ const LIVE_RIDE_OPTIONS = new Set(["boda", "rickshaw", "standard"]);
 const LIVE_PAYMENT_METHODS = new Set(["cash"]);
 const CURRENCY_CODE = "SSP";
 const FARE_ROUNDING = 500;
+const WAITING_CHARGE_ROUNDING = 100;
+const WAITING_GRACE_SECONDS = 2 * 60;
 
 const FARES = Object.freeze({
   boda: Object.freeze({
     minimumFare: 4000,
     baseFare: 2500,
-    perMinute: 200,
     perKilometer: 1500,
+    waitingPerMinute: 200,
   }),
   rickshaw: Object.freeze({
     minimumFare: 6000,
     baseFare: 3500,
-    perMinute: 250,
     perKilometer: 2100,
+    waitingPerMinute: 250,
   }),
   standard: Object.freeze({
     minimumFare: 10000,
     baseFare: 6000,
-    perMinute: 450,
     perKilometer: 3600,
+    waitingPerMinute: 450,
   }),
 });
 
@@ -116,7 +118,7 @@ function validateCreateRideInput(raw) {
   });
 }
 
-function calculateFare({ rideOptionId, distanceMeters, durationSeconds }) {
+function calculateFare({ rideOptionId, distanceMeters }) {
   const normalizedRide = normalizeRideOption(rideOptionId);
   const pricing = FARES[normalizedRide];
 
@@ -129,24 +131,48 @@ function calculateFare({ rideOptionId, distanceMeters, durationSeconds }) {
     throw new RangeError("route distance is outside the supported range");
   }
 
-  if (
-    typeof durationSeconds !== "number" ||
-    !Number.isFinite(durationSeconds) ||
-    durationSeconds <= 0 ||
-    durationSeconds > 24 * 60 * 60
-  ) {
-    throw new RangeError("route duration is outside the supported range");
-  }
-
   const distanceKilometers = distanceMeters / 1000;
-  const durationMinutes = durationSeconds / 60;
   const raw =
     pricing.baseFare +
-    distanceKilometers * pricing.perKilometer +
-    durationMinutes * pricing.perMinute;
+    distanceKilometers * pricing.perKilometer;
   const rounded = Math.ceil(raw / FARE_ROUNDING) * FARE_ROUNDING;
 
   return Math.max(rounded, pricing.minimumFare);
+}
+
+function calculateWaitingCharge({
+  rideOptionId,
+  billableWaitingSeconds,
+  ratePerMinute,
+}) {
+  const normalizedRide = normalizeRideOption(rideOptionId);
+  const pricing = FARES[normalizedRide];
+  const effectiveRate = ratePerMinute ?? pricing.waitingPerMinute;
+
+  if (
+    !Number.isInteger(billableWaitingSeconds) ||
+    billableWaitingSeconds < 0 ||
+    billableWaitingSeconds > 24 * 60 * 60
+  ) {
+    throw new RangeError("billable waiting time is outside the supported range");
+  }
+  if (!Number.isInteger(effectiveRate) || effectiveRate <= 0) {
+    throw new RangeError("waiting rate must be a positive integer");
+  }
+
+  if (billableWaitingSeconds === 0) return 0;
+
+  const raw = (billableWaitingSeconds / 60) * effectiveRate;
+  return Math.ceil(raw / WAITING_CHARGE_ROUNDING) *
+    WAITING_CHARGE_ROUNDING;
+}
+
+function waitingPolicyFor(rideOptionId) {
+  const normalizedRide = normalizeRideOption(rideOptionId);
+  return Object.freeze({
+    graceSeconds: WAITING_GRACE_SECONDS,
+    ratePerMinute: FARES[normalizedRide].waitingPerMinute,
+  });
 }
 
 function parseGoogleDurationSeconds(value) {
@@ -185,9 +211,12 @@ module.exports = {
   CURRENCY_CODE,
   FARES,
   FARE_ROUNDING,
+  WAITING_CHARGE_ROUNDING,
+  WAITING_GRACE_SECONDS,
   LIVE_PAYMENT_METHODS,
   LIVE_RIDE_OPTIONS,
   calculateFare,
+  calculateWaitingCharge,
   isCancellableBeforePickup,
   normalizePaymentMethod,
   normalizeRideOption,
@@ -196,4 +225,5 @@ module.exports = {
   validateCancellationReason,
   validateCreateRideInput,
   validatePoint,
+  waitingPolicyFor,
 };

@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   calculateFare,
+  calculateWaitingCharge,
   isCancellableBeforePickup,
   parseGoogleDurationSeconds,
   validateCancellationReason,
@@ -16,9 +17,8 @@ test("boda fare matches the AlphaRide formula", () => {
     calculateFare({
       rideOptionId: "boda",
       distanceMeters: 10000,
-      durationSeconds: 20 * 60,
     }),
-    21500,
+    17500,
   );
 });
 
@@ -27,9 +27,8 @@ test("standard fare matches the AlphaRide formula", () => {
     calculateFare({
       rideOptionId: "standard",
       distanceMeters: 10000,
-      durationSeconds: 20 * 60,
     }),
-    51000,
+    42000,
   );
 });
 
@@ -38,9 +37,32 @@ test("minimum fares are enforced", () => {
     calculateFare({
       rideOptionId: "boda",
       distanceMeters: 100,
-      durationSeconds: 60,
     }),
     4000,
+  );
+});
+
+test("customer waiting is proportional and rounded to 100 SSP", () => {
+  assert.equal(
+    calculateWaitingCharge({
+      rideOptionId: "standard",
+      billableWaitingSeconds: 0,
+    }),
+    0,
+  );
+  assert.equal(
+    calculateWaitingCharge({
+      rideOptionId: "standard",
+      billableWaitingSeconds: 30,
+    }),
+    300,
+  );
+  assert.equal(
+    calculateWaitingCharge({
+      rideOptionId: "boda",
+      billableWaitingSeconds: 90,
+    }),
+    300,
   );
 });
 

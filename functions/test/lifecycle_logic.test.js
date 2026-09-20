@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   resolveCompletedRideFare,
+  resolveWaitingInterval,
   validateDriverRideTransition,
 } = require("../lifecycle_logic");
 
@@ -63,8 +64,48 @@ test("completed launch rides persist the trusted server-quoted fare", () => {
     12500,
   );
   assert.equal(
+    resolveCompletedRideFare({
+      estimatedFare: 12500,
+      finalFare: null,
+      waitingCharge: 600,
+    }),
+    13100,
+  );
+  assert.equal(
     resolveCompletedRideFare({ estimatedFare: 12500, finalFare: 13000 }),
     13000,
+  );
+});
+
+test("waiting intervals apply a fresh two-minute grace period", () => {
+  assert.deepEqual(
+    resolveWaitingInterval({
+      rideOptionId: "standard",
+      waitingSeconds: 75,
+      billableWaitingSeconds: 0,
+      waitingStartedAtMillis: 1000,
+      nowMillis: 182000,
+      waitingRatePerMinute: 450,
+    }),
+    {
+      intervalSeconds: 181,
+      intervalBillableSeconds: 61,
+      waitingSeconds: 256,
+      billableWaitingSeconds: 61,
+      waitingCharge: 500,
+    },
+  );
+});
+
+test("waiting intervals preserve the rate quoted when the ride was created", () => {
+  assert.equal(
+    resolveWaitingInterval({
+      rideOptionId: "standard",
+      waitingStartedAtMillis: 0,
+      nowMillis: 180000,
+      waitingRatePerMinute: 300,
+    }).waitingCharge,
+    300,
   );
 });
 

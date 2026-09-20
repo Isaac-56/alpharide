@@ -32,7 +32,7 @@ void main() {
           home: Scaffold(
             body: OrderPanel(
               pickupAddress: 'Current location',
-              destinationAddress: '',
+              destinationAddress: 'Gudele, Juba',
               onPickupTap: () {},
               onDestinationTap: () {},
               onConfirmRide: (RideOption ride, _) {
@@ -72,17 +72,43 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('Set pick-up point'), findsOneWidget);
-      expect(find.text('~ 21,500 SSP'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('~ 17,500 SSP'), findsOneWidget);
       expect(find.text('Alpha Boda'), findsNothing);
 
-      await tester.tap(find.text('Set pick-up point'));
+      await tester.tap(find.text('Continue'));
       await tester.pump();
 
-      expect(confirmedRide?.estimatedFare, 21500);
+      expect(confirmedRide?.estimatedFare, 17500);
 
       // Let the OrderPanel confirmation lock timer finish before the test ends.
       await tester.pump(const Duration(milliseconds: 701));
+    },
+  );
+
+  testWidgets(
+    'order panel hides placeholder fares until a destination is priced',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OrderPanel(
+              pickupAddress: 'Current location',
+              destinationAddress: '',
+              onPickupTap: () {},
+              onDestinationTap: () {},
+              onConfirmRide: (_, __) {},
+              collapsed: true,
+              onExpand: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Choose destination'), findsOneWidget);
+      expect(find.text('Fare after destination'), findsOneWidget);
+      expect(find.textContaining('68,000'), findsNothing);
+      expect(find.textContaining('10,500'), findsNothing);
     },
   );
 
@@ -97,23 +123,20 @@ void main() {
     expect(
       boda.calculateFare(
         distanceKilometers: 0,
-        durationMinutes: 0,
       ),
       boda.minimumFare,
     );
     expect(
       boda.calculateFare(
         distanceKilometers: 1,
-        durationMinutes: 1,
       ),
-      4500,
+      4000,
     );
     expect(
       standard.calculateFare(
         distanceKilometers: 10,
-        durationMinutes: 20,
       ),
-      51000,
+      42000,
     );
   });
 }

@@ -97,7 +97,9 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   _detailRow(
                     context: context,
                     label: 'Estimated price',
-                    value: '~ ${ride.estimatedFareLabel}',
+                    value: ride.estimatedFare == null
+                        ? ride.estimatedFareLabel
+                        : '~ ${ride.estimatedFareLabel}',
                   ),
                   _detailRow(
                     context: context,
@@ -128,8 +130,13 @@ class RideOptionDetailsScreen extends StatelessWidget {
                   ),
                   _detailRow(
                     context: context,
-                    label: 'Distance and time',
-                    value: '${ride.perMinuteLabel} • ${ride.perKilometerLabel}',
+                    label: 'Distance rate',
+                    value: ride.perKilometerLabel,
+                  ),
+                  _detailRow(
+                    context: context,
+                    label: 'Customer waiting',
+                    value: '${ride.waitingPerMinuteLabel} after 2 free min',
                   ),
                   Theme(
                     data: Theme.of(context).copyWith(
@@ -154,7 +161,7 @@ class RideOptionDetailsScreen extends StatelessWidget {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'The final price can change with traffic, waiting time, route changes, tolls, or active promotions.',
+                            'Your estimate is calculated after a destination is selected. Customer-requested waiting is charged only when the driver starts the visible waiting meter; normal traffic does not start it.',
                             style: TextStyle(
                               color: mutedColor,
                               fontSize: 14,

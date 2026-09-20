@@ -31,6 +31,7 @@ const {
   isCancellableBeforePickup,
   validateCancellationReason,
   validateCreateRideInput,
+  waitingPolicyFor,
 } = require("./ride_logic");
 const {
   advanceRoutePreviewLimit,
@@ -428,8 +429,8 @@ exports.createRide = onCall(
       const estimatedFare = calculateFare({
         rideOptionId: input.rideOptionId,
         distanceMeters: route.distanceMeters,
-        durationSeconds: route.durationSeconds,
       });
+      const waitingPolicy = waitingPolicyFor(input.rideOptionId);
 
       const rideRef = db.collection("rides").doc();
       const activeRideRef = db
@@ -471,9 +472,17 @@ exports.createRide = onCall(
           paymentMethod: input.paymentMethod,
           estimatedFare,
           finalFare: null,
+          pricingVersion: "juba-distance-wait-v1",
           currencyCode: CURRENCY_CODE,
           routeDistanceMeters: Math.round(route.distanceMeters),
           routeDurationSeconds: Math.round(route.durationSeconds),
+          isWaiting: false,
+          waitingStartedAt: null,
+          waitingSeconds: 0,
+          billableWaitingSeconds: 0,
+          waitingCharge: 0,
+          waitingGraceSeconds: waitingPolicy.graceSeconds,
+          waitingRatePerMinute: waitingPolicy.ratePerMinute,
           cancelledBy: null,
           cancellationReason: null,
           offeredDriverIds: [],
