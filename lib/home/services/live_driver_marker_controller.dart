@@ -14,9 +14,9 @@ class LiveDriverMarkerPolicy {
   const LiveDriverMarkerPolicy._();
 
   static const Map<String, String> markerAssets = <String, String>{
-    'standard': 'assets/images/vehicles/alpha_driver_top.png',
-    'boda': 'assets/images/vehicles/alpha_boda_top.png',
-    'rickshaw': 'assets/images/vehicles/alpha_rickshaw_top.png',
+    'standard': 'assets/images/vehicles/alpha_driver_top.webp',
+    'boda': 'assets/images/vehicles/alpha_boda_top.webp',
+    'rickshaw': 'assets/images/vehicles/alpha_rickshaw_top.webp',
   };
 
   static String normalizedVehicleType(String vehicleType) {
@@ -212,9 +212,11 @@ class LiveDriverMarkerController extends ChangeNotifier {
     final Set<String> incomingIds = visibleDrivers
         .map((DriverLocationModel driver) => driver.driverId)
         .toSet();
+    bool animationNeeded = false;
 
     for (final _VisualDriver driver in _visualDrivers.values) {
-      if (!incomingIds.contains(driver.driverId)) {
+      if (!incomingIds.contains(driver.driverId) &&
+          (!driver.removeWhenInvisible || driver.targetAlpha != 0)) {
         driver
           ..startPosition = driver.position
           ..targetPosition = driver.position
@@ -223,6 +225,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
           ..startAlpha = driver.alpha
           ..targetAlpha = 0
           ..removeWhenInvisible = true;
+        animationNeeded = true;
       }
     }
 
@@ -256,28 +259,41 @@ class LiveDriverMarkerController extends ChangeNotifier {
           targetAlpha: 1,
           removeWhenInvisible: false,
         );
+        animationNeeded = true;
         continue;
       }
 
+      final String vehicleType =
+          LiveDriverMarkerPolicy.normalizedVehicleType(driver.vehicleType);
+      final double targetHeading = LiveDriverMarkerPolicy.normalizedHeading(
+        driver.heading ??
+            (_samePoint(current.position, destination)
+                ? current.heading
+                : _bearingBetween(current.position, destination)),
+      );
+      final bool targetUnchanged =
+          current.vehicleType == vehicleType &&
+          _samePoint(current.targetPosition, destination) &&
+          _sameHeading(current.targetHeading, targetHeading) &&
+          current.targetAlpha == 1 &&
+          !current.removeWhenInvisible;
+      if (targetUnchanged) continue;
+
       current
-        ..vehicleType = LiveDriverMarkerPolicy.normalizedVehicleType(
-          driver.vehicleType,
-        )
+        ..vehicleType = vehicleType
         ..startPosition = current.position
         ..targetPosition = destination
         ..startHeading = current.heading
-        ..targetHeading = LiveDriverMarkerPolicy.normalizedHeading(
-          driver.heading ??
-              (_samePoint(current.position, destination)
-                  ? current.heading
-                  : _bearingBetween(current.position, destination)),
-        )
+        ..targetHeading = targetHeading
         ..startAlpha = current.alpha
         ..targetAlpha = 1
         ..removeWhenInvisible = false;
+      animationNeeded = true;
     }
 
-    _startMovementAnimation();
+    if (animationNeeded) {
+      _startMovementAnimation();
+    }
   }
 
   void _startMovementAnimation() {
@@ -351,6 +367,11 @@ class LiveDriverMarkerController extends ChangeNotifier {
   static bool _samePoint(LatLng first, LatLng second) {
     return (first.latitude - second.latitude).abs() < 0.00001 &&
         (first.longitude - second.longitude).abs() < 0.00001;
+  }
+
+  static bool _sameHeading(double first, double second) {
+    final double difference = ((first - second + 540) % 360) - 180;
+    return difference.abs() < 0.1;
   }
 
   static double _lerp(double start, double end, double progress) {

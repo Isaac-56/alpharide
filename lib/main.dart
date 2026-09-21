@@ -17,10 +17,11 @@ import 'widgets/loading_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final Future<void> themeInitialization = AppThemeController.initialize();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await AppThemeController.initialize();
+  await themeInitialization;
 
   runApp(const MyApp());
 }
@@ -157,7 +158,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.initState();
     _authStateChanges = FirebaseAuth.instance.authStateChanges();
     _minimumSplashDuration = Future<void>.delayed(
-      const Duration(milliseconds: 2450),
+      const Duration(milliseconds: 900),
     );
   }
 

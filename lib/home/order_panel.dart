@@ -609,7 +609,7 @@ class _OrderPanelState extends State<OrderPanel> {
                         width: 68,
                         height: 44,
                         child: Image.asset(
-                          'assets/images/vehicles/alpha_standard.png',
+                          'assets/images/vehicles/alpha_standard.webp',
                           fit: BoxFit.contain,
                           cacheWidth: 240,
                           filterQuality: FilterQuality.high,

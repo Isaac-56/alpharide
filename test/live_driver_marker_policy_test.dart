@@ -6,22 +6,22 @@ void main() {
     test('selects the correct overhead marker for every launch vehicle', () {
       expect(
         LiveDriverMarkerPolicy.markerAssetForVehicle('standard'),
-        'assets/images/vehicles/alpha_driver_top.png',
+        'assets/images/vehicles/alpha_driver_top.webp',
       );
       expect(
         LiveDriverMarkerPolicy.markerAssetForVehicle('Alpha Boda'),
-        'assets/images/vehicles/alpha_boda_top.png',
+        'assets/images/vehicles/alpha_boda_top.webp',
       );
       expect(
         LiveDriverMarkerPolicy.markerAssetForVehicle('Tuk Tuk'),
-        'assets/images/vehicles/alpha_rickshaw_top.png',
+        'assets/images/vehicles/alpha_rickshaw_top.webp',
       );
     });
 
     test('uses the standard car marker for unknown vehicle labels', () {
       expect(
         LiveDriverMarkerPolicy.markerAssetForVehicle('future vehicle'),
-        'assets/images/vehicles/alpha_driver_top.png',
+        'assets/images/vehicles/alpha_driver_top.webp',
       );
     });
 

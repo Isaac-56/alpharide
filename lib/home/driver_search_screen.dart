@@ -766,7 +766,12 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 SizedBox(
                   width: 86,
                   height: 58,
-                  child: Image.asset(widget.ride.assetPath, fit: BoxFit.contain),
+                  child: Image.asset(
+                    widget.ride.assetPath,
+                    fit: BoxFit.contain,
+                    cacheWidth: 280,
+                    filterQuality: FilterQuality.medium,
+                  ),
                 ),
               ],
             ),

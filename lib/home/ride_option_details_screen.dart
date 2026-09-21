@@ -37,6 +37,8 @@ class RideOptionDetailsScreen extends StatelessWidget {
                       child: Image.asset(
                         ride.assetPath,
                         fit: BoxFit.contain,
+                        cacheWidth: 900,
+                        filterQuality: FilterQuality.medium,
                       ),
                     ),
                   ),

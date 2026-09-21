@@ -557,6 +557,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                   child: Image.asset(
                     widget.ride.assetPath,
                     fit: BoxFit.contain,
+                    cacheWidth: 240,
+                    filterQuality: FilterQuality.medium,
                   ),
                 ),
                 const SizedBox(width: 10),
