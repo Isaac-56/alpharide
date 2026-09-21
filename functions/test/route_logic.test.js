@@ -7,6 +7,7 @@ const {
   ROUTE_PREVIEW_REQUEST_LIMIT,
   ROUTE_PREVIEW_WINDOW_MS,
   advanceRoutePreviewLimit,
+  buildGoogleRouteRequest,
   parseGoogleRouteResponse,
   validateRoutePreviewInput,
 } = require("../route_logic");
@@ -40,6 +41,26 @@ test("route previews reject invalid or identical coordinates", () => {
     }),
     /cannot be the same/,
   );
+});
+
+test("route previews use lower-latency overview geometry", () => {
+  const pickup = { latitude: 4.8517, longitude: 31.5825 };
+  const destination = { latitude: 4.872, longitude: 31.601 };
+
+  const previewRequest = buildGoogleRouteRequest(
+    pickup,
+    destination,
+    { includePolyline: true },
+  );
+
+  assert.equal(previewRequest.routingPreference, "TRAFFIC_AWARE");
+  assert.equal(previewRequest.polylineQuality, "OVERVIEW");
+  assert.equal(previewRequest.polylineEncoding, "ENCODED_POLYLINE");
+
+  const trustedFareRequest = buildGoogleRouteRequest(pickup, destination);
+  assert.equal(trustedFareRequest.routingPreference, "TRAFFIC_AWARE");
+  assert.equal("polylineQuality" in trustedFareRequest, false);
+  assert.equal("polylineEncoding" in trustedFareRequest, false);
 });
 
 test("Google route responses expose only trusted preview fields", () => {

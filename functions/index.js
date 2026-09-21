@@ -35,6 +35,7 @@ const {
 } = require("./ride_logic");
 const {
   advanceRoutePreviewLimit,
+  buildGoogleRouteRequest,
   parseGoogleRouteResponse,
   validateRoutePreviewInput,
 } = require("./route_logic");
@@ -97,40 +98,11 @@ async function computeTrustedRoute(
           "X-Goog-Api-Key": googleRoutesApiKey.value(),
           "X-Goog-FieldMask": fieldMask.join(","),
         },
-        body: JSON.stringify({
-          origin: {
-            location: {
-              latLng: {
-                latitude: pickup.latitude,
-                longitude: pickup.longitude,
-              },
-            },
-          },
-          destination: {
-            location: {
-              latLng: {
-                latitude: destination.latitude,
-                longitude: destination.longitude,
-              },
-            },
-          },
-          travelMode: "DRIVE",
-          routingPreference: "TRAFFIC_AWARE",
-          computeAlternativeRoutes: false,
-          ...(includePolyline
-            ? {
-                polylineQuality: "HIGH_QUALITY",
-                polylineEncoding: "ENCODED_POLYLINE",
-              }
-            : {}),
-          routeModifiers: {
-            avoidTolls: false,
-            avoidHighways: false,
-            avoidFerries: true,
-          },
-          languageCode: "en-US",
-          units: "METRIC",
-        }),
+        body: JSON.stringify(
+          buildGoogleRouteRequest(pickup, destination, {
+            includePolyline,
+          }),
+        ),
         signal: AbortSignal.timeout(20000),
       },
     );

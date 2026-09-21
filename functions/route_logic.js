@@ -48,6 +48,49 @@ function validateRoutePreviewInput(raw) {
   return Object.freeze({ origin, destination });
 }
 
+function buildGoogleRouteRequest(
+  pickup,
+  destination,
+  { includePolyline = false } = {},
+) {
+  return {
+    origin: {
+      location: {
+        latLng: {
+          latitude: pickup.latitude,
+          longitude: pickup.longitude,
+        },
+      },
+    },
+    destination: {
+      location: {
+        latLng: {
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+        },
+      },
+    },
+    travelMode: "DRIVE",
+    routingPreference: "TRAFFIC_AWARE",
+    computeAlternativeRoutes: false,
+    ...(includePolyline
+      ? {
+          // OVERVIEW is designed for route previews and returns fewer points
+          // with lower latency than HIGH_QUALITY.
+          polylineQuality: "OVERVIEW",
+          polylineEncoding: "ENCODED_POLYLINE",
+        }
+      : {}),
+    routeModifiers: {
+      avoidTolls: false,
+      avoidHighways: false,
+      avoidFerries: true,
+    },
+    languageCode: "en-US",
+    units: "METRIC",
+  };
+}
+
 function parseGoogleRouteResponse(payload, { includePolyline = false } = {}) {
   const route = payload?.routes?.[0];
   if (
@@ -136,6 +179,7 @@ module.exports = {
   ROUTE_PREVIEW_REQUEST_LIMIT,
   ROUTE_PREVIEW_WINDOW_MS,
   advanceRoutePreviewLimit,
+  buildGoogleRouteRequest,
   parseGoogleRouteResponse,
   validateRoutePoint,
   validateRoutePreviewInput,
