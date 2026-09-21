@@ -515,15 +515,22 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    await _collapseOrderPanel();
+    final Future<void> panelAnimation = _collapseOrderPanel();
 
     if (!mounted) return;
 
     if (_destinationLocation != null) {
-      await _refreshRoadRoute(
-        showFailureMessage: true,
-      );
-    } else if (_mapController.isCompleted) {
+      await Future.wait<void>(<Future<void>>[
+        panelAnimation,
+        _refreshRoadRoute(
+          showFailureMessage: true,
+        ),
+      ]);
+    } else {
+      await panelAnimation;
+
+      if (!mounted || !_mapController.isCompleted) return;
+
       final GoogleMapController controller = await _mapController.future;
 
       await controller.animateCamera(
