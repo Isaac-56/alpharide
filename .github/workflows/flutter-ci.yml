@@ -8,6 +8,8 @@ on:
       - 'test/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'android/**'
+      - 'assets/**'
       - '.github/workflows/flutter-ci.yml'
   pull_request:
     branches: [main]
@@ -44,3 +46,9 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      - name: Build optimized Android app bundle
+        run: flutter build appbundle --release
+
+      - name: Report app bundle size
+        run: du -h build/app/outputs/bundle/release/app-release.aab
