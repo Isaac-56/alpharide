@@ -39,7 +39,7 @@ class SessionService {
     _signInInProgress = true;
 
     try {
-      await AccountRoleService.instance.ensurePassengerEligible();
+      await AccountRoleService.instance.claimPassengerRole();
 
       final String sessionId = _createSessionId();
       final SharedPreferences preferences =
@@ -78,6 +78,20 @@ class SessionService {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     final String key = _localSessionKey(user.uid);
     final String? localSessionId = preferences.getString(key);
+
+    try {
+      // A verified sign-in owns exactly one Alpha product role. Claiming here
+      // also migrates sessions created by older app versions.
+      await AccountRoleService.instance.claimPassengerRole();
+    } on FirebaseAuthException catch (error) {
+      debugPrint('Unable to confirm the AlphaRide account role: $error');
+
+      if (localSessionId == null ||
+          !isTemporaryAccountRoleFailureCode(error.code)) {
+        await preferences.remove(key);
+        return false;
+      }
+    }
 
     try {
       final DocumentSnapshot<Map<String, dynamic>> snapshot = forceServer
