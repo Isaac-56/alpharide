@@ -1,5 +1,6 @@
 "use strict";
 
+const { getAuth } = require("firebase-admin/auth");
 const {
   FieldValue,
   getFirestore,
@@ -15,8 +16,22 @@ const {
   roleConflictMessage,
 } = require("./account_role_logic");
 
+const auth = getAuth();
 const db = getFirestore();
 const REGION = "africa-south1";
+
+async function userIdForPhoneNumber(phoneNumber) {
+  try {
+    const user = await auth.getUserByPhoneNumber(phoneNumber);
+    return user.uid;
+  } catch (error) {
+    if (error?.code === "auth/user-not-found") {
+      return null;
+    }
+
+    throw error;
+  }
+}
 
 function authenticatedIdentity(request) {
   const uid = request.auth?.uid;
@@ -47,6 +62,11 @@ async function evaluateAccountRolePreflight(request) {
   const phoneNumber = normalizePhoneNumber(request.data?.phoneNumber);
   const phoneHash = hashPhoneNumber(phoneNumber);
 
+  // Firebase Authentication is the canonical phone-to-UID directory. Older
+  // Alpha accounts may not have a normalized phoneNumber field or role index,
+  // so resolving the UID first lets preflight inspect their real profile before
+  // an SMS is sent.
+  const uid = await userIdForPhoneNumber(phoneNumber);
   const identityRef = db.collection("identity_registry").doc(phoneHash);
   const accountRoleQuery = db
     .collection("account_roles")
@@ -62,18 +82,30 @@ async function evaluateAccountRolePreflight(request) {
     .where("phoneNumber", "==", phoneNumber)
     .limit(1);
 
+  const directAccountRoleRef = uid
+    ? db.collection("account_roles").doc(uid)
+    : null;
+  const directPassengerRef = uid ? db.collection("users").doc(uid) : null;
+  const directDriverRef = uid ? db.collection("drivers").doc(uid) : null;
+
   const [
     identitySnapshot,
     accountRoleSnapshot,
     legacyPassengerSnapshot,
     passengerSnapshot,
     driverSnapshot,
+    directAccountRoleSnapshot,
+    directPassengerSnapshot,
+    directDriverSnapshot,
   ] = await Promise.all([
     identityRef.get(),
     accountRoleQuery.get(),
     legacyPassengerRef.get(),
     passengerQuery.get(),
     driverQuery.get(),
+    directAccountRoleRef?.get() ?? Promise.resolve(null),
+    directPassengerRef?.get() ?? Promise.resolve(null),
+    directDriverRef?.get() ?? Promise.resolve(null),
   ]);
 
   const registryRoles = new Set();
@@ -83,6 +115,7 @@ async function evaluateAccountRolePreflight(request) {
   };
 
   addRegistryRole(identitySnapshot.data()?.role);
+  addRegistryRole(directAccountRoleSnapshot?.data()?.role);
   for (const document of accountRoleSnapshot.docs) {
     addRegistryRole(document.data()?.role);
   }
@@ -95,9 +128,13 @@ async function evaluateAccountRolePreflight(request) {
 
   const existingRole = inferExistingRole({
     accountRole: registryRoles.size === 1 ? [...registryRoles][0] : null,
-    passengerExists: !passengerSnapshot.empty,
-    legacyPassengerExists: legacyPassengerSnapshot.exists,
-    driverExists: !driverSnapshot.empty,
+    passengerExists:
+      (directPassengerSnapshot?.exists ?? false) || !passengerSnapshot.empty,
+    legacyPassengerExists:
+      legacyPassengerRef.path !== directPassengerRef?.path &&
+      legacyPassengerSnapshot.exists,
+    driverExists:
+      (directDriverSnapshot?.exists ?? false) || !driverSnapshot.empty,
   });
 
   if (existingRole != null && existingRole !== desiredRole) {
