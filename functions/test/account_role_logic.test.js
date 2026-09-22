@@ -7,6 +7,7 @@ const {
   hashPhoneNumber,
   inferExistingRole,
   normalizeAccountRole,
+  normalizePhoneNumber,
   roleConflictMessage,
 } = require("../account_role_logic");
 
@@ -14,6 +15,12 @@ test("account roles normalize to passenger or driver", () => {
   assert.equal(normalizeAccountRole(" Passenger "), "passenger");
   assert.equal(normalizeAccountRole("DRIVER"), "driver");
   assert.throws(() => normalizeAccountRole("admin"), TypeError);
+});
+
+test("phone numbers normalize before role lookup", () => {
+  assert.equal(normalizePhoneNumber(" +211 922 000 000 "), "+211922000000");
+  assert.throws(() => normalizePhoneNumber("0922000000"), TypeError);
+  assert.throws(() => normalizePhoneNumber("+211abc"), TypeError);
 });
 
 test("phone identity hashes are stable without storing the raw phone", () => {
