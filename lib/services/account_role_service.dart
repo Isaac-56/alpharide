@@ -1,6 +1,15 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+bool isTemporaryAccountRoleFailureCode(String code) {
+  return const <String>{
+    'account-role-unavailable',
+    'account-role-deadline-exceeded',
+    'account-role-internal',
+    'account-role-resource-exhausted',
+  }.contains(code);
+}
+
 class AccountRoleService {
   AccountRoleService({FirebaseFunctions? functions})
       : _functions =
@@ -47,7 +56,11 @@ class AccountRoleService {
     } on FirebaseFunctionsException catch (error) {
       final String? existingRole = _existingRole(error.details);
 
-      if (error.code == 'failed-precondition' && existingRole == 'driver') {
+      final bool namesAlphaPlus =
+          error.message?.contains('Alpha Plus') ?? false;
+
+      if (error.code == 'failed-precondition' &&
+          (existingRole == 'driver' || namesAlphaPlus)) {
         throw FirebaseAuthException(
           code: 'account-role-conflict',
           message:
