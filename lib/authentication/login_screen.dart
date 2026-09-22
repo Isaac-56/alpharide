@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/account_role_service.dart';
 import '../services/session_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -192,6 +193,8 @@ class _LoginScreenState extends State<LoginScreen> {
     _setLoading(true);
 
     try {
+      await AccountRoleService.instance.preflightPassengerRole(phoneNumber);
+
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: const Duration(seconds: 60),
