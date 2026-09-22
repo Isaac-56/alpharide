@@ -44,7 +44,7 @@ class AccountRoleService {
           await _functions.httpsCallable(functionName).call<dynamic>(
         <String, dynamic>{
           'role': role,
-          if (phoneNumber != null) 'phoneNumber': phoneNumber,
+          'phoneNumber': phoneNumber,
         },
       );
       final Object? data = result.data;
