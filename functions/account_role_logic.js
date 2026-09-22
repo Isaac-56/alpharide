@@ -16,13 +16,23 @@ function normalizeAccountRole(value) {
   return role;
 }
 
-function hashPhoneNumber(phoneNumber) {
-  if (typeof phoneNumber !== "string" || !phoneNumber.trim()) {
-    throw new TypeError("A verified phone number is required.");
+function normalizePhoneNumber(value) {
+  if (typeof value !== "string") {
+    throw new TypeError("Phone number must be a string.");
   }
 
+  const phoneNumber = value.replace(/\s+/g, "").trim();
+  if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
+    throw new TypeError("Enter a valid phone number with its country code.");
+  }
+  return phoneNumber;
+}
+
+function hashPhoneNumber(phoneNumber) {
+  const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
   return createHash("sha256")
-    .update(`alpha-account-role:v1:${phoneNumber.trim()}`)
+    .update(`alpha-account-role:v1:${normalizedPhoneNumber}`)
     .digest("hex");
 }
 
@@ -75,5 +85,6 @@ module.exports = {
   hashPhoneNumber,
   inferExistingRole,
   normalizeAccountRole,
+  normalizePhoneNumber,
   roleConflictMessage,
 };
