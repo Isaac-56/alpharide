@@ -19,6 +19,14 @@ class AccountRoleService {
 
   final FirebaseFunctions _functions;
 
+  Future<void> preflightPassengerRole(String phoneNumber) =>
+      _callRoleFunction(
+        'preflightAccountRole',
+        'passenger',
+        requireClaim: false,
+        phoneNumber: phoneNumber,
+      );
+
   Future<void> ensurePassengerEligible() =>
       _callRoleFunction('checkAccountRole', 'passenger', requireClaim: false);
 
@@ -29,11 +37,15 @@ class AccountRoleService {
     String functionName,
     String role, {
     required bool requireClaim,
+    String? phoneNumber,
   }) async {
     try {
       final HttpsCallableResult<dynamic> result =
           await _functions.httpsCallable(functionName).call<dynamic>(
-        <String, dynamic>{'role': role},
+        <String, dynamic>{
+          'role': role,
+          'phoneNumber': phoneNumber,
+        },
       );
       final Object? data = result.data;
 

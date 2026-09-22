@@ -11,6 +11,7 @@ const {
   hashPhoneNumber,
   inferExistingRole,
   normalizeAccountRole,
+  normalizePhoneNumber,
   roleConflictMessage,
 } = require("./account_role_logic");
 
@@ -38,6 +39,81 @@ function authenticatedIdentity(request) {
   return {
     uid,
     phoneNumber: phoneNumber.trim(),
+  };
+}
+
+async function evaluateAccountRolePreflight(request) {
+  const desiredRole = normalizeAccountRole(request.data?.role);
+  const phoneNumber = normalizePhoneNumber(request.data?.phoneNumber);
+  const phoneHash = hashPhoneNumber(phoneNumber);
+
+  const identityRef = db.collection("identity_registry").doc(phoneHash);
+  const accountRoleQuery = db
+    .collection("account_roles")
+    .where("phoneHash", "==", phoneHash)
+    .limit(2);
+  const legacyPassengerRef = db.collection("users").doc(phoneNumber);
+  const passengerQuery = db
+    .collection("users")
+    .where("phoneNumber", "==", phoneNumber)
+    .limit(1);
+  const driverQuery = db
+    .collection("drivers")
+    .where("phoneNumber", "==", phoneNumber)
+    .limit(1);
+
+  const [
+    identitySnapshot,
+    accountRoleSnapshot,
+    legacyPassengerSnapshot,
+    passengerSnapshot,
+    driverSnapshot,
+  ] = await Promise.all([
+    identityRef.get(),
+    accountRoleQuery.get(),
+    legacyPassengerRef.get(),
+    passengerQuery.get(),
+    driverQuery.get(),
+  ]);
+
+  const registryRoles = new Set();
+  const addRegistryRole = (value) => {
+    if (value == null || value === "") return;
+    registryRoles.add(normalizeAccountRole(value));
+  };
+
+  addRegistryRole(identitySnapshot.data()?.role);
+  for (const document of accountRoleSnapshot.docs) {
+    addRegistryRole(document.data()?.role);
+  }
+
+  if (registryRoles.size > 1) {
+    throw new RangeError(
+      "Conflicting passenger and driver account records already exist.",
+    );
+  }
+
+  const existingRole = inferExistingRole({
+    accountRole: registryRoles.size === 1 ? [...registryRoles][0] : null,
+    passengerExists: !passengerSnapshot.empty,
+    legacyPassengerExists: legacyPassengerSnapshot.exists,
+    driverExists: !driverSnapshot.empty,
+  });
+
+  if (existingRole != null && existingRole !== desiredRole) {
+    throw new HttpsError(
+      "failed-precondition",
+      roleConflictMessage(existingRole, desiredRole),
+      {
+        existingRole,
+        desiredRole,
+      },
+    );
+  }
+
+  return {
+    eligible: true,
+    registered: existingRole != null,
   };
 }
 
@@ -162,6 +238,44 @@ function roleCallable(claimIfUnassigned) {
     },
   );
 }
+
+// Runs before Firebase sends an SMS. It is read-only and only rejects a phone
+// already assigned to the other Alpha product. The authenticated claim below
+// remains authoritative so a modified client cannot bypass role enforcement.
+exports.preflightAccountRole = onCall(
+  {
+    region: REGION,
+    timeoutSeconds: 15,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      return await evaluateAccountRolePreflight(request);
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      if (error instanceof TypeError) {
+        throw new HttpsError("invalid-argument", error.message);
+      }
+
+      if (error instanceof RangeError) {
+        logger.error("Conflicting Alpha account-role records", error);
+        throw new HttpsError(
+          "failed-precondition",
+          "This phone number has conflicting Alpha account records. Contact support before continuing.",
+        );
+      }
+
+      logger.error("Unable to preflight Alpha account role", error);
+      throw new HttpsError(
+        "internal",
+        "Unable to confirm this Alpha account right now. Please try again.",
+      );
+    }
+  },
+);
 
 // Checks whether the signed-in phone may use the requested app. For a brand-new
 // phone it does not reserve a role, so abandoning OTP/onboarding cannot lock the
