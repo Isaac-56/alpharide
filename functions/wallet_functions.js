@@ -11,6 +11,12 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { normalizePhoneNumber } = require("./account_role_logic");
 const { PLATFORM_COMMISSION_BPS } = require("./accounting_logic");
 const {
+  effectiveVehicleClassForProfile,
+  fixedVehicleClassForBody,
+  requireAdminVehicleClass,
+  requiresAdminVehicleClass,
+} = require("./vehicle_logic");
+const {
   DEFAULT_LOW_BALANCE_THRESHOLD,
   WALLET_SCHEMA_VERSION,
   applyWalletCredit,
@@ -221,6 +227,9 @@ exports.adminListDrivers = callable(async (request) => {
         profile?.registration && typeof profile.registration === "object"
           ? profile.registration
           : {};
+      const profileWithRegistration = { ...profile, registration };
+      const vehicleClass =
+        effectiveVehicleClassForProfile(profileWithRegistration);
       return {
         driverId: document.id,
         firstName:
@@ -237,6 +246,10 @@ exports.adminListDrivers = callable(async (request) => {
           typeof registration?.vehicleType === "string"
             ? registration.vehicleType
             : "",
+        vehicleClass,
+        requiresVehicleClass:
+          requiresAdminVehicleClass(profileWithRegistration) &&
+          vehicleClass === "",
         plateNumber:
           typeof registration?.plateNumber === "string"
             ? registration.plateNumber
@@ -392,6 +405,62 @@ exports.adminSetDriverWalletStatus = callable(async (request) => {
   return { wallet: response };
 }, "The wallet status could not be updated.");
 
+exports.adminSetDriverVehicleClass = callable(async (request) => {
+  const administrator = requireAdmin(request);
+  const driverId = await resolveDriverId(request.data);
+  const vehicleClass = requireAdminVehicleClass(request.data?.vehicleClass);
+  const profileRef = db.collection("drivers").doc(driverId);
+  const auditRef = db.collection("admin_audit_log").doc();
+
+  await db.runTransaction(async (transaction) => {
+    const profileSnapshot = await transaction.get(profileRef);
+    if (!profileSnapshot.exists) {
+      throw new HttpsError("not-found", "Driver profile not found.");
+    }
+
+    const profile = profileSnapshot.data();
+    const registration =
+      profile?.registration && typeof profile.registration === "object"
+        ? profile.registration
+        : {};
+    const fixedClass = fixedVehicleClassForBody(registration.vehicleType);
+    if (fixedClass) {
+      throw new HttpsError(
+        "failed-precondition",
+        `This vehicle is automatically classified as ${fixedClass}.`,
+      );
+    }
+    if (!requiresAdminVehicleClass(profile)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "A supported regular vehicle category is required first.",
+      );
+    }
+
+    const previousVehicleClass =
+      effectiveVehicleClassForProfile(profile) || null;
+    const now = FieldValue.serverTimestamp();
+    transaction.update(profileRef, {
+      "registration.vehicleClass": vehicleClass,
+      vehicleClass,
+      vehicleClassAssignedAt: now,
+      vehicleClassAssignedBy: administrator.uid,
+      updatedAt: now,
+    });
+    transaction.create(auditRef, {
+      action: "driver_vehicle_class",
+      driverId,
+      previousVehicleClass,
+      vehicleClass,
+      administratorUid: administrator.uid,
+      administratorEmail: administrator.email,
+      createdAt: now,
+    });
+  });
+
+  return { driverId, vehicleClass };
+}, "The driver vehicle class could not be updated.");
+
 exports.adminSetDriverReviewStatus = callable(async (request) => {
   const administrator = requireAdmin(request);
   const driverId = await resolveDriverId(request.data);
@@ -411,6 +480,17 @@ exports.adminSetDriverReviewStatus = callable(async (request) => {
     if (!profileSnapshot.exists) {
       throw new HttpsError("not-found", "Driver profile not found.");
     }
+    const profile = profileSnapshot.data();
+    if (
+      reviewStatus === "approved" &&
+      !effectiveVehicleClassForProfile(profile)
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Assign this regular vehicle to an Alpha ride class before approval.",
+      );
+    }
+
     const previousStatus = profileSnapshot.get("reviewStatus") ?? "pending";
     const now = FieldValue.serverTimestamp();
     transaction.update(profileRef, {
