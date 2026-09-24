@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:passengerapp/account/wallet_screens.dart';
+import 'package:passengerapp/home/home_screen.dart';
 import 'package:passengerapp/home/order_panel.dart';
 import 'package:passengerapp/models/ride_option.dart';
 
 void main() {
+  test('ride options expand as soon as a destination exists', () {
+    expect(
+      shouldExpandRideOptionsAfterLocationSelection(hasDestination: true),
+      isTrue,
+    );
+    expect(
+      shouldExpandRideOptionsAfterLocationSelection(hasDestination: false),
+      isFalse,
+    );
+  });
+
   testWidgets(
     'wallet payment methods keep cash active and digital methods disabled',
     (WidgetTester tester) async {
