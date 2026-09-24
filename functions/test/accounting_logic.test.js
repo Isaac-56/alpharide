@@ -9,7 +9,7 @@ const {
   calculateCompletedRideAccounting,
 } = require("../accounting_logic");
 
-test("cash completion gives Alpha 10 percent and the driver 90 percent", () => {
+test("cash completion gives Alpha 10 percent and records a wallet deduction", () => {
   assert.deepEqual(
     calculateCompletedRideAccounting({
       grossFare: 21500,
@@ -22,7 +22,7 @@ test("cash completion gives Alpha 10 percent and the driver 90 percent", () => {
       platformFee: 2150,
       driverNetFare: 19350,
       cashCollectedByDriver: 21500,
-      settlementStatus: "platform_fee_due",
+      settlementStatus: "wallet_deducted",
     },
   );
 });

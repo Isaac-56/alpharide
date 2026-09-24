@@ -1,27 +1,63 @@
 {
-    "flutter":  {
-                    "platforms":  {
-                                      "android":  {
-                                                      "default":  {
-                                                                      "projectId":  "alpha-ride-29708",
-                                                                      "appId":  "1:486103357366:android:c53f304752a76ab17f1317",
-                                                                      "fileOutput":  "android/app/google-services.json"
-                                                                  }
-                                                  },
-                                      "dart":  {
-                                                   "lib/firebase_options.dart":  {
-                                                                                     "projectId":  "alpha-ride-29708",
-                                                                                     "configurations":  {
-                                                                                                            "android":  "1:486103357366:android:c53f304752a76ab17f1317"
-                                                                                                        }
-                                                                                 }
-                                               }
-                                  }
-                },
-    "firestore":  {
-                      "rules":  "firestore.rules"
-                  },
-    "functions":  {
-                      "source":  "functions"
-                  }
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "alpha-ride-29708",
+          "appId": "1:486103357366:android:c53f304752a76ab17f1317",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "alpha-ride-29708",
+          "configurations": {
+            "android": "1:486103357366:android:c53f304752a76ab17f1317"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "hosting": {
+    "public": "admin",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(css|js)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public,max-age=3600"
+          }
+        ]
+      }
+    ]
+  }
 }
