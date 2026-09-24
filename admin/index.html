@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Secure Alpha operations portal for driver approval and prepaid wallet management."
+    />
+    <title>Alpha Admin</title>
+    <link rel="preconnect" href="https://www.gstatic.com" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section id="login-view" class="auth-shell">
+        <div class="auth-card">
+          <div class="brand-mark" aria-hidden="true">A</div>
+          <p class="eyebrow">ALPHA OPERATIONS</p>
+          <h1>Driver administration</h1>
+          <p class="muted">
+            Sign in with an authorized Alpha administrator account.
+          </p>
+          <form id="login-form">
+            <label>
+              Work email
+              <input id="email" type="email" autocomplete="username" required />
+            </label>
+            <label>
+              Password
+              <input
+                id="password"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+            </label>
+            <button class="primary" type="submit">Sign in securely</button>
+          </form>
+          <p id="login-error" class="error" role="alert"></p>
+        </div>
+      </section>
+
+      <section id="admin-view" class="app-shell" hidden>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">ALPHA OPERATIONS</p>
+            <h1>Driver wallet control</h1>
+          </div>
+          <div class="topbar-actions">
+            <span id="admin-email" class="admin-email"></span>
+            <button id="sign-out" class="secondary" type="button">Sign out</button>
+          </div>
+        </header>
+
+        <div class="dashboard-grid">
+          <aside class="panel directory-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Drivers</h2>
+                <p id="driver-count" class="muted">Loading…</p>
+              </div>
+              <button id="refresh-drivers" class="icon-button" type="button">
+                Refresh
+              </button>
+            </div>
+            <label class="search">
+              <span class="sr-only">Search drivers</span>
+              <input
+                id="driver-search"
+                type="search"
+                placeholder="Search name, phone or plate"
+              />
+            </label>
+            <div id="driver-list" class="driver-list" aria-live="polite"></div>
+          </aside>
+
+          <section class="panel detail-panel">
+            <div id="empty-state" class="empty-state">
+              <div class="empty-icon" aria-hidden="true">↗</div>
+              <h2>Select a driver</h2>
+              <p class="muted">
+                Review registration, recharge wallet credit, or inspect the audit
+                ledger.
+              </p>
+            </div>
+
+            <div id="driver-detail" hidden>
+              <div class="driver-identity">
+                <div>
+                  <p class="eyebrow">DRIVER ACCOUNT</p>
+                  <h2 id="driver-name"></h2>
+                  <p id="driver-meta" class="muted"></p>
+                </div>
+                <span id="review-badge" class="badge"></span>
+              </div>
+
+              <div class="stat-grid">
+                <article class="stat-card wallet-stat">
+                  <span>Wallet balance</span>
+                  <strong id="wallet-balance">0 SSP</strong>
+                  <small id="wallet-status"></small>
+                </article>
+                <article class="stat-card">
+                  <span>Vehicle</span>
+                  <strong id="vehicle-type">—</strong>
+                  <small id="plate-number">—</small>
+                </article>
+                <article class="stat-card">
+                  <span>Lifetime recharges</span>
+                  <strong id="wallet-credits">0 SSP</strong>
+                  <small>Office-confirmed credit</small>
+                </article>
+                <article class="stat-card">
+                  <span>Fees deducted</span>
+                  <strong id="wallet-debits">0 SSP</strong>
+                  <small>Completed ride commissions</small>
+                </article>
+              </div>
+
+              <div class="action-grid">
+                <form id="topup-form" class="action-card">
+                  <h3>Recharge wallet</h3>
+                  <p class="muted">
+                    Record only cash or payment confirmed by the Alpha office.
+                  </p>
+                  <label>
+                    Amount (SSP)
+                    <input id="topup-amount" type="number" min="1" step="1" required />
+                  </label>
+                  <label>
+                    Receipt/reference
+                    <input id="topup-reference" maxlength="80" required />
+                  </label>
+                  <label>
+                    Note
+                    <textarea id="topup-note" maxlength="240"></textarea>
+                  </label>
+                  <button class="primary" type="submit">Confirm recharge</button>
+                </form>
+
+                <div class="action-card">
+                  <h3>Driver access</h3>
+                  <p class="muted">Every change is written to the audit history.</p>
+                  <label>
+                    Review status
+                    <select id="review-status">
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </label>
+                  <button id="save-review" class="secondary" type="button">
+                    Save review status
+                  </button>
+                  <label>
+                    Wallet status
+                    <select id="wallet-status-select">
+                      <option value="active">Active</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </label>
+                  <button id="save-wallet-status" class="secondary" type="button">
+                    Save wallet status
+                  </button>
+                </div>
+              </div>
+
+              <section class="ledger-section">
+                <div class="panel-heading">
+                  <div>
+                    <h3>Wallet ledger</h3>
+                    <p class="muted">Immutable office credits and ride deductions.</p>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Balance</th>
+                        <th>Reference</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ledger-body"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+
+        <div id="toast" class="toast" role="status" hidden></div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
