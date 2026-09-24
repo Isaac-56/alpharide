@@ -9,6 +9,7 @@ const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { calculateCompletedRideAccounting } = require("./accounting_logic");
+const { applyWalletDebit } = require("./wallet_logic");
 const { validateRideId } = require("./dispatch_logic");
 const {
   normalizeDriverRideStatus,
@@ -50,12 +51,17 @@ exports.updateRideStatus = onCall(
       const rideSummaryRef = db
         .collection("driver_ride_summaries")
         .doc(driverId);
+      const walletRef = db.collection("driver_wallets").doc(driverId);
+      const walletTransactionRef = walletRef
+        .collection("transactions")
+        .doc(`ride_fee_${rideId}`);
 
       let resolvedStatus = requestedStatus;
       let resolvedFinalFare = null;
       let resolvedAccounting = null;
       let resolvedWaitingCharge = 0;
       let resolvedWaitingSeconds = 0;
+      let resolvedWalletBalance = null;
 
       await db.runTransaction(async (transaction) => {
         const rideSnapshot = await transaction.get(rideRef);
@@ -106,6 +112,12 @@ exports.updateRideStatus = onCall(
         const activePassengerSnapshot = await transaction.get(
           activePassengerRef,
         );
+        const walletSnapshot = transition.completed
+          ? await transaction.get(walletRef)
+          : null;
+        const walletTransactionSnapshot = transition.completed
+          ? await transaction.get(walletTransactionRef)
+          : null;
 
         if (
           activeDriverSnapshot.exists &&
@@ -169,8 +181,18 @@ exports.updateRideStatus = onCall(
             grossFare: resolvedFinalFare,
             paymentMethod: rideSnapshot.get("paymentMethod"),
           });
+          const walletBefore = walletSnapshot?.exists
+            ? walletSnapshot.data()
+            : {};
+          const walletAfter = applyWalletDebit({
+            wallet: walletBefore,
+            amount: resolvedAccounting.platformFee,
+          });
+          resolvedWalletBalance = walletAfter.balance;
           Object.assign(rideUpdate, resolvedAccounting, {
             finalFare: resolvedFinalFare,
+            walletBalanceBefore: walletBefore.balance ?? 0,
+            walletBalanceAfter: walletAfter.balance,
             isWaiting: false,
             waitingStartedAt: null,
             waitingSeconds: resolvedWaitingSeconds,
@@ -200,7 +222,7 @@ exports.updateRideStatus = onCall(
               cashCollectedTotal: FieldValue.increment(
                 resolvedAccounting.cashCollectedByDriver,
               ),
-              unsettledPlatformFeeTotal: FieldValue.increment(
+              walletFeeDebitedTotal: FieldValue.increment(
                 resolvedAccounting.platformFee,
               ),
               lastCompletedRideId: rideId,
@@ -209,6 +231,35 @@ exports.updateRideStatus = onCall(
             },
             { merge: true },
           );
+          transaction.set(
+            walletRef,
+            {
+              ...walletAfter,
+              driverId,
+              lifetimeDebits: FieldValue.increment(
+                resolvedAccounting.platformFee,
+              ),
+              lastDebitAt: now,
+              lastRideId: rideId,
+              updatedAt: now,
+            },
+            { merge: true },
+          );
+          if (!walletTransactionSnapshot?.exists) {
+            transaction.set(walletTransactionRef, {
+              schemaVersion: 1,
+              driverId,
+              type: "ride_fee",
+              direction: "debit",
+              amount: resolvedAccounting.platformFee,
+              currencyCode: walletAfter.currencyCode,
+              balanceBefore: rideUpdate.walletBalanceBefore,
+              balanceAfter: walletAfter.balance,
+              rideId,
+              note: "Alpha platform fee",
+              createdAt: now,
+            });
+          }
           if (
             activeDriverSnapshot.exists &&
             activeDriverSnapshot.get("rideId") === rideId
@@ -256,6 +307,7 @@ exports.updateRideStatus = onCall(
         settlementStatus: resolvedAccounting?.settlementStatus ?? null,
         waitingSeconds: resolvedWaitingSeconds,
         waitingCharge: resolvedWaitingCharge,
+        walletBalance: resolvedWalletBalance,
       };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
