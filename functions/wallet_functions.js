@@ -248,8 +248,7 @@ exports.adminListDrivers = callable(async (request) => {
             : "",
         vehicleClass,
         requiresVehicleClass:
-          requiresAdminVehicleClass(profileWithRegistration) &&
-          vehicleClass === "",
+          requiresAdminVehicleClass(profileWithRegistration),
         plateNumber:
           typeof registration?.plateNumber === "string"
             ? registration.plateNumber
