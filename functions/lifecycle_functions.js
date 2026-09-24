@@ -236,11 +236,19 @@ exports.updateRideStatus = onCall(
             {
               ...walletAfter,
               driverId,
+              lifetimeCredits: walletSnapshot?.exists
+                ? walletSnapshot.get("lifetimeCredits") ?? 0
+                : 0,
               lifetimeDebits: FieldValue.increment(
                 resolvedAccounting.platformFee,
               ),
+              lastTransactionType: "ride_fee",
+              lastTransactionAt: now,
               lastDebitAt: now,
               lastRideId: rideId,
+              createdAt: walletSnapshot?.exists
+                ? walletSnapshot.get("createdAt") ?? now
+                : now,
               updatedAt: now,
             },
             { merge: true },
