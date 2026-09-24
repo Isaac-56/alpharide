@@ -48,6 +48,17 @@ Remove-Item Env:FUNCTIONS_DISCOVERY_TIMEOUT -ErrorAction SilentlyContinue
 
 Firebase prints the Hosting URL when deployment completes.
 
+## Driver vehicle classification
+
+- Drivers register the physical vehicle they use: Sedan, Hatchback, SUV/4x4,
+  Minivan/MPV, Pickup, Boda boda, Bajaj/Tuk-tuk, or Scooter.
+- Alpha administrators assign regular cars to Standard, Comfort, EV, Premium,
+  or Corporate after inspecting the vehicle and documents.
+- Boda and Scooter registrations use the Boda passenger service automatically.
+- Bajaj/Tuk-tuk registrations use the Rickshaw passenger service automatically.
+- A new regular car cannot be approved or go online until its Alpha ride class
+  is assigned. Legacy `Car` profiles remain Standard until reclassified.
+
 ## Office recharge procedure
 
 1. Search for the driver by name, phone or plate.
