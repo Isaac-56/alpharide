@@ -143,6 +143,21 @@
                   <h3>Driver access</h3>
                   <p class="muted">Every change is written to the audit history.</p>
                   <label>
+                    Alpha ride class
+                    <select id="vehicle-class">
+                      <option value="">Select a class</option>
+                      <option value="standard">Standard</option>
+                      <option value="comfort">Comfort</option>
+                      <option value="ev">Electric (EV)</option>
+                      <option value="premium">Premium</option>
+                      <option value="corporate">Corporate</option>
+                    </select>
+                  </label>
+                  <small id="vehicle-class-hint" class="muted"></small>
+                  <button id="save-vehicle-class" class="secondary" type="button">
+                    Save vehicle class
+                  </button>
+                  <label>
                     Review status
                     <select id="review-status">
                       <option value="pending">Pending</option>
