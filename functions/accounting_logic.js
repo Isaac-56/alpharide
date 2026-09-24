@@ -2,7 +2,7 @@
 
 const ACCOUNTING_VERSION = 1;
 const PLATFORM_COMMISSION_BPS = 1000;
-const SETTLEMENT_STATUS_PLATFORM_FEE_DUE = "platform_fee_due";
+const SETTLEMENT_STATUS_WALLET_DEDUCTED = "wallet_deducted";
 
 function _positiveInteger(value, fieldName) {
   if (!Number.isInteger(value) || value <= 0) {
@@ -43,13 +43,13 @@ function calculateCompletedRideAccounting({
     platformFee,
     driverNetFare,
     cashCollectedByDriver: normalizedGrossFare,
-    settlementStatus: SETTLEMENT_STATUS_PLATFORM_FEE_DUE,
+    settlementStatus: SETTLEMENT_STATUS_WALLET_DEDUCTED,
   });
 }
 
 module.exports = {
   ACCOUNTING_VERSION,
   PLATFORM_COMMISSION_BPS,
-  SETTLEMENT_STATUS_PLATFORM_FEE_DUE,
+  SETTLEMENT_STATUS_WALLET_DEDUCTED,
   calculateCompletedRideAccounting,
 };
