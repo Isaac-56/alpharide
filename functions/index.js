@@ -26,6 +26,9 @@ const {
   validateRideId,
 } = require("./dispatch_logic");
 const {
+  PLATFORM_COMMISSION_BPS,
+} = require("./accounting_logic");
+const {
   CURRENCY_CODE,
   calculateFare,
   isCancellableBeforePickup,
@@ -33,6 +36,10 @@ const {
   validateCreateRideInput,
   waitingPolicyFor,
 } = require("./ride_logic");
+const {
+  estimatedPlatformFee,
+  walletRideEligibility,
+} = require("./wallet_logic");
 const {
   advanceRoutePreviewLimit,
   buildGoogleRouteRequest,
@@ -234,14 +241,17 @@ async function dispatchRide({
 
   const verificationResults = await Promise.all(
     presenceCandidates.map(async (candidate) => {
-      const [profileSnapshot, activeRideSnapshot] = await Promise.all([
-        db.collection("drivers").doc(candidate.driverId).get(),
-        db.collection("active_driver_rides").doc(candidate.driverId).get(),
-      ]);
+      const [profileSnapshot, activeRideSnapshot, walletSnapshot] =
+        await Promise.all([
+          db.collection("drivers").doc(candidate.driverId).get(),
+          db.collection("active_driver_rides").doc(candidate.driverId).get(),
+          db.collection("driver_wallets").doc(candidate.driverId).get(),
+        ]);
       return {
         driverId: candidate.driverId,
         profile: profileSnapshot.exists ? profileSnapshot.data() : null,
         busy: activeRideSnapshot.exists,
+        wallet: walletSnapshot.exists ? walletSnapshot.data() : null,
       };
     }),
   );
@@ -251,12 +261,22 @@ async function dispatchRide({
   const busyDriverIds = verificationResults
     .filter((result) => result.busy)
     .map((result) => result.driverId);
-  const verifiedCandidates = selectEligibleDispatchCandidates({
+  const approvedCandidates = selectEligibleDispatchCandidates({
     presenceCandidates,
     profilesByDriverId,
     busyDriverIds,
     requiredVehicleType,
   });
+  const walletsByDriverId = Object.fromEntries(
+    verificationResults.map((result) => [result.driverId, result.wallet]),
+  );
+  const verifiedCandidates = approvedCandidates.filter((candidate) =>
+    walletRideEligibility({
+      wallet: walletsByDriverId[candidate.driverId] ?? {},
+      estimatedFare,
+      commissionBps: PLATFORM_COMMISSION_BPS,
+    }).allowed,
+  );
 
   if (verifiedCandidates.length === 0) {
     await rideRef.update({
@@ -287,6 +307,10 @@ async function dispatchRide({
       requiredVehicleType,
       paymentMethod,
       estimatedFare,
+      requiredWalletCredit: estimatedPlatformFee({
+        estimatedFare,
+        commissionBps: PLATFORM_COMMISSION_BPS,
+      }),
       currencyCode: CURRENCY_CODE,
       distanceToPickupMeters: candidate.distanceToPickupMeters,
       dispatchRank: candidateIndex + 1,
@@ -642,6 +666,7 @@ exports.acceptRideOffer = onCall(
       const activeDriverRef = db
         .collection("active_driver_rides")
         .doc(driverId);
+      const walletRef = db.collection("driver_wallets").doc(driverId);
 
       const preOffer = await offerRef.get();
       if (!preOffer.exists || preOffer.get("status") !== "pending") {
@@ -677,6 +702,7 @@ exports.acceptRideOffer = onCall(
         const rideSnapshot = await transaction.get(rideRef);
         const profileSnapshot = await transaction.get(profileRef);
         const activeDriverSnapshot = await transaction.get(activeDriverRef);
+        const walletSnapshot = await transaction.get(walletRef);
 
         if (!offerSnapshot.exists || !rideSnapshot.exists) {
           throw new HttpsError(
@@ -734,6 +760,29 @@ exports.acceptRideOffer = onCall(
           throw new HttpsError(
             "failed-precondition",
             "Finish your active ride before accepting another request.",
+          );
+        }
+
+        const walletEligibility = walletRideEligibility({
+          wallet: walletSnapshot.exists ? walletSnapshot.data() : {},
+          estimatedFare: rideSnapshot.get("estimatedFare"),
+          commissionBps: PLATFORM_COMMISSION_BPS,
+        });
+        if (!walletEligibility.allowed) {
+          const message = walletEligibility.reason === "wallet_suspended"
+            ? "Your driver wallet is suspended. Visit the Alpha office for help."
+            : walletEligibility.reason === "wallet_empty"
+              ? "Recharge your driver wallet at the Alpha office before accepting rides."
+              : "Your wallet does not cover this ride's estimated Alpha fee. Recharge before accepting.";
+          throw new HttpsError(
+            "failed-precondition",
+            message,
+            {
+              reason: walletEligibility.reason,
+              balance: walletEligibility.balance,
+              requiredCredit: walletEligibility.requiredCredit,
+              currencyCode: walletEligibility.currencyCode,
+            },
           );
         }
 
