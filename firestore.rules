@@ -151,6 +151,22 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /driver_wallets/{driverId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+
+      match /transactions/{transactionId} {
+        allow read:
+            if signedIn() && request.auth.uid == driverId;
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /admin_audit_log/{auditId} {
+      allow read, write: if false;
+    }
+
     match /route_preview_limits/{userId} {
       allow read, write: if false;
     }
