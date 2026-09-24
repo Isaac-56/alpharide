@@ -29,6 +29,7 @@ function buildDriverPublicSummary(profile) {
       firstName: "",
       lastName: "",
       vehicleType: "",
+      vehicleClass: "",
       make: "",
       model: "",
       color: "",
