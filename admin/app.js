@@ -34,6 +34,10 @@ const setReviewStatus = httpsCallable(
   functions,
   "adminSetDriverReviewStatus",
 );
+const setVehicleClass = httpsCallable(
+  functions,
+  "adminSetDriverVehicleClass",
+);
 const listTransactions = httpsCallable(
   functions,
   "adminListWalletTransactions",
@@ -63,6 +67,9 @@ const elements = {
   walletDebits: document.querySelector("#wallet-debits"),
   vehicleType: document.querySelector("#vehicle-type"),
   plateNumber: document.querySelector("#plate-number"),
+  vehicleClass: document.querySelector("#vehicle-class"),
+  vehicleClassHint: document.querySelector("#vehicle-class-hint"),
+  saveVehicleClass: document.querySelector("#save-vehicle-class"),
   topupForm: document.querySelector("#topup-form"),
   topupAmount: document.querySelector("#topup-amount"),
   topupReference: document.querySelector("#topup-reference"),
@@ -94,6 +101,18 @@ function readableError(error) {
     .trim() || "The operation could not be completed.";
 }
 
+function vehicleClassLabel(value) {
+  return {
+    boda: "Boda",
+    rickshaw: "Rickshaw",
+    standard: "Standard",
+    comfort: "Comfort",
+    ev: "Electric",
+    premium: "Premium",
+    corporate: "Corporate",
+  }[value] || "Unassigned";
+}
+
 function showToast(message) {
   clearTimeout(toastTimer);
   elements.toast.textContent = message;
@@ -120,6 +139,7 @@ function searchableText(driver) {
     driver.phoneNumber,
     driver.plateNumber,
     driver.vehicleType,
+    driver.vehicleClass,
     driver.driverId,
   ]
     .join(" ")
@@ -217,7 +237,18 @@ function renderDriverDetail(driver) {
   elements.walletCredits.textContent = `${money(wallet.lifetimeCredits)} SSP`;
   elements.walletDebits.textContent = `${money(wallet.lifetimeDebits)} SSP`;
   elements.vehicleType.textContent = driver.vehicleType || "Not recorded";
-  elements.plateNumber.textContent = driver.plateNumber || "No plate";
+  elements.plateNumber.textContent = [
+    driver.plateNumber || "No plate",
+    `Alpha ${vehicleClassLabel(driver.vehicleClass)}`,
+  ].join(" · ");
+  elements.vehicleClass.value = driver.vehicleClass || "";
+  elements.vehicleClass.disabled = !driver.requiresVehicleClass;
+  elements.saveVehicleClass.disabled = !driver.requiresVehicleClass;
+  elements.vehicleClassHint.textContent = driver.requiresVehicleClass
+    ? driver.vehicleClass
+      ? "Alpha administrators may update this class after reviewing the vehicle."
+      : "Required before this regular vehicle can be approved."
+    : `Automatically classified as ${vehicleClassLabel(driver.vehicleClass)}.`;
   elements.reviewStatus.value = driver.reviewStatus || "pending";
   elements.walletStatusSelect.value = wallet.status || "active";
 }
@@ -329,6 +360,28 @@ elements.topupForm.addEventListener("submit", async (event) => {
     showToast(readableError(error));
   } finally {
     setBusy(button, false);
+  }
+});
+
+elements.saveVehicleClass.addEventListener("click", async () => {
+  const driver = selectedDriver();
+  if (!driver || !driver.requiresVehicleClass) return;
+  if (!elements.vehicleClass.value) {
+    showToast("Select an Alpha ride class first.");
+    return;
+  }
+  setBusy(elements.saveVehicleClass, true);
+  try {
+    await setVehicleClass({
+      driverId: driver.driverId,
+      vehicleClass: elements.vehicleClass.value,
+    });
+    showToast("Driver vehicle class updated.");
+    await loadDrivers();
+  } catch (error) {
+    showToast(readableError(error));
+  } finally {
+    setBusy(elements.saveVehicleClass, false);
   }
 });
 

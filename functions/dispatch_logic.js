@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  effectiveVehicleClassForProfile,
+  normalizeVehicleClass,
+} = require("./vehicle_logic");
+
 const PRESENCE_FRESH_MS = 90 * 1000;
 const DISPATCH_RADIUS_METERS = 12 * 1000;
 const ACCEPTANCE_PICKUP_RADIUS_METERS = 15 * 1000;
@@ -9,21 +14,7 @@ const OFFER_WINDOW_MS = 45 * 1000;
 const DISPATCH_ALGORITHM_VERSION = 2;
 
 function normalizeVehicleType(value) {
-  if (typeof value !== "string") return "";
-  const normalized = value.trim().toLowerCase();
-
-  if (normalized.includes("boda") || normalized.includes("motor")) {
-    return "boda";
-  }
-  if (
-    normalized.includes("rickshaw") ||
-    normalized.includes("tuk") ||
-    normalized.includes("three")
-  ) {
-    return "rickshaw";
-  }
-  if (!normalized) return "";
-  return "standard";
+  return normalizeVehicleClass(value);
 }
 
 function _publicText(value, maximumLength = 80) {
@@ -38,6 +29,7 @@ function buildDriverPublicSummary(profile) {
       firstName: "",
       lastName: "",
       vehicleType: "",
+      vehicleClass: "",
       make: "",
       model: "",
       color: "",
@@ -64,6 +56,7 @@ function buildDriverPublicSummary(profile) {
       registration.vehicleType ?? profile.vehicleType,
       60,
     ),
+    vehicleClass: effectiveVehicleClassForProfile(profile),
     make: _publicText(registration.make, 60),
     model: _publicText(registration.model, 60),
     color: _publicText(registration.color, 40),
@@ -264,14 +257,7 @@ function profileAllowsDispatch(profile, requiredVehicleType) {
       : "";
   if (reviewStatus !== "approved") return false;
 
-  const registration =
-    profile.registration && typeof profile.registration === "object"
-      ? profile.registration
-      : {};
-  const profileVehicleType = normalizeVehicleType(
-    registration.vehicleType ?? profile.vehicleType,
-  );
-
+  const profileVehicleType = effectiveVehicleClassForProfile(profile);
   return profileVehicleType === normalizeVehicleType(requiredVehicleType);
 }
 

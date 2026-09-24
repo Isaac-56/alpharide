@@ -20,6 +20,12 @@ import 'order_confirmation_screen.dart';
 import 'order_panel.dart';
 import 'services/directions_service.dart';
 
+bool shouldExpandRideOptionsAfterLocationSelection({
+  required bool hasDestination,
+}) {
+  return hasDestination;
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -515,11 +521,17 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    final Future<void> panelAnimation = _collapseOrderPanel();
+    final bool hasDestination = _destinationLocation != null;
+    final Future<void> panelAnimation =
+        shouldExpandRideOptionsAfterLocationSelection(
+          hasDestination: hasDestination,
+        )
+        ? _expandOrderPanel()
+        : _collapseOrderPanel();
 
     if (!mounted) return;
 
-    if (_destinationLocation != null) {
+    if (hasDestination) {
       await Future.wait<void>(<Future<void>>[
         panelAnimation,
         _refreshRoadRoute(

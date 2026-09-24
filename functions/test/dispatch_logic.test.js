@@ -172,6 +172,32 @@ test("driver profile must be approved and vehicle matched", () => {
   assert.equal(
     profileAllowsDispatch(
       {
+        reviewStatus: "approved",
+        registration: {
+          vehicleType: "SUV / 4x4",
+          vehicleClass: "comfort",
+        },
+      },
+      "comfort",
+    ),
+    true,
+  );
+  assert.equal(
+    profileAllowsDispatch(
+      {
+        reviewStatus: "approved",
+        registration: {
+          vehicleType: "Sedan",
+          vehicleClass: "",
+        },
+      },
+      "standard",
+    ),
+    false,
+  );
+  assert.equal(
+    profileAllowsDispatch(
+      {
         reviewStatus: "pending",
         registration: { vehicleType: "Car" },
       },
@@ -270,6 +296,7 @@ test("public driver summary exposes rider-safe identity and vehicle fields", () 
       firstName: "Daniel",
       lastName: "Driver",
       vehicleType: "Car",
+      vehicleClass: "standard",
       make: "Toyota",
       model: "Corolla",
       color: "White",
@@ -284,6 +311,7 @@ test("public driver summary falls back safely when profile data is absent", () =
     firstName: "",
     lastName: "",
     vehicleType: "",
+    vehicleClass: "",
     make: "",
     model: "",
     color: "",
