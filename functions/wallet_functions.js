@@ -215,7 +215,7 @@ exports.adminListDrivers = callable(async (request) => {
   requireAdmin(request);
   const rawLimit = request.data?.limit;
   const limit = Number.isInteger(rawLimit)
-    ? Math.min(Math.max(rawLimit, 1), 100)
+    ? Math.min(Math.max(rawLimit, 1), 200)
     : 50;
   const driverSnapshot = await db.collection("drivers").limit(limit).get();
 
@@ -279,6 +279,7 @@ exports.adminCreditDriverWallet = callable(async (request) => {
   const profileRef = db.collection("drivers").doc(driverId);
   const walletRef = walletReference(driverId);
   const transactionRef = walletRef.collection("transactions").doc();
+  const auditRef = db.collection("admin_audit_log").doc();
   let response;
 
   await db.runTransaction(async (transaction) => {
@@ -332,6 +333,18 @@ exports.adminCreditDriverWallet = callable(async (request) => {
       administratorEmail: administrator.email,
       createdAt: now,
     });
+    transaction.create(auditRef, {
+      action: "wallet_top_up",
+      driverId,
+      amount,
+      reference,
+      note,
+      balanceBefore: before.balance,
+      balanceAfter: after.balance,
+      administratorUid: administrator.uid,
+      administratorEmail: administrator.email,
+      createdAt: now,
+    });
     response = walletPayload(driverId, {
       ...walletData,
       lifetimeCredits:
@@ -354,6 +367,7 @@ exports.adminSetDriverWalletStatus = callable(async (request) => {
   const note = cleanText(request.data?.note, "note", 240);
   const walletRef = walletReference(driverId);
   const transactionRef = walletRef.collection("transactions").doc();
+  const auditRef = db.collection("admin_audit_log").doc();
   let response;
 
   await db.runTransaction(async (transaction) => {
@@ -394,6 +408,18 @@ exports.adminSetDriverWalletStatus = callable(async (request) => {
       status: after.status,
       currencyCode: "SSP",
       note,
+      administratorUid: administrator.uid,
+      administratorEmail: administrator.email,
+      createdAt: now,
+    });
+    transaction.create(auditRef, {
+      action: "wallet_status",
+      driverId,
+      previousStatus: before.status,
+      status: after.status,
+      note,
+      balanceBefore: before.balance,
+      balanceAfter: after.balance,
       administratorUid: administrator.uid,
       administratorEmail: administrator.email,
       createdAt: now,
