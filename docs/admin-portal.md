@@ -1,7 +1,8 @@
 # Alpha Admin portal
 
-Alpha Admin is the office-only web interface for driver approval and prepaid
-wallet management. It is hosted separately from the passenger and driver apps.
+Alpha Admin is the office-only operations console for driver approval, prepaid
+wallet management, ride monitoring, and administrator auditing. It is hosted
+separately from the passenger and driver apps.
 
 ## Security model
 
@@ -79,3 +80,29 @@ so every balance change remains attributable and auditable.
 - A balance below 20,000 SSP is marked low and shown as a recharge warning.
 - Suspended or exhausted wallets cannot work until an administrator resolves
   the account or records a recharge.
+
+## Operations workspace
+
+The portal is organized into four responsive work areas:
+
+- **Overview** shows driver approvals, wallet exposure, active rides, completed
+  rides, and items that need office attention.
+- **Drivers** supports search and operational filters, vehicle classification,
+  approval, wallet suspension/restoration, quick recharge amounts, recharge
+  previews, confirmations, and per-driver wallet history.
+- **Rides** shows the latest ride requests, lifecycle status, assigned driver,
+  service class, fare, and recorded Alpha fee.
+- **Activity** records vehicle class changes, driver review decisions, wallet
+  recharges, and wallet access changes with the administrator identity.
+
+All sensitive actions require an administrator claim and execute through Cloud
+Functions. The overview, ride list, and activity endpoints are read-only.
+
+## Office safety checklist
+
+- Match the driver name, phone number, and vehicle before changing anything.
+- Use a unique receipt/reference for every recharge.
+- Read the new-balance preview and confirmation dialog before submitting.
+- Suspend access only when the operational reason has been verified.
+- Do not use the portal to alter fare policy; pricing remains controlled by the
+  trusted ride backend while the commercial policy is under review.
