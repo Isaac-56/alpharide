@@ -96,11 +96,16 @@ function ridePayload(document) {
 }
 
 exports.adminGetOperationsOverview = callable(async () => {
-  const now = new Date();
+  // South Sudan uses CAT (UTC+2) year-round. Convert Juba midnight back
+  // to UTC before querying Firestore timestamps.
+  const jubaOffsetMillis = 2 * 60 * 60 * 1000;
+  const jubaNow = new Date(Date.now() + jubaOffsetMillis);
   const startOfDay = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
+    Date.UTC(
+      jubaNow.getUTCFullYear(),
+      jubaNow.getUTCMonth(),
+      jubaNow.getUTCDate(),
+    ) - jubaOffsetMillis,
   );
   const [driverSnapshot, walletSnapshot, todayRideSnapshot, activeRideSnapshot] =
     await Promise.all([
