@@ -27,6 +27,7 @@ const {
 } = require("./dispatch_logic");
 const {
   PLATFORM_COMMISSION_BPS,
+  commissionBpsFromConfig,
 } = require("./accounting_logic");
 const {
   CURRENCY_CODE,
@@ -235,6 +236,7 @@ async function dispatchRide({
   requiredVehicleType,
   paymentMethod,
   estimatedFare,
+  commissionBps,
 }) {
   const rideRef = db.collection("rides").doc(rideId);
   const presenceSnapshot = await realtimeDb.ref("driver_locations").get();
@@ -292,7 +294,7 @@ async function dispatchRide({
     walletRideEligibility({
       wallet: walletsByDriverId[candidate.driverId] ?? {},
       estimatedFare,
-      commissionBps: PLATFORM_COMMISSION_BPS,
+      commissionBps,
     }).allowed,
   );
 
@@ -327,7 +329,7 @@ async function dispatchRide({
       estimatedFare,
       requiredWalletCredit: estimatedPlatformFee({
         estimatedFare,
-        commissionBps: PLATFORM_COMMISSION_BPS,
+        commissionBps,
       }),
       currencyCode: CURRENCY_CODE,
       distanceToPickupMeters: candidate.distanceToPickupMeters,
@@ -439,7 +441,13 @@ exports.createRide = onCall(
     try {
       const passengerId = requireAuthenticatedUser(request);
       const input = validateCreateRideInput(request.data);
-      const route = await computeTrustedRoute(input.pickup, input.destination);
+      const [route, accountingConfigSnapshot] = await Promise.all([
+        computeTrustedRoute(input.pickup, input.destination),
+        db.collection("platform_config").doc("accounting").get(),
+      ]);
+      const commissionBps = commissionBpsFromConfig(
+        accountingConfigSnapshot.exists ? accountingConfigSnapshot.data() : {},
+      );
       const estimatedFare = calculateFare({
         rideOptionId: input.rideOptionId,
         distanceMeters: route.distanceMeters,
@@ -486,6 +494,7 @@ exports.createRide = onCall(
           paymentMethod: input.paymentMethod,
           estimatedFare,
           finalFare: null,
+          platformCommissionBps: commissionBps,
           pricingVersion: "juba-distance-wait-v2",
           currencyCode: CURRENCY_CODE,
           routeDistanceMeters: Math.round(route.distanceMeters),
@@ -529,6 +538,7 @@ exports.createRide = onCall(
           requiredVehicleType: input.rideOptionId,
           paymentMethod: input.paymentMethod,
           estimatedFare,
+          commissionBps,
         });
       } catch (dispatchError) {
         logger.error("Initial ride dispatch failed", {
@@ -795,7 +805,9 @@ exports.acceptRideOffer = onCall(
         const walletEligibility = walletRideEligibility({
           wallet: walletSnapshot.exists ? walletSnapshot.data() : {},
           estimatedFare: rideSnapshot.get("estimatedFare"),
-          commissionBps: PLATFORM_COMMISSION_BPS,
+          commissionBps:
+            rideSnapshot.get("platformCommissionBps") ??
+            PLATFORM_COMMISSION_BPS,
         });
         if (!walletEligibility.allowed) {
           const message = walletEligibility.reason === "wallet_suspended"

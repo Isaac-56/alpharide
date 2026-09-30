@@ -3,6 +3,10 @@
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const {
+  PLATFORM_COMMISSION_BPS,
+  normalizeCommissionBps,
+} = require("./accounting_logic");
 
 const REGION = "africa-south1";
 const ACTIVE_RIDE_STATUSES = [
@@ -221,6 +225,7 @@ exports.adminListAdminActivity = callable(async (request) => {
     if (action === "driver_vehicle_class") summary = `${text(data.previousVehicleClass) || "unassigned"} → ${text(data.vehicleClass)}`;
     if (action === "wallet_top_up") summary = `+${number(data.amount).toLocaleString("en-US")} SSP · ${text(data.reference) || "No reference"}`;
     if (action === "wallet_status") summary = `${text(data.previousStatus) || "active"} → ${text(data.status)}`;
+    if (action === "commission_rate") summary = `${number(data.previousCommissionBps) / 100}% → ${number(data.commissionBps) / 100}%`;
     return {
       activityId: document.id,
       action,
@@ -233,3 +238,48 @@ exports.adminListAdminActivity = callable(async (request) => {
   });
   return { activity };
 }, "The administrator activity log could not be loaded.");
+
+exports.adminGetBusinessSettings = callable(async () => {
+  const snapshot = await db.collection("platform_config").doc("accounting").get();
+  const commissionBps = snapshot.exists
+    ? normalizeCommissionBps(snapshot.get("commissionBps"))
+    : PLATFORM_COMMISSION_BPS;
+  return {
+    currencyCode: "SSP",
+    commissionBps,
+    commissionPercent: commissionBps / 100,
+    updatedAtMillis: snapshot.exists ? millis(snapshot.get("updatedAt")) : null,
+  };
+}, "The business settings could not be loaded.");
+
+exports.adminSetCommissionRate = callable(async (request) => {
+  const percent = Number(request.data?.commissionPercent);
+  if (!Number.isFinite(percent)) {
+    throw new TypeError("commissionPercent must be a number");
+  }
+  const commissionBps = normalizeCommissionBps(Math.round(percent * 100));
+  const settingsRef = db.collection("platform_config").doc("accounting");
+  const auditRef = db.collection("admin_audit_log").doc();
+  await db.runTransaction(async (transaction) => {
+    const previous = await transaction.get(settingsRef);
+    const previousCommissionBps = previous.exists
+      ? normalizeCommissionBps(previous.get("commissionBps"))
+      : PLATFORM_COMMISSION_BPS;
+    const now = Timestamp.now();
+    transaction.set(settingsRef, {
+      commissionBps,
+      updatedAt: now,
+      updatedBy: request.auth.uid,
+      updatedByEmail: text(request.auth.token?.email),
+    }, { merge: true });
+    transaction.set(auditRef, {
+      action: "commission_rate",
+      previousCommissionBps,
+      commissionBps,
+      administratorId: request.auth.uid,
+      administratorEmail: text(request.auth.token?.email),
+      createdAt: now,
+    });
+  });
+  return { commissionBps, commissionPercent: commissionBps / 100 };
+}, "The commission rate could not be updated.");

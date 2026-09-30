@@ -9,7 +9,10 @@ const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
-const { calculateCompletedRideAccounting } = require("./accounting_logic");
+const {
+  PLATFORM_COMMISSION_BPS,
+  calculateCompletedRideAccounting,
+} = require("./accounting_logic");
 const { applyWalletDebit } = require("./wallet_logic");
 const { validateRideId } = require("./dispatch_logic");
 const {
@@ -198,6 +201,9 @@ exports.updateRideStatus = onCall(
           resolvedAccounting = calculateCompletedRideAccounting({
             grossFare: resolvedFinalFare,
             paymentMethod: rideSnapshot.get("paymentMethod"),
+            commissionBps:
+              rideSnapshot.get("platformCommissionBps") ??
+              PLATFORM_COMMISSION_BPS,
           });
           const walletBefore = walletSnapshot?.exists
             ? walletSnapshot.data()
