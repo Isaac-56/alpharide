@@ -22,6 +22,7 @@ const {
   validateDriverRideTransition,
 } = require("./lifecycle_logic");
 const { waitingPolicyFor } = require("./ride_logic");
+const { buildReceiptNumber } = require("./receipt_logic");
 
 const REGION = "africa-south1";
 const db = getFirestore();
@@ -76,6 +77,7 @@ exports.updateRideStatus = onCall(
       const walletTransactionRef = walletRef
         .collection("transactions")
         .doc(`ride_fee_${rideId}`);
+      const receiptRef = db.collection("ride_receipts").doc(rideId);
 
       let resolvedStatus = requestedStatus;
       let resolvedFinalFare = null;
@@ -83,6 +85,7 @@ exports.updateRideStatus = onCall(
       let resolvedWaitingCharge = 0;
       let resolvedWaitingSeconds = 0;
       let resolvedWalletBalance = null;
+      let resolvedReceiptNumber = null;
 
       await db.runTransaction(async (transaction) => {
         const rideSnapshot = await transaction.get(rideRef);
@@ -103,6 +106,7 @@ exports.updateRideStatus = onCall(
           resolvedWaitingCharge = rideSnapshot.get("waitingCharge") ?? 0;
           resolvedWaitingSeconds = rideSnapshot.get("waitingSeconds") ?? 0;
           if (currentStatus === "completed") {
+            resolvedReceiptNumber = rideSnapshot.get("receiptNumber") ?? null;
             resolvedAccounting = {
               platformCommissionBps:
                 rideSnapshot.get("platformCommissionBps") ?? null,
@@ -205,6 +209,10 @@ exports.updateRideStatus = onCall(
               rideSnapshot.get("platformCommissionBps") ??
               PLATFORM_COMMISSION_BPS,
           });
+          resolvedReceiptNumber = buildReceiptNumber({
+            rideId,
+            completedAtMillis: now.toMillis(),
+          });
           const walletBefore = walletSnapshot?.exists
             ? walletSnapshot.data()
             : {};
@@ -215,6 +223,7 @@ exports.updateRideStatus = onCall(
           resolvedWalletBalance = walletAfter.balance;
           Object.assign(rideUpdate, resolvedAccounting, {
             finalFare: resolvedFinalFare,
+            receiptNumber: resolvedReceiptNumber,
             walletBalanceBefore: walletBefore.balance ?? 0,
             walletBalanceAfter: walletAfter.balance,
             isWaiting: false,
@@ -292,6 +301,28 @@ exports.updateRideStatus = onCall(
               createdAt: now,
             });
           }
+          transaction.set(receiptRef, {
+            schemaVersion: 1,
+            receiptNumber: resolvedReceiptNumber,
+            rideId,
+            passengerId,
+            driverId,
+            rideOptionId: rideSnapshot.get("rideOptionId"),
+            pickup: rideSnapshot.get("pickup"),
+            destination: rideSnapshot.get("destination"),
+            paymentMethod: rideSnapshot.get("paymentMethod"),
+            routeDistanceMeters: rideSnapshot.get("routeDistanceMeters") ?? 0,
+            estimatedFare: rideSnapshot.get("estimatedFare"),
+            finalFare: resolvedFinalFare,
+            waitingCharge: resolvedWaitingCharge,
+            platformCommissionBps: resolvedAccounting.platformCommissionBps,
+            platformFee: resolvedAccounting.platformFee,
+            driverNetFare: resolvedAccounting.driverNetFare,
+            currencyCode: rideSnapshot.get("currencyCode") ?? "SSP",
+            completedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          }, { merge: true });
           if (
             activeDriverSnapshot.exists &&
             activeDriverSnapshot.get("rideId") === rideId
@@ -353,6 +384,7 @@ exports.updateRideStatus = onCall(
         waitingSeconds: resolvedWaitingSeconds,
         waitingCharge: resolvedWaitingCharge,
         walletBalance: resolvedWalletBalance,
+        receiptNumber: resolvedReceiptNumber,
       };
     } catch (error) {
       if (error instanceof HttpsError) throw error;

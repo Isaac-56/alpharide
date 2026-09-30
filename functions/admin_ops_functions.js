@@ -90,6 +90,7 @@ function ridePayload(document) {
     estimatedFare: number(data.estimatedFare),
     finalFare: number(data.finalFare),
     platformFee: number(data.platformFee),
+    receiptNumber: text(data.receiptNumber),
     currencyCode: text(data.currencyCode) || "SSP",
     routeDistanceMeters: number(data.routeDistanceMeters),
     requestedAtMillis: millis(data.requestedAt),
@@ -204,6 +205,39 @@ exports.adminListRides = callable(async (request) => {
     .get();
   return { rides: snapshot.docs.map(ridePayload) };
 }, "The recent ride list could not be loaded.");
+
+exports.adminListReceipts = callable(async (request) => {
+  const limit = limitFrom(request.data?.limit, 100, 200);
+  const snapshot = await db
+    .collection("ride_receipts")
+    .orderBy("completedAt", "desc")
+    .limit(limit)
+    .get();
+  return {
+    receipts: snapshot.docs.map((document) => {
+      const data = document.data();
+      const pickup = data.pickup && typeof data.pickup === "object" ? data.pickup : {};
+      const destination = data.destination && typeof data.destination === "object" ? data.destination : {};
+      return {
+        receiptId: document.id,
+        receiptNumber: text(data.receiptNumber),
+        rideId: text(data.rideId) || document.id,
+        passengerId: text(data.passengerId),
+        driverId: text(data.driverId),
+        rideOptionId: text(data.rideOptionId),
+        pickupAddress: text(pickup.address),
+        destinationAddress: text(destination.address),
+        paymentMethod: text(data.paymentMethod),
+        finalFare: number(data.finalFare),
+        waitingCharge: number(data.waitingCharge),
+        platformFee: number(data.platformFee),
+        driverNetFare: number(data.driverNetFare),
+        currencyCode: text(data.currencyCode) || "SSP",
+        completedAtMillis: millis(data.completedAt),
+      };
+    }),
+  };
+}, "The receipt list could not be loaded.");
 
 exports.adminListAdminActivity = callable(async (request) => {
   const limit = limitFrom(request.data?.limit, 100, 200);
