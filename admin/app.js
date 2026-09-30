@@ -19,7 +19,11 @@ const api = {
   overview: call("adminGetOperationsOverview"),
   drivers: call("adminListDrivers"),
   rides: call("adminListRides"),
+  receipts: call("adminListReceipts"),
+  recharges: call("adminListRecharges"),
   activity: call("adminListAdminActivity"),
+  businessSettings: call("adminGetBusinessSettings"),
+  setCommission: call("adminSetCommissionRate"),
   creditWallet: call("adminCreditDriverWallet"),
   walletStatus: call("adminSetDriverWalletStatus"),
   reviewStatus: call("adminSetDriverReviewStatus"),
@@ -36,16 +40,20 @@ const el = {
   refreshDrivers: $("#refresh-drivers"), driverSearch: $("#driver-search"), driverFilter: $("#driver-filter"), driverCount: $("#driver-count"), driverList: $("#driver-list"),
   empty: $("#empty-state"), detail: $("#driver-detail"), name: $("#driver-name"), meta: $("#driver-meta"), reviewBadge: $("#review-badge"),
   walletBalance: $("#wallet-balance"), walletStatus: $("#wallet-status"), walletCredits: $("#wallet-credits"), walletDebits: $("#wallet-debits"),
-  vehicleType: $("#vehicle-type"), plateNumber: $("#plate-number"), vehicleClass: $("#vehicle-class"), vehicleClassHint: $("#vehicle-class-hint"), saveVehicleClass: $("#save-vehicle-class"),
-  topupForm: $("#topup-form"), topupAmount: $("#topup-amount"), topupReference: $("#topup-reference"), topupNote: $("#topup-note"), rechargePreview: $("#recharge-preview"),
+  vehicleType: $("#vehicle-type"), plateNumber: $("#plate-number"), vehicleClasses: $("#vehicle-classes"), vehicleClassHint: $("#vehicle-class-hint"), saveVehicleClass: $("#save-vehicle-class"),
   reviewStatus: $("#review-status"), saveReview: $("#save-review"), walletStatusSelect: $("#wallet-status-select"), saveWalletStatus: $("#save-wallet-status"), ledger: $("#ledger-body"),
+  refreshRecharges: $("#refresh-recharges"), rechargeForm: $("#recharge-form"), rechargeDriver: $("#recharge-driver"), rechargeAmount: $("#recharge-amount"), rechargeReference: $("#recharge-reference"), rechargeNote: $("#recharge-note"), rechargePagePreview: $("#recharge-page-preview"), rechargesBody: $("#recharges-body"),
   refreshRides: $("#refresh-rides"), rideSearch: $("#ride-search"), rideFilter: $("#ride-filter"), rideCount: $("#ride-count"), ridesBody: $("#rides-body"),
+  refreshReceipts: $("#refresh-receipts"), receiptSearch: $("#receipt-search"), receiptCount: $("#receipt-count"), receiptsBody: $("#receipts-body"),
+  refreshCommission: $("#refresh-commission"), commissionForm: $("#commission-form"), commissionPercent: $("#commission-percent"), commissionPreview: $("#commission-preview"),
   refreshActivity: $("#refresh-activity"), activityBody: $("#activity-body"), toast: $("#toast"), dialog: $("#confirm-dialog"),
   confirmTitle: $("#confirm-title"), confirmMessage: $("#confirm-message"), confirmCancel: $("#confirm-cancel"), confirmAccept: $("#confirm-accept"),
 };
 
 let drivers = [];
 let rides = [];
+let receipts = [];
+let recharges = [];
 let selectedDriverId = null;
 let toastTimer = null;
 let confirmResolver = null;
@@ -83,6 +91,9 @@ function navigate(view) {
   $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (view === "rides" && rides.length === 0) loadRides();
+  if (view === "receipts" && receipts.length === 0) loadReceipts();
+  if (view === "recharges") loadRecharges();
+  if (view === "commission") loadCommission();
   if (view === "activity") loadActivity();
 }
 
@@ -130,10 +141,10 @@ async function loadOverview() {
 }
 
 function selectedDriver() { return drivers.find((driver) => driver.driverId === selectedDriverId) || null; }
-function searchableDriver(driver) { return [driver.firstName, driver.lastName, driver.phoneNumber, driver.plateNumber, driver.vehicleType, driver.vehicleClass, driver.driverId].join(" ").toLowerCase(); }
+function searchableDriver(driver) { return [driver.firstName, driver.lastName, driver.phoneNumber, driver.plateNumber, driver.vehicleType, ...(driver.vehicleClasses || []), driver.driverId].join(" ").toLowerCase(); }
 function driverMatchesFilter(driver, filter) {
   const wallet = driver.wallet || {};
-  return filter === "all" || (filter === "pending" && driver.reviewStatus === "pending") || (filter === "low" && wallet.isLowBalance) || (filter === "blocked" && wallet.status === "suspended") || (filter === "unclassified" && driver.requiresVehicleClass && !driver.vehicleClass);
+  return filter === "all" || (filter === "pending" && driver.reviewStatus === "pending") || (filter === "low" && wallet.isLowBalance) || (filter === "blocked" && wallet.status === "suspended") || (filter === "unclassified" && driver.requiresVehicleClass && !(driver.vehicleClasses || []).length);
 }
 
 function renderDriverList() {
@@ -154,7 +165,7 @@ async function loadDrivers({ preserveSelection = true } = {}) {
   try {
     const result = await api.drivers({ limit: 200 }); drivers = Array.isArray(result.data?.drivers) ? result.data.drivers : [];
     if (!preserveSelection || (selectedDriverId && !selectedDriver())) selectedDriverId = null;
-    renderDriverList(); renderDriverDetail(selectedDriver());
+    renderDriverList(); renderDriverDetail(selectedDriver()); renderRechargeDrivers();
   } catch (error) { showToast(readableError(error), "error"); }
   finally { setBusy(el.refreshDrivers, false); }
 }
@@ -169,15 +180,12 @@ function renderDriverDetail(driver) {
   el.walletBalance.textContent = `${money(wallet.balance)} ${wallet.currencyCode || "SSP"}`;
   el.walletStatus.textContent = wallet.status === "suspended" ? "Suspended — cannot work" : wallet.balance <= 0 ? "Recharge required" : wallet.isLowBalance ? "Low balance" : "Ready for rides";
   el.walletCredits.textContent = `${money(wallet.lifetimeCredits)} SSP`; el.walletDebits.textContent = `${money(wallet.lifetimeDebits)} SSP`;
-  el.vehicleType.textContent = driver.vehicleType || "Not recorded"; el.plateNumber.textContent = `${driver.plateNumber || "No plate"} · Alpha ${vehicleClassLabel(driver.vehicleClass)}`;
-  el.vehicleClass.value = driver.vehicleClass || ""; el.vehicleClass.disabled = !driver.requiresVehicleClass; el.saveVehicleClass.disabled = !driver.requiresVehicleClass;
-  el.vehicleClassHint.textContent = driver.requiresVehicleClass ? (driver.vehicleClass ? "Update only after inspecting the vehicle." : "Required before this vehicle can be approved.") : `Automatically classified as ${vehicleClassLabel(driver.vehicleClass)}.`;
-  el.reviewStatus.value = driver.reviewStatus || "pending"; el.walletStatusSelect.value = wallet.status || "active"; updateRechargePreview();
-}
-
-function updateRechargePreview() {
-  const driver = selectedDriver(); const amount = Number(el.topupAmount.value);
-  el.rechargePreview.textContent = driver && Number.isFinite(amount) && amount > 0 ? `New balance: ${money((driver.wallet?.balance || 0) + amount)} SSP` : "Enter an amount to preview the new balance.";
+  const classes = driver.vehicleClasses?.length ? driver.vehicleClasses : (driver.vehicleClass ? [driver.vehicleClass] : []);
+  el.vehicleType.textContent = driver.vehicleType || "Not recorded"; el.plateNumber.textContent = `${driver.plateNumber || "No plate"} · ${classes.length ? classes.map(vehicleClassLabel).join(", ") : "Class unassigned"}`;
+  $$("#vehicle-classes input").forEach((input) => { input.checked = classes.includes(input.value); input.disabled = !driver.requiresVehicleClass; });
+  el.saveVehicleClass.disabled = !driver.requiresVehicleClass;
+  el.vehicleClassHint.textContent = driver.requiresVehicleClass ? (classes.length ? "A car may qualify for more than one service class after inspection." : "Choose at least one class before approving this vehicle.") : `Automatically classified as ${classes.map(vehicleClassLabel).join(", ") || "its fixed local category"}.`;
+  el.reviewStatus.value = driver.reviewStatus || "pending"; el.walletStatusSelect.value = wallet.status || "active";
 }
 
 function cellRow(values, classes = {}) {
@@ -191,6 +199,65 @@ async function loadLedger(driverId) {
     if (!txs.length) { const row = cellRow(["No wallet transactions yet."]); row.firstElementChild.colSpan = 5; el.ledger.append(row); return; }
     txs.forEach((item) => { const credit = item.type === "top_up"; const type = item.type === "ride_fee" ? "Ride fee" : credit ? "Office recharge" : "Access change"; el.ledger.append(cellRow([dateTime(item.createdAtMillis), type, `${credit ? "+" : item.amount ? "−" : ""}${money(item.amount)} ${item.currencyCode || "SSP"}`, `${money(item.balanceAfter)} ${item.currencyCode || "SSP"}`, item.reference || item.rideId || item.note || "—"], { 2: item.amount ? (credit ? "credit" : "debit") : "" })); });
   } catch (error) { el.ledger.replaceChildren(); const row = cellRow([readableError(error)]); row.firstElementChild.colSpan = 5; el.ledger.append(row); }
+}
+
+function renderRechargeDrivers() {
+  const selected = el.rechargeDriver.value;
+  const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = "Select a driver";
+  el.rechargeDriver.replaceChildren(placeholder);
+  drivers.forEach((driver) => {
+    const option = document.createElement("option"); option.value = driver.driverId;
+    option.textContent = `${`${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "Unnamed driver"} · ${driver.phoneNumber || driver.driverId.slice(0, 10)} · ${money(driver.wallet?.balance)} SSP`;
+    el.rechargeDriver.append(option);
+  });
+  if (drivers.some((driver) => driver.driverId === selected)) el.rechargeDriver.value = selected;
+  updateRechargePagePreview();
+}
+
+function updateRechargePagePreview() {
+  const driver = drivers.find((item) => item.driverId === el.rechargeDriver.value);
+  const amount = Number(el.rechargeAmount.value);
+  el.rechargePagePreview.textContent = driver && Number.isFinite(amount) && amount > 0
+    ? `Current ${money(driver.wallet?.balance)} SSP → new balance ${money((driver.wallet?.balance || 0) + amount)} SSP`
+    : "Choose a driver and amount to preview the new balance.";
+}
+
+async function loadRecharges() {
+  setBusy(el.refreshRecharges, true, "Refreshing…"); el.rechargesBody.replaceChildren();
+  try {
+    const result = await api.recharges({ limit: 150 }); recharges = Array.isArray(result.data?.recharges) ? result.data.recharges : [];
+    recharges.forEach((item) => el.rechargesBody.append(cellRow([dateTime(item.createdAtMillis), item.driverName || item.driverId?.slice(0, 12) || "—", `+${money(item.amount)} SSP`, `${money(item.balanceAfter)} SSP`, item.reference || "—", item.administratorEmail || "Authorized admin"], { 2: "credit" })));
+    if (!recharges.length) { const row = cellRow(["No recharges recorded yet."]); row.firstElementChild.colSpan = 6; el.rechargesBody.append(row); }
+  } catch (error) { const row = cellRow([readableError(error)]); row.firstElementChild.colSpan = 6; el.rechargesBody.append(row); }
+  finally { setBusy(el.refreshRecharges, false); }
+}
+
+function renderReceipts() {
+  const query = el.receiptSearch.value.trim().toLowerCase();
+  const filtered = receipts.filter((receipt) => !query || [receipt.receiptNumber, receipt.rideId, receipt.driverId, receipt.passengerId, receipt.pickupAddress, receipt.destinationAddress].join(" ").toLowerCase().includes(query));
+  el.receiptCount.textContent = `${filtered.length} of ${receipts.length} receipts`; el.receiptsBody.replaceChildren();
+  filtered.forEach((item) => el.receiptsBody.append(cellRow([dateTime(item.completedAtMillis), item.receiptNumber || "Pending", vehicleClassLabel(item.rideOptionId), `${item.pickupAddress || "Pickup"} → ${item.destinationAddress || "Destination"}`, `${money(item.finalFare)} ${item.currencyCode || "SSP"}`, `${money(item.platformFee)} SSP`, `${money(item.driverNetFare)} SSP`], { 1: "receipt-number", 5: "credit" })));
+  if (!filtered.length) { const row = cellRow(["No receipts match this search."]); row.firstElementChild.colSpan = 7; el.receiptsBody.append(row); }
+}
+
+async function loadReceipts() {
+  setBusy(el.refreshReceipts, true, "Refreshing…");
+  try { const result = await api.receipts({ limit: 200 }); receipts = Array.isArray(result.data?.receipts) ? result.data.receipts : []; renderReceipts(); }
+  catch (error) { showToast(readableError(error), "error"); }
+  finally { setBusy(el.refreshReceipts, false); }
+}
+
+function updateCommissionPreview() {
+  const percent = Number(el.commissionPercent.value);
+  const fee = Number.isFinite(percent) ? Math.round(100000 * percent / 100) : 0;
+  el.commissionPreview.textContent = `Example: Alpha receives ${money(fee)} SSP and the driver keeps ${money(100000 - fee)} SSP from a 100,000 SSP completed ride.`;
+}
+
+async function loadCommission() {
+  setBusy(el.refreshCommission, true, "Refreshing…");
+  try { const result = await api.businessSettings(); el.commissionPercent.value = result.data?.commissionPercent ?? 10; updateCommissionPreview(); }
+  catch (error) { showToast(readableError(error), "error"); }
+  finally { setBusy(el.refreshCommission, false); }
 }
 
 function rideStatusLabel(status) { return ({ driver_arriving: "Driver arriving", in_progress: "In progress" })[status] || (status ? status[0].toUpperCase() + status.slice(1) : "Unknown"); }
@@ -212,7 +279,7 @@ async function loadRides() {
   finally { setBusy(el.refreshRides, false); }
 }
 
-function activityLabel(action) { return ({ driver_review_status: "Driver review", driver_vehicle_class: "Vehicle class", wallet_top_up: "Wallet recharge", wallet_status: "Wallet access" })[action] || action.replaceAll("_", " "); }
+function activityLabel(action) { return ({ driver_review_status: "Driver review", driver_vehicle_class: "Vehicle classes", wallet_top_up: "Wallet recharge", wallet_status: "Wallet access", commission_rate: "Commission rate" })[action] || action.replaceAll("_", " "); }
 async function loadActivity() {
   setBusy(el.refreshActivity, true, "Refreshing…"); el.activityBody.replaceChildren();
   try {
@@ -231,17 +298,20 @@ el.confirmCancel.addEventListener("click", () => closeDialog(false)); el.confirm
 document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !el.dialog.hidden) closeDialog(false); });
 el.refreshOverview.addEventListener("click", loadOverview); el.refreshDrivers.addEventListener("click", () => loadDrivers()); el.driverSearch.addEventListener("input", renderDriverList); el.driverFilter.addEventListener("change", renderDriverList);
 el.refreshRides.addEventListener("click", loadRides); el.rideSearch.addEventListener("input", renderRides); el.rideFilter.addEventListener("change", renderRides); el.refreshActivity.addEventListener("click", loadActivity);
-$$('.quick-amounts button').forEach((button) => button.addEventListener("click", () => { el.topupAmount.value = button.dataset.amount; updateRechargePreview(); })); el.topupAmount.addEventListener("input", updateRechargePreview);
+el.refreshRecharges.addEventListener("click", loadRecharges); el.refreshReceipts.addEventListener("click", loadReceipts); el.receiptSearch.addEventListener("input", renderReceipts); el.refreshCommission.addEventListener("click", loadCommission);
+$$('[data-recharge-amount]').forEach((button) => button.addEventListener("click", () => { el.rechargeAmount.value = button.dataset.rechargeAmount; updateRechargePagePreview(); })); el.rechargeAmount.addEventListener("input", updateRechargePagePreview); el.rechargeDriver.addEventListener("change", updateRechargePagePreview); el.commissionPercent.addEventListener("input", updateCommissionPreview);
 
-el.topupForm.addEventListener("submit", async (event) => {
-  event.preventDefault(); const driver = selectedDriver(); if (!driver) return; const amount = Number(el.topupAmount.value); const reference = el.topupReference.value.trim();
-  const approved = await confirmAction({ title: "Confirm wallet recharge", message: `Add ${money(amount)} SSP to ${el.name.textContent}? The receipt reference is ${reference}. This creates a permanent audit record.`, confirmLabel: `Add ${money(amount)} SSP` }); if (!approved) return;
-  const button = el.topupForm.querySelector("button[type=submit]"); setBusy(button, true, "Recording…");
-  try { await api.creditWallet({ driverId: driver.driverId, amount, reference, note: el.topupNote.value.trim() }); el.topupForm.reset(); showToast("Wallet recharge recorded successfully."); await Promise.all([loadDrivers(), loadLedger(driver.driverId), loadOverview()]); }
-  catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); updateRechargePreview(); }
+el.rechargeForm.addEventListener("submit", async (event) => {
+  event.preventDefault(); const driver = drivers.find((item) => item.driverId === el.rechargeDriver.value); if (!driver) return showToast("Select a driver first.", "error"); const amount = Number(el.rechargeAmount.value); const reference = el.rechargeReference.value.trim();
+  const name = `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "this driver"; const approved = await confirmAction({ title: "Confirm wallet recharge", message: `Add ${money(amount)} SSP to ${name}? Reference: ${reference}. This creates a permanent audit record.`, confirmLabel: `Add ${money(amount)} SSP` }); if (!approved) return;
+  const button = el.rechargeForm.querySelector("button[type=submit]"); setBusy(button, true, "Recording…");
+  try { await api.creditWallet({ driverId: driver.driverId, amount, reference, note: el.rechargeNote.value.trim() }); el.rechargeForm.reset(); showToast("Wallet recharge recorded successfully."); await Promise.all([loadDrivers(), loadRecharges(), loadOverview()]); }
+  catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); updateRechargePagePreview(); }
 });
 
-el.saveVehicleClass.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver?.requiresVehicleClass) return; if (!el.vehicleClass.value) return showToast("Select an Alpha ride class first.", "error"); const approved = await confirmAction({ title: "Change vehicle class?", message: `Assign ${el.name.textContent} to Alpha ${vehicleClassLabel(el.vehicleClass.value)} after physical inspection?`, confirmLabel: "Save class" }); if (!approved) return; setBusy(el.saveVehicleClass, true); try { await api.vehicleClass({ driverId: driver.driverId, vehicleClass: el.vehicleClass.value }); showToast("Driver vehicle class updated."); await Promise.all([loadDrivers(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveVehicleClass, false); } });
+el.saveVehicleClass.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver?.requiresVehicleClass) return; const vehicleClasses = $$("#vehicle-classes input:checked").map((input) => input.value); if (!vehicleClasses.length) return showToast("Select at least one Alpha ride class.", "error"); const labels = vehicleClasses.map(vehicleClassLabel).join(", "); const approved = await confirmAction({ title: "Change ride classes?", message: `Assign ${el.name.textContent} to ${labels} after physical inspection?`, confirmLabel: "Save classes" }); if (!approved) return; setBusy(el.saveVehicleClass, true); try { await api.vehicleClass({ driverId: driver.driverId, vehicleClasses }); showToast("Driver ride classes updated."); await Promise.all([loadDrivers(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveVehicleClass, false); } });
+
+el.commissionForm.addEventListener("submit", async (event) => { event.preventDefault(); const commissionPercent = Number(el.commissionPercent.value); const approved = await confirmAction({ title: "Update commission rate?", message: `New rides will use a ${commissionPercent}% Alpha commission. Existing rides keep the rate they were created with.`, confirmLabel: "Save rate" }); if (!approved) return; const button = el.commissionForm.querySelector("button[type=submit]"); setBusy(button, true, "Saving…"); try { const result = await api.setCommission({ commissionPercent }); el.commissionPercent.value = result.data.commissionPercent; updateCommissionPreview(); showToast("Commission rate updated for new rides."); await Promise.all([loadActivity(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); } });
 el.saveReview.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.reviewStatus.value; const approved = await confirmAction({ title: `${rideStatusLabel(status)} this driver?`, message: `Change ${el.name.textContent}'s review status to ${status}.`, confirmLabel: "Save status" }); if (!approved) return; setBusy(el.saveReview, true); try { await api.reviewStatus({ driverId: driver.driverId, reviewStatus: status, note: "Updated from Alpha Admin" }); showToast("Driver review status updated."); await Promise.all([loadDrivers(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveReview, false); } });
 el.saveWalletStatus.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.walletStatusSelect.value; const approved = await confirmAction({ title: status === "suspended" ? "Suspend wallet access?" : "Restore wallet access?", message: status === "suspended" ? `${el.name.textContent} will be unable to go online or accept rides.` : `${el.name.textContent} may work again if the wallet has enough credit.`, confirmLabel: status === "suspended" ? "Suspend access" : "Restore access" }); if (!approved) return; setBusy(el.saveWalletStatus, true); try { await api.walletStatus({ driverId: driver.driverId, status, note: "Updated from Alpha Admin" }); showToast("Wallet access updated."); await Promise.all([loadDrivers(), loadLedger(driver.driverId), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveWalletStatus, false); } });
 
