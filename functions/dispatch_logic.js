@@ -2,6 +2,7 @@
 
 const {
   effectiveVehicleClassForProfile,
+  effectiveVehicleClassesForProfile,
   normalizeVehicleClass,
 } = require("./vehicle_logic");
 
@@ -30,6 +31,7 @@ function buildDriverPublicSummary(profile) {
       lastName: "",
       vehicleType: "",
       vehicleClass: "",
+      vehicleClasses: [],
       make: "",
       model: "",
       color: "",
@@ -57,6 +59,7 @@ function buildDriverPublicSummary(profile) {
       60,
     ),
     vehicleClass: effectiveVehicleClassForProfile(profile),
+    vehicleClasses: effectiveVehicleClassesForProfile(profile),
     make: _publicText(registration.make, 60),
     model: _publicText(registration.model, 60),
     color: _publicText(registration.color, 40),
@@ -100,10 +103,11 @@ function presenceAllowsAcceptance({
     typeof presence.driverId === "string" ? presence.driverId.trim() : "";
   if (storedDriverId && storedDriverId !== driverId) return false;
 
-  return (
-    normalizeVehicleType(presence.vehicleType) ===
-    normalizeVehicleType(requiredVehicleType)
-  );
+  const activeRideId =
+    typeof presence.activeRideId === "string"
+      ? presence.activeRideId.trim()
+      : "";
+  return activeRideId === "";
 }
 
 function presenceIsWithinPickupRadius({
@@ -257,8 +261,10 @@ function profileAllowsDispatch(profile, requiredVehicleType) {
       : "";
   if (reviewStatus !== "approved") return false;
 
-  const profileVehicleType = effectiveVehicleClassForProfile(profile);
-  return profileVehicleType === normalizeVehicleType(requiredVehicleType);
+  const profileVehicleTypes = effectiveVehicleClassesForProfile(profile);
+  return profileVehicleTypes.includes(
+    normalizeVehicleType(requiredVehicleType),
+  );
 }
 
 function validateRideId(value) {

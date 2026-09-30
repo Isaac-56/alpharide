@@ -6,6 +6,7 @@ class DriverLocationModel {
   final bool isOnline;
   final int updatedAt;
   final String vehicleType;
+  final String? activeRideId;
 
   const DriverLocationModel({
     required this.driverId,
@@ -15,7 +16,10 @@ class DriverLocationModel {
     required this.isOnline,
     required this.updatedAt,
     required this.vehicleType,
+    required this.activeRideId,
   });
+
+  bool get isAvailable => activeRideId == null;
 
   factory DriverLocationModel.fromMap(
     String driverId,
@@ -29,6 +33,7 @@ class DriverLocationModel {
       isOnline: _toBool(data['isOnline'] ?? data['online']),
       updatedAt: _toInt(data['updatedAt'] ?? data['lastUpdated']) ?? 0,
       vehicleType: data['vehicleType']?.toString() ?? 'standard',
+      activeRideId: _nonEmptyString(data['activeRideId']),
     );
   }
 
@@ -38,6 +43,11 @@ class DriverLocationModel {
         longitude >= -180 &&
         longitude <= 180 &&
         !(latitude == 0 && longitude == 0);
+  }
+
+  static String? _nonEmptyString(Object? value) {
+    final String normalized = value?.toString().trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
   }
 
   static double? _toDouble(Object? value) {

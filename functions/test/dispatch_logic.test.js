@@ -77,7 +77,7 @@ test("candidate selection keeps fresh matching nearby drivers sorted", () => {
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.driverId),
-    ["near", "farther"],
+    ["near", "wrongType", "farther"],
   );
   assert.ok(
     candidates[0].distanceToPickupMeters <
@@ -111,7 +111,7 @@ test("acceptance location must remain near the passenger pickup", () => {
   );
 });
 
-test("acceptance requires current online matching presence", () => {
+test("acceptance requires current online and unassigned presence", () => {
   const nowMs = 1_800_000_000_000;
   const valid = {
     driverId: "driver-1",
@@ -154,6 +154,15 @@ test("acceptance requires current online matching presence", () => {
       requiredVehicleType: "standard",
       nowMs,
     }),
+    true,
+  );
+  assert.equal(
+    presenceAllowsAcceptance({
+      presence: { ...valid, activeRideId: "ride-active" },
+      driverId: "driver-1",
+      requiredVehicleType: "standard",
+      nowMs,
+    }),
     false,
   );
 });
@@ -175,10 +184,23 @@ test("driver profile must be approved and vehicle matched", () => {
         reviewStatus: "approved",
         registration: {
           vehicleType: "SUV / 4x4",
-          vehicleClass: "comfort",
+          vehicleClasses: ["standard", "comfort", "ev"],
         },
       },
       "comfort",
+    ),
+    true,
+  );
+  assert.equal(
+    profileAllowsDispatch(
+      {
+        reviewStatus: "approved",
+        registration: {
+          vehicleType: "SUV / 4x4",
+          vehicleClasses: ["standard", "ev"],
+        },
+      },
+      "standard",
     ),
     true,
   );
@@ -297,6 +319,7 @@ test("public driver summary exposes rider-safe identity and vehicle fields", () 
       lastName: "Driver",
       vehicleType: "Car",
       vehicleClass: "standard",
+      vehicleClasses: ["standard"],
       make: "Toyota",
       model: "Corolla",
       color: "White",
@@ -312,6 +335,7 @@ test("public driver summary falls back safely when profile data is absent", () =
     lastName: "",
     vehicleType: "",
     vehicleClass: "",
+    vehicleClasses: [],
     make: "",
     model: "",
     color: "",

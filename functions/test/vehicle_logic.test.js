@@ -5,10 +5,12 @@ const assert = require("node:assert/strict");
 
 const {
   effectiveVehicleClassForProfile,
+  effectiveVehicleClassesForProfile,
   fixedVehicleClassForBody,
   normalizeVehicleBodyType,
   normalizeVehicleClass,
   requireAdminVehicleClass,
+  requireAdminVehicleClasses,
   requiresAdminVehicleClass,
 } = require("../vehicle_logic");
 
@@ -62,4 +64,28 @@ test("administrator classes reject fixed or unknown values", () => {
   assert.equal(requireAdminVehicleClass(" Premium "), "premium");
   assert.throws(() => requireAdminVehicleClass("boda"), /vehicleClass/);
   assert.throws(() => requireAdminVehicleClass("sedan"), /vehicleClass/);
+});
+
+
+test("regular cars may belong to multiple administrator service classes", () => {
+  const profile = {
+    reviewStatus: "approved",
+    registration: {
+      vehicleType: "Electric SUV",
+      vehicleClasses: ["ev", "standard", "comfort"],
+    },
+  };
+  assert.deepEqual(
+    effectiveVehicleClassesForProfile(profile),
+    ["standard", "comfort", "ev"],
+  );
+  assert.equal(effectiveVehicleClassForProfile(profile), "standard");
+  assert.deepEqual(
+    requireAdminVehicleClasses(["comfort", "standard"]),
+    ["standard", "comfort"],
+  );
+  assert.throws(
+    () => requireAdminVehicleClasses(["standard", "boda"]),
+    /vehicleClasses/,
+  );
 });

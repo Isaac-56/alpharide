@@ -12,8 +12,9 @@ const { normalizePhoneNumber } = require("./account_role_logic");
 const { PLATFORM_COMMISSION_BPS } = require("./accounting_logic");
 const {
   effectiveVehicleClassForProfile,
+  effectiveVehicleClassesForProfile,
   fixedVehicleClassForBody,
-  requireAdminVehicleClass,
+  requireAdminVehicleClasses,
   requiresAdminVehicleClass,
 } = require("./vehicle_logic");
 const {
@@ -228,8 +229,9 @@ exports.adminListDrivers = callable(async (request) => {
           ? profile.registration
           : {};
       const profileWithRegistration = { ...profile, registration };
-      const vehicleClass =
-        effectiveVehicleClassForProfile(profileWithRegistration);
+      const vehicleClasses =
+        effectiveVehicleClassesForProfile(profileWithRegistration);
+      const vehicleClass = vehicleClasses[0] ?? "";
       return {
         driverId: document.id,
         firstName:
@@ -247,6 +249,7 @@ exports.adminListDrivers = callable(async (request) => {
             ? registration.vehicleType
             : "",
         vehicleClass,
+        vehicleClasses,
         requiresVehicleClass:
           requiresAdminVehicleClass(profileWithRegistration),
         plateNumber:
@@ -433,7 +436,10 @@ exports.adminSetDriverWalletStatus = callable(async (request) => {
 exports.adminSetDriverVehicleClass = callable(async (request) => {
   const administrator = requireAdmin(request);
   const driverId = await resolveDriverId(request.data);
-  const vehicleClass = requireAdminVehicleClass(request.data?.vehicleClass);
+  const vehicleClasses = requireAdminVehicleClasses(
+    request.data?.vehicleClasses,
+  );
+  const vehicleClass = vehicleClasses[0];
   const profileRef = db.collection("drivers").doc(driverId);
   const auditRef = db.collection("admin_audit_log").doc();
 
@@ -462,12 +468,14 @@ exports.adminSetDriverVehicleClass = callable(async (request) => {
       );
     }
 
-    const previousVehicleClass =
-      effectiveVehicleClassForProfile(profile) || null;
+    const previousVehicleClasses =
+      effectiveVehicleClassesForProfile(profile);
     const now = FieldValue.serverTimestamp();
     transaction.update(profileRef, {
       "registration.vehicleClass": vehicleClass,
+      "registration.vehicleClasses": vehicleClasses,
       vehicleClass,
+      vehicleClasses,
       vehicleClassAssignedAt: now,
       vehicleClassAssignedBy: administrator.uid,
       updatedAt: now,
@@ -475,15 +483,17 @@ exports.adminSetDriverVehicleClass = callable(async (request) => {
     transaction.create(auditRef, {
       action: "driver_vehicle_class",
       driverId,
-      previousVehicleClass,
+      previousVehicleClass: previousVehicleClasses[0] ?? null,
+      previousVehicleClasses,
       vehicleClass,
+      vehicleClasses,
       administratorUid: administrator.uid,
       administratorEmail: administrator.email,
       createdAt: now,
     });
   });
 
-  return { driverId, vehicleClass };
+  return { driverId, vehicleClass, vehicleClasses };
 }, "The driver vehicle class could not be updated.");
 
 exports.adminSetDriverReviewStatus = callable(async (request) => {
@@ -508,7 +518,7 @@ exports.adminSetDriverReviewStatus = callable(async (request) => {
     const profile = profileSnapshot.data();
     if (
       reviewStatus === "approved" &&
-      !effectiveVehicleClassForProfile(profile)
+      effectiveVehicleClassesForProfile(profile).length === 0
     ) {
       throw new HttpsError(
         "failed-precondition",
