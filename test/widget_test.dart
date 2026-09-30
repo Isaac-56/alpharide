@@ -71,12 +71,12 @@ void main() {
       await tester.pump();
 
       expect(find.text('Continue'), findsOneWidget);
-      expect(find.text('~ 17,500 SSP'), findsNWidgets(2));
+      expect(find.text('~ 37,500 SSP'), findsNWidgets(2));
 
       await tester.tap(find.text('Continue'));
       await tester.pump();
 
-      expect(confirmedRide?.estimatedFare, 17500);
+      expect(confirmedRide?.estimatedFare, 37500);
 
       // Let the OrderPanel confirmation lock timer finish before the test ends.
       await tester.pump(const Duration(milliseconds: 701));
@@ -221,7 +221,7 @@ void main() {
       standard.calculateFare(
         distanceKilometers: 10,
       ),
-      42000,
+      100000,
     );
   });
 }
