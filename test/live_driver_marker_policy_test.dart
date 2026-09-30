@@ -25,6 +25,17 @@ void main() {
       );
     });
 
+    test('hides busy drivers from nearby browsing', () {
+      expect(
+        LiveDriverMarkerPolicy.isAvailableToNearbyPassengers(null),
+        isTrue,
+      );
+      expect(
+        LiveDriverMarkerPolicy.isAvailableToNearbyPassengers('ride-123'),
+        isFalse,
+      );
+    });
+
     test('normalizes headings into one complete turn', () {
       expect(LiveDriverMarkerPolicy.normalizedHeading(360), 0);
       expect(LiveDriverMarkerPolicy.normalizedHeading(725), 5);

@@ -27,6 +27,7 @@ const {
 } = require("./dispatch_logic");
 const {
   PLATFORM_COMMISSION_BPS,
+  commissionBpsFromConfig,
 } = require("./accounting_logic");
 const {
   CURRENCY_CODE,
@@ -192,6 +193,24 @@ function offerReference(driverId, rideId) {
     .doc(rideId);
 }
 
+async function markDriverPresenceBusy(driverId, rideId) {
+  await realtimeDb.ref(`driver_locations/${driverId}`).update({
+    activeRideId: rideId,
+    updatedAt: Date.now(),
+  });
+}
+
+async function clearDriverPresenceBusy(driverId, rideId) {
+  const reference = realtimeDb.ref(`driver_locations/${driverId}`);
+  await reference.transaction((current) => {
+    if (!current || typeof current !== "object") return;
+    if (current.activeRideId !== rideId) return;
+    const next = { ...current, updatedAt: Date.now() };
+    delete next.activeRideId;
+    return next;
+  });
+}
+
 async function markOffers(rideId, driverIds, status) {
   if (!Array.isArray(driverIds) || driverIds.length === 0) return;
   const batch = db.batch();
@@ -217,6 +236,7 @@ async function dispatchRide({
   requiredVehicleType,
   paymentMethod,
   estimatedFare,
+  commissionBps,
 }) {
   const rideRef = db.collection("rides").doc(rideId);
   const presenceSnapshot = await realtimeDb.ref("driver_locations").get();
@@ -274,7 +294,7 @@ async function dispatchRide({
     walletRideEligibility({
       wallet: walletsByDriverId[candidate.driverId] ?? {},
       estimatedFare,
-      commissionBps: PLATFORM_COMMISSION_BPS,
+      commissionBps,
     }).allowed,
   );
 
@@ -309,7 +329,7 @@ async function dispatchRide({
       estimatedFare,
       requiredWalletCredit: estimatedPlatformFee({
         estimatedFare,
-        commissionBps: PLATFORM_COMMISSION_BPS,
+        commissionBps,
       }),
       currencyCode: CURRENCY_CODE,
       distanceToPickupMeters: candidate.distanceToPickupMeters,
@@ -421,7 +441,13 @@ exports.createRide = onCall(
     try {
       const passengerId = requireAuthenticatedUser(request);
       const input = validateCreateRideInput(request.data);
-      const route = await computeTrustedRoute(input.pickup, input.destination);
+      const [route, accountingConfigSnapshot] = await Promise.all([
+        computeTrustedRoute(input.pickup, input.destination),
+        db.collection("platform_config").doc("accounting").get(),
+      ]);
+      const commissionBps = commissionBpsFromConfig(
+        accountingConfigSnapshot.exists ? accountingConfigSnapshot.data() : {},
+      );
       const estimatedFare = calculateFare({
         rideOptionId: input.rideOptionId,
         distanceMeters: route.distanceMeters,
@@ -468,7 +494,8 @@ exports.createRide = onCall(
           paymentMethod: input.paymentMethod,
           estimatedFare,
           finalFare: null,
-          pricingVersion: "juba-distance-wait-v1",
+          platformCommissionBps: commissionBps,
+          pricingVersion: "juba-distance-wait-v2",
           currencyCode: CURRENCY_CODE,
           routeDistanceMeters: Math.round(route.distanceMeters),
           routeDurationSeconds: Math.round(route.durationSeconds),
@@ -511,6 +538,7 @@ exports.createRide = onCall(
           requiredVehicleType: input.rideOptionId,
           paymentMethod: input.paymentMethod,
           estimatedFare,
+          commissionBps,
         });
       } catch (dispatchError) {
         logger.error("Initial ride dispatch failed", {
@@ -639,6 +667,17 @@ exports.cancelRide = onCall(
         offeredDriverIds.push(assignedDriverId);
       }
 
+      if (assignedDriverId) {
+        await clearDriverPresenceBusy(assignedDriverId, rideId).catch(
+          (cleanupError) => {
+            logger.warn("Could not clear cancelled driver presence", {
+              rideId,
+              driverId: assignedDriverId,
+              error: cleanupError,
+            });
+          },
+        );
+      }
       await markOffers(rideId, offeredDriverIds, "cancelled").catch(
         (cleanupError) => {
           logger.warn("Could not close cancelled ride offers", {
@@ -766,7 +805,9 @@ exports.acceptRideOffer = onCall(
         const walletEligibility = walletRideEligibility({
           wallet: walletSnapshot.exists ? walletSnapshot.data() : {},
           estimatedFare: rideSnapshot.get("estimatedFare"),
-          commissionBps: PLATFORM_COMMISSION_BPS,
+          commissionBps:
+            rideSnapshot.get("platformCommissionBps") ??
+            PLATFORM_COMMISSION_BPS,
         });
         if (!walletEligibility.allowed) {
           const message = walletEligibility.reason === "wallet_suspended"
@@ -811,6 +852,7 @@ exports.acceptRideOffer = onCall(
         });
       });
 
+      await markDriverPresenceBusy(driverId, rideId);
       await markOffers(
         rideId,
         competingDriverIds.filter((candidateId) => candidateId !== driverId),

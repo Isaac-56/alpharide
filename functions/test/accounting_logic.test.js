@@ -5,8 +5,11 @@ const assert = require("node:assert/strict");
 
 const {
   ACCOUNTING_VERSION,
+  MAX_PLATFORM_COMMISSION_BPS,
   PLATFORM_COMMISSION_BPS,
   calculateCompletedRideAccounting,
+  commissionBpsFromConfig,
+  normalizeCommissionBps,
 } = require("../accounting_logic");
 
 test("cash completion gives Alpha 10 percent and records a wallet deduction", () => {
@@ -35,6 +38,24 @@ test("commission uses integer SSP rounding", () => {
 
   assert.equal(accounting.platformFee, 1000);
   assert.equal(accounting.driverNetFare, 9001);
+});
+
+test("configured commission is normalized and frozen in basis points", () => {
+  assert.equal(commissionBpsFromConfig({ commissionBps: 1250 }), 1250);
+  assert.equal(commissionBpsFromConfig({}), PLATFORM_COMMISSION_BPS);
+  assert.equal(normalizeCommissionBps(0), 0);
+  assert.throws(
+    () => normalizeCommissionBps(MAX_PLATFORM_COMMISSION_BPS + 1),
+    /between 0 and 5000/,
+  );
+
+  const accounting = calculateCompletedRideAccounting({
+    grossFare: 100000,
+    paymentMethod: "cash",
+    commissionBps: 1250,
+  });
+  assert.equal(accounting.platformFee, 12500);
+  assert.equal(accounting.driverNetFare, 87500);
 });
 
 test("launch accounting rejects invalid fares and unimplemented payments", () => {

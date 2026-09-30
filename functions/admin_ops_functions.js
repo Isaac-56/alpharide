@@ -3,6 +3,10 @@
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const {
+  PLATFORM_COMMISSION_BPS,
+  normalizeCommissionBps,
+} = require("./accounting_logic");
 
 const REGION = "africa-south1";
 const ACTIVE_RIDE_STATUSES = [
@@ -86,6 +90,7 @@ function ridePayload(document) {
     estimatedFare: number(data.estimatedFare),
     finalFare: number(data.finalFare),
     platformFee: number(data.platformFee),
+    receiptNumber: text(data.receiptNumber),
     currencyCode: text(data.currencyCode) || "SSP",
     routeDistanceMeters: number(data.routeDistanceMeters),
     requestedAtMillis: millis(data.requestedAt),
@@ -201,6 +206,39 @@ exports.adminListRides = callable(async (request) => {
   return { rides: snapshot.docs.map(ridePayload) };
 }, "The recent ride list could not be loaded.");
 
+exports.adminListReceipts = callable(async (request) => {
+  const limit = limitFrom(request.data?.limit, 100, 200);
+  const snapshot = await db
+    .collection("ride_receipts")
+    .orderBy("completedAt", "desc")
+    .limit(limit)
+    .get();
+  return {
+    receipts: snapshot.docs.map((document) => {
+      const data = document.data();
+      const pickup = data.pickup && typeof data.pickup === "object" ? data.pickup : {};
+      const destination = data.destination && typeof data.destination === "object" ? data.destination : {};
+      return {
+        receiptId: document.id,
+        receiptNumber: text(data.receiptNumber),
+        rideId: text(data.rideId) || document.id,
+        passengerId: text(data.passengerId),
+        driverId: text(data.driverId),
+        rideOptionId: text(data.rideOptionId),
+        pickupAddress: text(pickup.address),
+        destinationAddress: text(destination.address),
+        paymentMethod: text(data.paymentMethod),
+        finalFare: number(data.finalFare),
+        waitingCharge: number(data.waitingCharge),
+        platformFee: number(data.platformFee),
+        driverNetFare: number(data.driverNetFare),
+        currencyCode: text(data.currencyCode) || "SSP",
+        completedAtMillis: millis(data.completedAt),
+      };
+    }),
+  };
+}, "The receipt list could not be loaded.");
+
 exports.adminListAdminActivity = callable(async (request) => {
   const limit = limitFrom(request.data?.limit, 100, 200);
   const snapshot = await db
@@ -218,9 +256,18 @@ exports.adminListAdminActivity = callable(async (request) => {
     const action = text(data.action);
     let summary = text(data.note);
     if (action === "driver_review_status") summary = `${text(data.previousStatus) || "pending"} → ${text(data.reviewStatus)}`;
-    if (action === "driver_vehicle_class") summary = `${text(data.previousVehicleClass) || "unassigned"} → ${text(data.vehicleClass)}`;
+    if (action === "driver_vehicle_class") {
+      const before = Array.isArray(data.previousVehicleClasses)
+        ? data.previousVehicleClasses.join(", ")
+        : text(data.previousVehicleClass) || "unassigned";
+      const after = Array.isArray(data.vehicleClasses)
+        ? data.vehicleClasses.join(", ")
+        : text(data.vehicleClass);
+      summary = `${before} → ${after}`;
+    }
     if (action === "wallet_top_up") summary = `+${number(data.amount).toLocaleString("en-US")} SSP · ${text(data.reference) || "No reference"}`;
     if (action === "wallet_status") summary = `${text(data.previousStatus) || "active"} → ${text(data.status)}`;
+    if (action === "commission_rate") summary = `${number(data.previousCommissionBps) / 100}% → ${number(data.commissionBps) / 100}%`;
     return {
       activityId: document.id,
       action,
@@ -233,3 +280,93 @@ exports.adminListAdminActivity = callable(async (request) => {
   });
   return { activity };
 }, "The administrator activity log could not be loaded.");
+
+exports.adminListRecharges = callable(async (request) => {
+  const limit = limitFrom(request.data?.limit, 100, 200);
+  const auditSnapshot = await db
+    .collection("admin_audit_log")
+    .orderBy("createdAt", "desc")
+    .limit(500)
+    .get();
+  const rechargeDocuments = auditSnapshot.docs
+    .filter((document) => document.get("action") === "wallet_top_up")
+    .slice(0, limit);
+  const driverIds = [...new Set(
+    rechargeDocuments
+      .map((document) => text(document.get("driverId")))
+      .filter(Boolean),
+  )];
+  const profiles = driverIds.length
+    ? await db.getAll(
+      ...driverIds.map((driverId) => db.collection("drivers").doc(driverId)),
+    )
+    : [];
+  const names = new Map(
+    profiles.map((profile) => [
+      profile.id,
+      profile.exists ? profileName(profile.data()) : "",
+    ]),
+  );
+  return {
+    recharges: rechargeDocuments.map((document) => {
+      const data = document.data();
+      return {
+        rechargeId: document.id,
+        driverId: text(data.driverId),
+        driverName: names.get(text(data.driverId)) || "",
+        amount: number(data.amount),
+        balanceBefore: number(data.balanceBefore),
+        balanceAfter: number(data.balanceAfter),
+        reference: text(data.reference),
+        note: text(data.note),
+        administratorEmail: text(data.administratorEmail),
+        createdAtMillis: millis(data.createdAt),
+      };
+    }),
+  };
+}, "The recharge history could not be loaded.");
+
+exports.adminGetBusinessSettings = callable(async () => {
+  const snapshot = await db.collection("platform_config").doc("accounting").get();
+  const commissionBps = snapshot.exists
+    ? normalizeCommissionBps(snapshot.get("commissionBps"))
+    : PLATFORM_COMMISSION_BPS;
+  return {
+    currencyCode: "SSP",
+    commissionBps,
+    commissionPercent: commissionBps / 100,
+    updatedAtMillis: snapshot.exists ? millis(snapshot.get("updatedAt")) : null,
+  };
+}, "The business settings could not be loaded.");
+
+exports.adminSetCommissionRate = callable(async (request) => {
+  const percent = Number(request.data?.commissionPercent);
+  if (!Number.isFinite(percent)) {
+    throw new TypeError("commissionPercent must be a number");
+  }
+  const commissionBps = normalizeCommissionBps(Math.round(percent * 100));
+  const settingsRef = db.collection("platform_config").doc("accounting");
+  const auditRef = db.collection("admin_audit_log").doc();
+  await db.runTransaction(async (transaction) => {
+    const previous = await transaction.get(settingsRef);
+    const previousCommissionBps = previous.exists
+      ? normalizeCommissionBps(previous.get("commissionBps"))
+      : PLATFORM_COMMISSION_BPS;
+    const now = Timestamp.now();
+    transaction.set(settingsRef, {
+      commissionBps,
+      updatedAt: now,
+      updatedBy: request.auth.uid,
+      updatedByEmail: text(request.auth.token?.email),
+    }, { merge: true });
+    transaction.set(auditRef, {
+      action: "commission_rate",
+      previousCommissionBps,
+      commissionBps,
+      administratorId: request.auth.uid,
+      administratorEmail: text(request.auth.token?.email),
+      createdAt: now,
+    });
+  });
+  return { commissionBps, commissionPercent: commissionBps / 100 };
+}, "The commission rate could not be updated.");

@@ -39,6 +39,9 @@ class LiveDriverMarkerPolicy {
         markerAssets['standard']!;
   }
 
+  static bool isAvailableToNearbyPassengers(String? activeRideId) =>
+      activeRideId == null || activeRideId.trim().isEmpty;
+
   static double normalizedHeading(double value) {
     return ((value % 360) + 360) % 360;
   }
@@ -205,7 +208,10 @@ class LiveDriverMarkerController extends ChangeNotifier {
           driver.longitude,
         );
 
-        return distanceMeters <= radiusKilometers * 1000;
+        return LiveDriverMarkerPolicy.isAvailableToNearbyPassengers(
+              driver.activeRideId,
+            ) &&
+            distanceMeters <= radiusKilometers * 1000;
       },
     ).toList(growable: false);
 

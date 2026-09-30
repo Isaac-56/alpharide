@@ -21,13 +21,9 @@ function normalizeVehicleBodyType(value) {
     normalized.includes("tuk") ||
     normalized.includes("three") ||
     normalized.includes("bajaj")
-  ) {
-    return "rickshaw";
-  }
+  ) return "rickshaw";
   if (normalized.includes("scooter")) return "scooter";
-  if (normalized.includes("boda") || normalized.includes("motor")) {
-    return "boda";
-  }
+  if (normalized.includes("boda") || normalized.includes("motor")) return "boda";
   if (
     normalized === "car" ||
     normalized.includes("sedan") ||
@@ -37,28 +33,20 @@ function normalizeVehicleBodyType(value) {
     normalized.includes("minivan") ||
     normalized.includes("mpv") ||
     normalized.includes("pickup")
-  ) {
-    return "car";
-  }
-
+  ) return "car";
   return "";
 }
 
 function normalizeVehicleClass(value) {
   const normalized = clean(value);
   if (!normalized) return "";
-
   if (ADMIN_VEHICLE_CLASSES.includes(normalized)) return normalized;
   if (normalized.includes("electric")) return "ev";
 
   const bodyType = normalizeVehicleBodyType(normalized);
   if (bodyType === "rickshaw") return "rickshaw";
   if (bodyType === "boda" || bodyType === "scooter") return "boda";
-
-  // Kept only for driver-location records and profiles created before the
-  // separate administrator vehicle class was introduced.
   if (normalized === "car") return "standard";
-
   return "";
 }
 
@@ -77,21 +65,46 @@ function registrationForProfile(profile) {
     : {};
 }
 
-function effectiveVehicleClassForProfile(profile) {
+function normalizeAdminVehicleClasses(value) {
+  const rawValues = Array.isArray(value) ? value : [value];
+  return [...new Set(
+    rawValues
+      .map(normalizeVehicleClass)
+      .filter((item) => ADMIN_VEHICLE_CLASSES.includes(item)),
+  )].sort(
+    (first, second) =>
+      ADMIN_VEHICLE_CLASSES.indexOf(first) -
+      ADMIN_VEHICLE_CLASSES.indexOf(second),
+  );
+}
+
+function effectiveVehicleClassesForProfile(profile) {
   const registration = registrationForProfile(profile);
   const rawVehicleType = registration.vehicleType ?? profile?.vehicleType;
   const fixedClass = fixedVehicleClassForBody(rawVehicleType);
-  if (fixedClass) return fixedClass;
+  if (fixedClass) return Object.freeze([fixedClass]);
 
-  const assignedClass = normalizeVehicleClass(
-    registration.vehicleClass ?? profile?.vehicleClass,
+  const assigned = normalizeAdminVehicleClasses(
+    registration.vehicleClasses ??
+      profile?.vehicleClasses ??
+      registration.vehicleClass ??
+      profile?.vehicleClass,
   );
-  if (ADMIN_VEHICLE_CLASSES.includes(assignedClass)) return assignedClass;
+  if (assigned.length > 0) return Object.freeze(assigned);
 
-  const legacyCar =
-    !Object.prototype.hasOwnProperty.call(registration, "vehicleClass") &&
-    clean(rawVehicleType) === "car";
-  return legacyCar ? "standard" : "";
+  const hasExplicitAssignment =
+    Object.prototype.hasOwnProperty.call(registration, "vehicleClasses") ||
+    Object.prototype.hasOwnProperty.call(registration, "vehicleClass") ||
+    Object.prototype.hasOwnProperty.call(profile ?? {}, "vehicleClasses") ||
+    Object.prototype.hasOwnProperty.call(profile ?? {}, "vehicleClass");
+  if (!hasExplicitAssignment && clean(rawVehicleType) === "car") {
+    return Object.freeze(["standard"]);
+  }
+  return Object.freeze([]);
+}
+
+function effectiveVehicleClassForProfile(profile) {
+  return effectiveVehicleClassesForProfile(profile)[0] ?? "";
 }
 
 function requiresAdminVehicleClass(profile) {
@@ -104,22 +117,32 @@ function requiresAdminVehicleClass(profile) {
 }
 
 function requireAdminVehicleClass(value) {
-  const normalized = normalizeVehicleClass(value);
-  if (!ADMIN_VEHICLE_CLASSES.includes(normalized)) {
+  return requireAdminVehicleClasses([value])[0];
+}
+
+function requireAdminVehicleClasses(value) {
+  if (!Array.isArray(value)) {
+    throw new TypeError("vehicleClasses must be a list");
+  }
+  const normalized = normalizeAdminVehicleClasses(value);
+  if (normalized.length === 0 || normalized.length !== value.length) {
     throw new TypeError(
-      "vehicleClass must be standard, comfort, ev, premium or corporate",
+      "vehicleClasses must contain one or more unique supported Alpha classes",
     );
   }
-  return normalized;
+  return Object.freeze(normalized);
 }
 
 module.exports = {
   ADMIN_VEHICLE_CLASSES,
   effectiveVehicleClassForProfile,
+  effectiveVehicleClassesForProfile,
   fixedVehicleClassForBody,
+  normalizeAdminVehicleClasses,
   normalizeVehicleBodyType,
   normalizeVehicleClass,
   registrationForProfile,
   requireAdminVehicleClass,
+  requireAdminVehicleClasses,
   requiresAdminVehicleClass,
 };
