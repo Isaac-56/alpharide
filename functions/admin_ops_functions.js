@@ -256,7 +256,15 @@ exports.adminListAdminActivity = callable(async (request) => {
     const action = text(data.action);
     let summary = text(data.note);
     if (action === "driver_review_status") summary = `${text(data.previousStatus) || "pending"} → ${text(data.reviewStatus)}`;
-    if (action === "driver_vehicle_class") summary = `${text(data.previousVehicleClass) || "unassigned"} → ${text(data.vehicleClass)}`;
+    if (action === "driver_vehicle_class") {
+      const before = Array.isArray(data.previousVehicleClasses)
+        ? data.previousVehicleClasses.join(", ")
+        : text(data.previousVehicleClass) || "unassigned";
+      const after = Array.isArray(data.vehicleClasses)
+        ? data.vehicleClasses.join(", ")
+        : text(data.vehicleClass);
+      summary = `${before} → ${after}`;
+    }
     if (action === "wallet_top_up") summary = `+${number(data.amount).toLocaleString("en-US")} SSP · ${text(data.reference) || "No reference"}`;
     if (action === "wallet_status") summary = `${text(data.previousStatus) || "active"} → ${text(data.status)}`;
     if (action === "commission_rate") summary = `${number(data.previousCommissionBps) / 100}% → ${number(data.commissionBps) / 100}%`;
@@ -272,6 +280,51 @@ exports.adminListAdminActivity = callable(async (request) => {
   });
   return { activity };
 }, "The administrator activity log could not be loaded.");
+
+exports.adminListRecharges = callable(async (request) => {
+  const limit = limitFrom(request.data?.limit, 100, 200);
+  const auditSnapshot = await db
+    .collection("admin_audit_log")
+    .orderBy("createdAt", "desc")
+    .limit(500)
+    .get();
+  const rechargeDocuments = auditSnapshot.docs
+    .filter((document) => document.get("action") === "wallet_top_up")
+    .slice(0, limit);
+  const driverIds = [...new Set(
+    rechargeDocuments
+      .map((document) => text(document.get("driverId")))
+      .filter(Boolean),
+  )];
+  const profiles = driverIds.length
+    ? await db.getAll(
+      ...driverIds.map((driverId) => db.collection("drivers").doc(driverId)),
+    )
+    : [];
+  const names = new Map(
+    profiles.map((profile) => [
+      profile.id,
+      profile.exists ? profileName(profile.data()) : "",
+    ]),
+  );
+  return {
+    recharges: rechargeDocuments.map((document) => {
+      const data = document.data();
+      return {
+        rechargeId: document.id,
+        driverId: text(data.driverId),
+        driverName: names.get(text(data.driverId)) || "",
+        amount: number(data.amount),
+        balanceBefore: number(data.balanceBefore),
+        balanceAfter: number(data.balanceAfter),
+        reference: text(data.reference),
+        note: text(data.note),
+        administratorEmail: text(data.administratorEmail),
+        createdAtMillis: millis(data.createdAt),
+      };
+    }),
+  };
+}, "The recharge history could not be loaded.");
 
 exports.adminGetBusinessSettings = callable(async () => {
   const snapshot = await db.collection("platform_config").doc("accounting").get();
