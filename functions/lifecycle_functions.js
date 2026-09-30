@@ -5,6 +5,7 @@ const {
   Timestamp,
   getFirestore,
 } = require("firebase-admin/firestore");
+const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
@@ -21,6 +22,23 @@ const { waitingPolicyFor } = require("./ride_logic");
 
 const REGION = "africa-south1";
 const db = getFirestore();
+const realtimeDb = getDatabase();
+
+async function syncDriverPresenceRide(driverId, rideId, completed) {
+  const reference = realtimeDb.ref(`driver_locations/${driverId}`);
+  if (!completed) {
+    await reference.update({ activeRideId: rideId, updatedAt: Date.now() });
+    return;
+  }
+
+  await reference.transaction((current) => {
+    if (!current || typeof current !== "object") return;
+    if (current.activeRideId !== rideId) return;
+    const next = { ...current, updatedAt: Date.now() };
+    delete next.activeRideId;
+    return next;
+  });
+}
 
 function requireAuthenticatedDriver(request) {
   const uid = request.auth?.uid;
@@ -302,6 +320,19 @@ exports.updateRideStatus = onCall(
         }
 
         resolvedStatus = transition.status;
+      });
+
+      await syncDriverPresenceRide(
+        driverId,
+        rideId,
+        resolvedStatus === "completed",
+      ).catch((presenceError) => {
+        logger.warn("Could not synchronize active driver presence", {
+          rideId,
+          driverId,
+          status: resolvedStatus,
+          error: presenceError,
+        });
       });
 
       return {

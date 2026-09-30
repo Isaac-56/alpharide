@@ -657,15 +657,17 @@ exports.cancelRide = onCall(
         offeredDriverIds.push(assignedDriverId);
       }
 
-      await clearDriverPresenceBusy(assignedDriverId, rideId).catch(
-        (cleanupError) => {
-          logger.warn("Could not clear cancelled driver presence", {
-            rideId,
-            driverId: assignedDriverId,
-            error: cleanupError,
-          });
-        },
-      );
+      if (assignedDriverId) {
+        await clearDriverPresenceBusy(assignedDriverId, rideId).catch(
+          (cleanupError) => {
+            logger.warn("Could not clear cancelled driver presence", {
+              rideId,
+              driverId: assignedDriverId,
+              error: cleanupError,
+            });
+          },
+        );
+      }
       await markOffers(rideId, offeredDriverIds, "cancelled").catch(
         (cleanupError) => {
           logger.warn("Could not close cancelled ride offers", {
