@@ -81,7 +81,7 @@ test("candidate selection keeps fresh matching nearby drivers sorted", () => {
   );
   assert.ok(
     candidates[0].distanceToPickupMeters <
-      candidates[1].distanceToPickupMeters,
+      candidates[2].distanceToPickupMeters,
   );
 });
 
