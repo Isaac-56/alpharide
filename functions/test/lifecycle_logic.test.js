@@ -77,7 +77,7 @@ test("completed launch rides persist the trusted server-quoted fare", () => {
   );
 });
 
-test("waiting intervals apply a fresh two-minute grace period", () => {
+test("explicit customer waiting is billable from the first minute", () => {
   assert.deepEqual(
     resolveWaitingInterval({
       rideOptionId: "standard",
@@ -85,14 +85,14 @@ test("waiting intervals apply a fresh two-minute grace period", () => {
       billableWaitingSeconds: 0,
       waitingStartedAtMillis: 1000,
       nowMillis: 182000,
-      waitingRatePerMinute: 450,
+      waitingRatePerMinute: 100,
     }),
     {
       intervalSeconds: 181,
-      intervalBillableSeconds: 61,
+      intervalBillableSeconds: 181,
       waitingSeconds: 256,
-      billableWaitingSeconds: 61,
-      waitingCharge: 500,
+      billableWaitingSeconds: 181,
+      waitingCharge: 400,
     },
   );
 });
@@ -105,7 +105,7 @@ test("waiting intervals preserve the rate quoted when the ride was created", () 
       nowMillis: 180000,
       waitingRatePerMinute: 300,
     }).waitingCharge,
-    300,
+    900,
   );
 });
 

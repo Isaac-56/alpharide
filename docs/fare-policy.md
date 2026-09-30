@@ -1,53 +1,32 @@
-# AlphaRide Juba launch fare policy
+# AlphaRide Juba fare policy
 
-## What customers see
+## Customer pricing
 
-- No price is shown before both pickup and destination produce a valid road
-  route.
-- The upfront estimate is based on the vehicle's base fare plus the road
-  distance returned by the server-side Google Routes integration.
-- Normal traffic, red lights, and congestion do not start a separate waiting
-  charge.
+- A fare appears only after pickup and destination produce a valid road route.
+- Normal traffic, red lights and congestion do not create a waiting charge.
 - During an active trip, a driver may start **Customer waiting** only when the
-  passenger requests a stop. Both apps show the running timer.
-- Every customer-requested stop has a two-minute free grace period. Billable
-  time after the grace period is accumulated proportionally and rounded up to
-  the nearest 100 SSP.
+  passenger asks the driver to stop.
+- Explicit customer waiting is charged proportionally from the first recorded
+  minute and rounded up to the nearest 100 SSP.
 
-## Launch rates
+## Approved rates
 
-| Service | Minimum | Base | Distance | Customer waiting |
-| --- | ---: | ---: | ---: | ---: |
-| Alpha Boda | 4,000 SSP | 2,500 SSP | 1,500 SSP/km | 200 SSP/min |
-| Alpha Rickshaw | 6,000 SSP | 3,500 SSP | 2,100 SSP/km | 250 SSP/min |
-| Alpha Standard | 10,000 SSP | 6,000 SSP | 3,600 SSP/km | 450 SSP/min |
+| Service | Flag-down | Distance | Customer waiting |
+| --- | ---: | ---: | ---: |
+| Alpha Boda | 0 SSP | 3,750 SSP/km | 100 SSP/min |
+| Alpha Rickshaw | 0 SSP | 5,000 SSP/km | 100 SSP/min |
+| Alpha Standard car | 10,000 SSP | 9,000 SSP/km | 100 SSP/min |
 
-The route quote is rounded up to the nearest 500 SSP. Waiting is rounded up to
-the nearest 100 SSP so partial minutes are still charged proportionally.
+Road-distance fares are rounded up to the nearest 500 SSP. The Standard flag-down
+is also its minimum fare. Boda and Rickshaw have no separate minimum or flag-down
+charge; their fare begins with the measured road distance.
 
 ## Server authority
 
-The client may display a preview, but `createRide` recalculates the road route
-and distance fare on the server. Waiting starts and stops through authenticated
-callable functions using server timestamps. On completion, the backend closes
-any active waiting interval, calculates the final fare, and then applies the
-existing 10% Alpha commission and 90% driver net accounting.
+The app may display a preview, but `createRide` recalculates the route and fare
+on the server. Waiting starts and stops through authenticated Cloud Functions
+using server timestamps. Every ride stores the pricing and commission used when
+it was created so later policy changes do not alter an active or completed trip.
 
-## Research basis and local limitation
-
-Publicly verifiable, current Juba competitor tariff tables were not available,
-so AlphaRide does not claim that these rates copy a named South Sudan operator.
-The policy keeps the previously approved Juba launch rates and adopts common
-transparent ride-hailing behavior:
-
-- Uber explains that upfront prices use base, estimated time, and estimated
-  distance, and may increase for destination changes, extra stops, or a trip
-  that takes much longer than expected:
-  <https://help.uber.com/riders/article/how-are-fares-calculated?nodeId=d2d43bbc-f4bb-4882-b8bb-4bd8acf03a9d>
-- AlphaRide intentionally narrows that model for launch: distance determines
-  the quote, while only an explicit, visible customer-requested stop adds
-  waiting. This avoids charging passengers merely because Juba traffic is slow.
-
-Rates should be reviewed against real completed-trip operating costs before a
-production rollout. Changes must be made in both the server pricing table and
-the passenger catalogue and must include regression tests.
+Only explicit customer-requested stops may be recorded as waiting. Drivers must
+not record normal traffic, road controls or congestion as customer waiting.

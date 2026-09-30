@@ -468,7 +468,7 @@ exports.createRide = onCall(
           paymentMethod: input.paymentMethod,
           estimatedFare,
           finalFare: null,
-          pricingVersion: "juba-distance-wait-v1",
+          pricingVersion: "juba-distance-wait-v2",
           currencyCode: CURRENCY_CODE,
           routeDistanceMeters: Math.round(route.distanceMeters),
           routeDurationSeconds: Math.round(route.durationSeconds),

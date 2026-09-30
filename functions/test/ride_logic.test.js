@@ -18,7 +18,7 @@ test("boda fare matches the AlphaRide formula", () => {
       rideOptionId: "boda",
       distanceMeters: 10000,
     }),
-    17500,
+    37500,
   );
 });
 
@@ -28,17 +28,24 @@ test("standard fare matches the AlphaRide formula", () => {
       rideOptionId: "standard",
       distanceMeters: 10000,
     }),
-    42000,
+    100000,
   );
 });
 
-test("minimum fares are enforced", () => {
+test("zero-flag-down services charge only rounded road distance", () => {
   assert.equal(
     calculateFare({
       rideOptionId: "boda",
       distanceMeters: 100,
     }),
-    4000,
+    500,
+  );
+  assert.equal(
+    calculateFare({
+      rideOptionId: "rickshaw",
+      distanceMeters: 10000,
+    }),
+    50000,
   );
 });
 
@@ -55,14 +62,14 @@ test("customer waiting is proportional and rounded to 100 SSP", () => {
       rideOptionId: "standard",
       billableWaitingSeconds: 30,
     }),
-    300,
+    100,
   );
   assert.equal(
     calculateWaitingCharge({
       rideOptionId: "boda",
       billableWaitingSeconds: 90,
     }),
-    300,
+    200,
   );
 });
 

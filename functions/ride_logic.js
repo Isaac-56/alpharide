@@ -5,26 +5,26 @@ const LIVE_PAYMENT_METHODS = new Set(["cash"]);
 const CURRENCY_CODE = "SSP";
 const FARE_ROUNDING = 500;
 const WAITING_CHARGE_ROUNDING = 100;
-const WAITING_GRACE_SECONDS = 2 * 60;
+const WAITING_GRACE_SECONDS = 0;
 
 const FARES = Object.freeze({
   boda: Object.freeze({
-    minimumFare: 4000,
-    baseFare: 2500,
-    perKilometer: 1500,
-    waitingPerMinute: 200,
+    minimumFare: 0,
+    baseFare: 0,
+    perKilometer: 3750,
+    waitingPerMinute: 100,
   }),
   rickshaw: Object.freeze({
-    minimumFare: 6000,
-    baseFare: 3500,
-    perKilometer: 2100,
-    waitingPerMinute: 250,
+    minimumFare: 0,
+    baseFare: 0,
+    perKilometer: 5000,
+    waitingPerMinute: 100,
   }),
   standard: Object.freeze({
     minimumFare: 10000,
-    baseFare: 6000,
-    perKilometer: 3600,
-    waitingPerMinute: 450,
+    baseFare: 10000,
+    perKilometer: 9000,
+    waitingPerMinute: 100,
   }),
 });
 
