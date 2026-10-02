@@ -47,6 +47,14 @@ const {
   parseGoogleRouteResponse,
   validateRoutePreviewInput,
 } = require("./route_logic");
+const {
+  CALL_CENTER_BOOKING_SOURCE,
+  callCenterPassengerId,
+  maskPhoneNumber,
+  validateCallCenterRideInput,
+  validatePlaceId,
+  validatePlaceSearchQuery,
+} = require("./call_center_logic");
 
 initializeApp();
 
@@ -71,6 +79,20 @@ function requireAuthenticatedUser(request) {
     throw new HttpsError(
       "unauthenticated",
       "Sign in before using the live ride service.",
+    );
+  }
+  return uid;
+}
+
+function requireCustomerServiceAgent(request) {
+  const uid = requireAuthenticatedUser(request);
+  if (
+    request.auth?.token?.customerService !== true &&
+    request.auth?.token?.admin !== true
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "An authorized Alpha customer-service account is required.",
     );
   }
   return uid;
@@ -237,6 +259,7 @@ async function dispatchRide({
   paymentMethod,
   estimatedFare,
   commissionBps,
+  bookingSource = "app",
 }) {
   const rideRef = db.collection("rides").doc(rideId);
   const presenceSnapshot = await realtimeDb.ref("driver_locations").get();
@@ -332,6 +355,7 @@ async function dispatchRide({
         commissionBps,
       }),
       currencyCode: CURRENCY_CODE,
+      bookingSource,
       distanceToPickupMeters: candidate.distanceToPickupMeters,
       dispatchRank: candidateIndex + 1,
       dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
@@ -400,6 +424,483 @@ async function expireOfferedRide(rideRef) {
     await markOffers(rideRef.id, offeredDriverIds, "expired");
   }
 }
+
+function timestampMillis(value) {
+  return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+function safeText(value) {
+  return typeof value === "string" ? value : "";
+}
+
+function customerServiceRidePayload(rideId, data = {}) {
+  const driverSummary = data.driverSummary &&
+    typeof data.driverSummary === "object" &&
+    !Array.isArray(data.driverSummary)
+    ? data.driverSummary
+    : {};
+  return {
+    rideId,
+    status: safeText(data.status),
+    customerName: safeText(data.customerName),
+    customerPhone: safeText(data.customerPhone),
+    customerPhoneMasked: data.customerPhone
+      ? maskPhoneNumber(data.customerPhone)
+      : "",
+    customerNote: safeText(data.customerNote),
+    pickup: data.pickup ?? null,
+    destination: data.destination ?? null,
+    rideOptionId: safeText(data.rideOptionId),
+    paymentMethod: safeText(data.paymentMethod),
+    estimatedFare: Number(data.estimatedFare) || 0,
+    finalFare: Number(data.finalFare) || 0,
+    currencyCode: safeText(data.currencyCode) || CURRENCY_CODE,
+    routeDistanceMeters: Number(data.routeDistanceMeters) || 0,
+    routeDurationSeconds: Number(data.routeDurationSeconds) || 0,
+    driverId: safeText(data.driverId),
+    driverName:
+      `${safeText(driverSummary.firstName)} ${safeText(driverSummary.lastName)}`.trim() ||
+      safeText(driverSummary.name),
+    requestedAtMillis: timestampMillis(data.requestedAt),
+    updatedAtMillis: timestampMillis(data.updatedAt),
+  };
+}
+
+async function fetchGooglePlaces(url, fallbackMessage) {
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  } catch (error) {
+    logger.error("Google Places could not be reached", error);
+    throw new HttpsError("unavailable", fallbackMessage);
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    logger.error("Google Places rejected a call-centre request", {
+      status: response.status,
+      body: body.slice(0, 1000),
+    });
+    throw new HttpsError("unavailable", fallbackMessage);
+  }
+  const payload = await response.json();
+  if (payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
+    logger.error("Google Places returned an error status", {
+      status: payload.status,
+      message: payload.error_message,
+    });
+    throw new HttpsError("unavailable", fallbackMessage);
+  }
+  return payload;
+}
+
+exports.customerServiceSearchPlaces = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 15,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const query = validatePlaceSearchQuery(request.data?.query);
+      await enforceRoutePreviewLimit(`customer_service_${agentId}`);
+      const parameters = new URLSearchParams({
+        input: query,
+        components: "country:SS",
+        location: "4.8594,31.5713",
+        radius: "75000",
+        language: "en",
+        key: googleRoutesApiKey.value(),
+      });
+      const payload = await fetchGooglePlaces(
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?${parameters}`,
+        "Location search is temporarily unavailable.",
+      );
+      return {
+        results: (payload.predictions ?? []).slice(0, 8).map((prediction) => ({
+          placeId: safeText(prediction.place_id),
+          primaryText: safeText(prediction.structured_formatting?.main_text) ||
+            safeText(prediction.description),
+          secondaryText: safeText(
+            prediction.structured_formatting?.secondary_text,
+          ),
+          description: safeText(prediction.description),
+        })),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to search for locations.");
+    }
+  },
+);
+
+exports.customerServiceGetPlace = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 15,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      requireCustomerServiceAgent(request);
+      const placeId = validatePlaceId(request.data?.placeId);
+      const parameters = new URLSearchParams({
+        place_id: placeId,
+        fields: "place_id,name,formatted_address,geometry/location",
+        language: "en",
+        key: googleRoutesApiKey.value(),
+      });
+      const payload = await fetchGooglePlaces(
+        `https://maps.googleapis.com/maps/api/place/details/json?${parameters}`,
+        "That location could not be loaded right now.",
+      );
+      const place = payload.result;
+      const latitude = place?.geometry?.location?.lat;
+      const longitude = place?.geometry?.location?.lng;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new HttpsError("not-found", "That location has no map point.");
+      }
+      return {
+        placeId,
+        address: safeText(place.formatted_address) || safeText(place.name),
+        latitude,
+        longitude,
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to load the location.");
+    }
+  },
+);
+
+exports.customerServiceQuoteRide = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const input = validateCallCenterRideInput({
+        ...request.data,
+        customerName: request.data?.customerName || "Phone customer",
+        customerPhone: request.data?.customerPhone || "+211900000000",
+      });
+      await enforceRoutePreviewLimit(`customer_service_${agentId}`);
+      const route = await computeTrustedRoute(input.pickup, input.destination);
+      return {
+        estimatedFare: calculateFare({
+          rideOptionId: input.rideOptionId,
+          distanceMeters: route.distanceMeters,
+        }),
+        currencyCode: CURRENCY_CODE,
+        routeDistanceMeters: Math.round(route.distanceMeters),
+        routeDurationSeconds: Math.round(route.durationSeconds),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to calculate the phone-booking fare.");
+    }
+  },
+);
+
+exports.customerServiceCreateRide = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const agentEmail = safeText(request.auth?.token?.email);
+      const input = validateCallCenterRideInput(request.data);
+      const passengerId = callCenterPassengerId(input.customerPhone);
+      const [route, accountingConfigSnapshot] = await Promise.all([
+        computeTrustedRoute(input.pickup, input.destination),
+        db.collection("platform_config").doc("accounting").get(),
+      ]);
+      const commissionBps = commissionBpsFromConfig(
+        accountingConfigSnapshot.exists ? accountingConfigSnapshot.data() : {},
+      );
+      const estimatedFare = calculateFare({
+        rideOptionId: input.rideOptionId,
+        distanceMeters: route.distanceMeters,
+      });
+      const waitingPolicy = waitingPolicyFor(input.rideOptionId);
+      const rideRef = db.collection("rides").doc();
+      const activeRideRef = db.collection("active_passenger_rides").doc(passengerId);
+      const bookingRef = db.collection("call_center_bookings").doc(rideRef.id);
+      const auditRef = db.collection("customer_service_audit").doc();
+
+      await db.runTransaction(async (transaction) => {
+        const activeSnapshot = await transaction.get(activeRideRef);
+        if (activeSnapshot.exists) {
+          const activeRideId = activeSnapshot.get("rideId");
+          if (typeof activeRideId === "string" && activeRideId) {
+            const existingRide = await transaction.get(
+              db.collection("rides").doc(activeRideId),
+            );
+            if (
+              existingRide.exists &&
+              ACTIVE_RIDE_STATUSES.has(existingRide.get("status"))
+            ) {
+              throw new HttpsError(
+                "already-exists",
+                "This phone number already has an active ride.",
+                { rideId: activeRideId },
+              );
+            }
+          }
+          transaction.delete(activeRideRef);
+        }
+
+        const now = FieldValue.serverTimestamp();
+        transaction.create(rideRef, {
+          schemaVersion: 1,
+          bookingSource: CALL_CENTER_BOOKING_SOURCE,
+          passengerId,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          customerNote: input.customerNote,
+          createdByStaffId: agentId,
+          createdByStaffEmail: agentEmail,
+          driverId: null,
+          driverSummary: null,
+          status: "requested",
+          pickup: input.pickup,
+          destination: input.destination,
+          rideOptionId: input.rideOptionId,
+          requiredVehicleType: input.rideOptionId,
+          paymentMethod: "cash",
+          estimatedFare,
+          finalFare: null,
+          platformCommissionBps: commissionBps,
+          pricingVersion: "juba-distance-wait-v2",
+          currencyCode: CURRENCY_CODE,
+          routeDistanceMeters: Math.round(route.distanceMeters),
+          routeDurationSeconds: Math.round(route.durationSeconds),
+          isWaiting: false,
+          waitingStartedAt: null,
+          waitingSeconds: 0,
+          billableWaitingSeconds: 0,
+          waitingCharge: 0,
+          waitingGraceSeconds: waitingPolicy.graceSeconds,
+          waitingRatePerMinute: waitingPolicy.ratePerMinute,
+          cancelledBy: null,
+          cancellationReason: null,
+          offeredDriverIds: [],
+          dispatchState: "pending",
+          dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
+          requestedAt: now,
+          updatedAt: now,
+          acceptedAt: null,
+          arrivedAt: null,
+          startedAt: null,
+          completedAt: null,
+          cancelledAt: null,
+        });
+        transaction.set(activeRideRef, {
+          passengerId,
+          rideId: rideRef.id,
+          bookingSource: CALL_CENTER_BOOKING_SOURCE,
+          createdAt: now,
+          updatedAt: now,
+        });
+        transaction.create(bookingRef, {
+          rideId: rideRef.id,
+          passengerId,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          customerPhoneMasked: maskPhoneNumber(input.customerPhone),
+          status: "requested",
+          createdByStaffId: agentId,
+          createdByStaffEmail: agentEmail,
+          createdAt: now,
+          updatedAt: now,
+        });
+        transaction.create(auditRef, {
+          action: "phone_booking_created",
+          actorId: agentId,
+          actorEmail: agentEmail,
+          rideId: rideRef.id,
+          customerPhoneMasked: maskPhoneNumber(input.customerPhone),
+          createdAt: now,
+        });
+      });
+
+      let status = "requested";
+      try {
+        status = await dispatchRide({
+          rideId: rideRef.id,
+          passengerId,
+          pickup: input.pickup,
+          destination: input.destination,
+          rideOptionId: input.rideOptionId,
+          requiredVehicleType: input.rideOptionId,
+          paymentMethod: "cash",
+          estimatedFare,
+          commissionBps,
+          bookingSource: CALL_CENTER_BOOKING_SOURCE,
+        });
+      } catch (dispatchError) {
+        logger.error("Call-centre ride dispatch failed", {
+          rideId: rideRef.id,
+          error: dispatchError,
+        });
+        await rideRef.update({
+          dispatchState: "error",
+          dispatchAttemptedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }).catch(() => {});
+      }
+      await bookingRef.set(
+        { status, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+
+      return {
+        rideId: rideRef.id,
+        status,
+        estimatedFare,
+        currencyCode: CURRENCY_CODE,
+        routeDistanceMeters: Math.round(route.distanceMeters),
+        routeDurationSeconds: Math.round(route.durationSeconds),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to create the phone booking.");
+    }
+  },
+);
+
+exports.customerServiceListBookings = onCall(
+  { region: REGION, timeoutSeconds: 20, memory: "256MiB" },
+  async (request) => {
+    try {
+      requireCustomerServiceAgent(request);
+      const rawLimit = request.data?.limit;
+      const limit = rawLimit == null
+        ? 50
+        : Math.min(Math.max(Number(rawLimit) || 1, 1), 100);
+      const bookingSnapshot = await db
+        .collection("call_center_bookings")
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .get();
+      const rideRefs = bookingSnapshot.docs.map((document) =>
+        db.collection("rides").doc(document.id));
+      const rides = rideRefs.length ? await db.getAll(...rideRefs) : [];
+      return {
+        bookings: rides
+          .filter((document) => document.exists)
+          .map((document) => customerServiceRidePayload(
+            document.id,
+            document.data(),
+          )),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to load phone bookings.");
+    }
+  },
+);
+
+exports.customerServiceCancelRide = onCall(
+  { region: REGION, timeoutSeconds: 20, memory: "256MiB" },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const agentEmail = safeText(request.auth?.token?.email);
+      const rideId = validateRideId(request.data?.rideId);
+      const cancellationReason = validateCancellationReason(
+        request.data?.reason || "Cancelled by customer service",
+      );
+      const rideRef = db.collection("rides").doc(rideId);
+      const bookingRef = db.collection("call_center_bookings").doc(rideId);
+      const auditRef = db.collection("customer_service_audit").doc();
+      let offeredDriverIds = [];
+      let assignedDriverId = null;
+
+      await db.runTransaction(async (transaction) => {
+        const rideSnapshot = await transaction.get(rideRef);
+        if (!rideSnapshot.exists) {
+          throw new HttpsError("not-found", "The booking no longer exists.");
+        }
+        if (rideSnapshot.get("bookingSource") !== CALL_CENTER_BOOKING_SOURCE) {
+          throw new HttpsError(
+            "permission-denied",
+            "Customer service can only cancel phone bookings.",
+          );
+        }
+        const passengerId = rideSnapshot.get("passengerId");
+        const activePassengerRef = db
+          .collection("active_passenger_rides")
+          .doc(passengerId);
+        const activePassengerSnapshot = await transaction.get(activePassengerRef);
+        assignedDriverId = safeText(rideSnapshot.get("driverId")) || null;
+        const activeDriverRef = assignedDriverId
+          ? db.collection("active_driver_rides").doc(assignedDriverId)
+          : null;
+        const activeDriverSnapshot = activeDriverRef
+          ? await transaction.get(activeDriverRef)
+          : null;
+        offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+          ? rideSnapshot.get("offeredDriverIds")
+          : [];
+        const status = rideSnapshot.get("status");
+        if (status !== "cancelled" && !isCancellableBeforePickup(status)) {
+          throw new HttpsError(
+            "failed-precondition",
+            "This trip has started and can no longer be cancelled here.",
+          );
+        }
+        const now = FieldValue.serverTimestamp();
+        if (status !== "cancelled") {
+          transaction.update(rideRef, {
+            status: "cancelled",
+            offerExpiresAt: null,
+            isWaiting: false,
+            waitingStartedAt: null,
+            cancelledBy: "customer_service",
+            cancellationReason,
+            cancelledAt: now,
+            updatedAt: now,
+          });
+        }
+        transaction.set(bookingRef, { status: "cancelled", updatedAt: now }, { merge: true });
+        if (
+          activePassengerSnapshot.exists &&
+          activePassengerSnapshot.get("rideId") === rideId
+        ) transaction.delete(activePassengerRef);
+        if (
+          activeDriverRef &&
+          activeDriverSnapshot?.exists &&
+          activeDriverSnapshot.get("rideId") === rideId
+        ) transaction.delete(activeDriverRef);
+        transaction.create(auditRef, {
+          action: "phone_booking_cancelled",
+          actorId: agentId,
+          actorEmail: agentEmail,
+          rideId,
+          reason: cancellationReason,
+          createdAt: now,
+        });
+      });
+
+      if (assignedDriverId && !offeredDriverIds.includes(assignedDriverId)) {
+        offeredDriverIds.push(assignedDriverId);
+      }
+      if (assignedDriverId) {
+        await clearDriverPresenceBusy(assignedDriverId, rideId).catch(() => {});
+      }
+      await markOffers(rideId, offeredDriverIds, "cancelled").catch(() => {});
+      return { rideId, status: "cancelled" };
+    } catch (error) {
+      throw callableError(error, "Unable to cancel the phone booking.");
+    }
+  },
+);
 
 exports.calculateRoute = onCall(
   {
