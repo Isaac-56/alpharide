@@ -8,6 +8,7 @@ const {
 const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 const {
   PLATFORM_COMMISSION_BPS,
@@ -16,6 +17,8 @@ const {
 const { applyWalletDebit } = require("./wallet_logic");
 const { validateRideId } = require("./dispatch_logic");
 const {
+  STALE_ACTIVE_RIDE_STATUSES,
+  isStaleActiveRide,
   normalizeDriverRideStatus,
   resolveCompletedRideFare,
   resolveWaitingInterval,
@@ -27,6 +30,9 @@ const { buildReceiptNumber } = require("./receipt_logic");
 const REGION = "africa-south1";
 const db = getFirestore();
 const realtimeDb = getDatabase();
+
+const STALE_RIDE_CANCELLATION_REASON =
+  "Automatically closed after 24 hours without trip activity.";
 
 async function syncDriverPresenceRide(driverId, rideId, completed) {
   const reference = realtimeDb.ref(`driver_locations/${driverId}`);
@@ -43,6 +49,142 @@ async function syncDriverPresenceRide(driverId, rideId, completed) {
     return next;
   });
 }
+
+async function closeStaleActiveRide(rideReference, now) {
+  let staleRide = null;
+
+  await db.runTransaction(async (transaction) => {
+    const rideSnapshot = await transaction.get(rideReference);
+    if (!rideSnapshot.exists) return;
+
+    const activityAt = [
+      "updatedAt",
+      "startedAt",
+      "arrivedAt",
+      "acceptedAt",
+      "createdAt",
+    ]
+      .map((field) => rideSnapshot.get(field))
+      .find((value) => value instanceof Timestamp);
+    if (!(activityAt instanceof Timestamp)) return;
+    if (!isStaleActiveRide({
+      status: rideSnapshot.get("status"),
+      updatedAtMillis: activityAt.toMillis(),
+      nowMillis: now.toMillis(),
+    })) {
+      return;
+    }
+
+    const rideId = rideSnapshot.id;
+    const passengerId = rideSnapshot.get("passengerId");
+    const driverId = rideSnapshot.get("driverId");
+    const activePassengerRef =
+      typeof passengerId === "string" && passengerId
+        ? db.collection("active_passenger_rides").doc(passengerId)
+        : null;
+    const activeDriverRef =
+      typeof driverId === "string" && driverId
+        ? db.collection("active_driver_rides").doc(driverId)
+        : null;
+    const activePassengerSnapshot = activePassengerRef
+      ? await transaction.get(activePassengerRef)
+      : null;
+    const activeDriverSnapshot = activeDriverRef
+      ? await transaction.get(activeDriverRef)
+      : null;
+
+    transaction.update(rideReference, {
+      status: "cancelled",
+      cancelledAt: now,
+      cancelledBy: "system",
+      cancellationReason: STALE_RIDE_CANCELLATION_REASON,
+      cancellationReasonCode: "inactive_ride_timeout",
+      isWaiting: false,
+      waitingStartedAt: null,
+      staleClosedAt: now,
+      updatedAt: now,
+    });
+
+    if (
+      activePassengerRef &&
+      activePassengerSnapshot?.exists &&
+      activePassengerSnapshot.get("rideId") === rideId
+    ) {
+      transaction.delete(activePassengerRef);
+    }
+    if (
+      activeDriverRef &&
+      activeDriverSnapshot?.exists &&
+      activeDriverSnapshot.get("rideId") === rideId
+    ) {
+      transaction.delete(activeDriverRef);
+    }
+
+    staleRide = { rideId, driverId };
+  });
+
+  if (staleRide?.driverId) {
+    await syncDriverPresenceRide(
+      staleRide.driverId,
+      staleRide.rideId,
+      true,
+    ).catch((error) => {
+      logger.warn("Could not release stale driver presence", {
+        ...staleRide,
+        error,
+      });
+    });
+  }
+
+  return staleRide;
+}
+
+exports.expireStaleActiveRides = onSchedule(
+  {
+    region: REGION,
+    schedule: "every 5 minutes",
+    timeZone: "Africa/Juba",
+    timeoutSeconds: 120,
+    memory: "256MiB",
+  },
+  async () => {
+    const now = Timestamp.now();
+    const candidates = await db
+      .collection("rides")
+      .where("status", "in", [...STALE_ACTIVE_RIDE_STATUSES])
+      .limit(200)
+      .get();
+
+    const results = [];
+    for (let start = 0; start < candidates.docs.length; start += 20) {
+      const group = candidates.docs.slice(start, start + 20);
+      results.push(...await Promise.allSettled(
+        group.map((snapshot) => closeStaleActiveRide(
+          snapshot.ref,
+          now,
+        )),
+      ));
+    }
+    const closedRideIds = [];
+    let failures = 0;
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        failures += 1;
+        logger.error("Unable to close a stale active ride", result.reason);
+      } else if (result.value?.rideId) {
+        closedRideIds.push(result.value.rideId);
+      }
+    }
+
+    logger.info("Stale active ride sweep completed", {
+      candidates: candidates.size,
+      closed: closedRideIds.length,
+      failures,
+      rideIds: closedRideIds,
+    });
+  },
+);
 
 function requireAuthenticatedDriver(request) {
   const uid = request.auth?.uid;
