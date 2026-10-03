@@ -502,34 +502,46 @@ exports.customerServiceSearchPlaces = onCall(
       const agentId = requireCustomerServiceAgent(request);
       const query = validatePlaceSearchQuery(request.data?.query);
       await enforceRoutePreviewLimit(`customer_service_${agentId}`);
-      const payload = await fetchGooglePlaces(
-        "https://places.googleapis.com/v1/places:autocomplete",
-        "Location search is temporarily unavailable.",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": googleRoutesApiKey.value(),
-            "X-Goog-FieldMask": [
-              "suggestions.placePrediction.placeId",
-              "suggestions.placePrediction.text",
-              "suggestions.placePrediction.structuredFormat",
-            ].join(","),
-          },
-          body: JSON.stringify({
-            input: query,
-            includedRegionCodes: ["ss"],
-            languageCode: "en",
-            locationBias: {
-              circle: {
-                center: { latitude: 4.8594, longitude: 31.5713 },
-                radius: 75000,
-              },
+      const searchGooglePlaces = async (input, restrictToSouthSudan) =>
+        fetchGooglePlaces(
+          "https://places.googleapis.com/v1/places:autocomplete",
+          "Location search is temporarily unavailable.",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": googleRoutesApiKey.value(),
+              "X-Goog-FieldMask": [
+                "suggestions.placePrediction.placeId",
+                "suggestions.placePrediction.text",
+                "suggestions.placePrediction.structuredFormat",
+              ].join(","),
             },
-          }),
-        },
+            body: JSON.stringify({
+              input,
+              ...(restrictToSouthSudan
+                ? { includedRegionCodes: ["ss"] }
+                : {}),
+              languageCode: "en",
+              locationBias: {
+                circle: {
+                  center: { latitude: 4.8594, longitude: 31.5713 },
+                  radius: 75000,
+                },
+              },
+            }),
+          },
+        );
+
+      let results = parseGooglePlacePredictions(
+        await searchGooglePlaces(query, true),
       );
-      return { results: parseGooglePlacePredictions(payload) };
+      if (!results.length) {
+        results = parseGooglePlacePredictions(
+          await searchGooglePlaces(`${query}, South Sudan`, false),
+        );
+      }
+      return { results };
     } catch (error) {
       throw callableError(error, "Unable to search for locations.");
     }
