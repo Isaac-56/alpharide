@@ -38,6 +38,7 @@ class RideDriverSummary {
   final String model;
   final String color;
   final String plateNumber;
+  final String phoneNumber;
 
   const RideDriverSummary({
     required this.displayName,
@@ -46,6 +47,7 @@ class RideDriverSummary {
     required this.model,
     required this.color,
     required this.plateNumber,
+    required this.phoneNumber,
   });
 
   String get vehicleLabel {
@@ -68,6 +70,7 @@ class RideDriverSummary {
       model: _optionalString(data['model']) ?? '',
       color: _optionalString(data['color']) ?? '',
       plateNumber: _optionalString(data['plateNumber']) ?? '',
+      phoneNumber: _optionalString(data['phoneNumber']) ?? '',
     );
   }
 }

@@ -36,6 +36,7 @@ void main() {
           'model': 'Corolla',
           'color': 'White',
           'plateNumber': 'SSD 1234',
+          'phoneNumber': '+211912345678',
         },
         'estimatedFare': 21500,
         'finalFare': null,
@@ -49,6 +50,7 @@ void main() {
     expect(state.driver?.displayName, 'Daniel Driver');
     expect(state.driver?.vehicleLabel, 'White Toyota Corolla');
     expect(state.driver?.plateNumber, 'SSD 1234');
+    expect(state.driver?.phoneNumber, '+211912345678');
     expect(state.fare, 21500);
     expect(state.isTerminal, false);
   });
@@ -68,6 +70,7 @@ void main() {
 
     expect(state.driver?.displayName, 'Alpha driver');
     expect(state.driver?.vehicleLabel, 'Vehicle details unavailable');
+    expect(state.driver?.phoneNumber, isEmpty);
   });
 
   test('terminal ride states are recognized', () {

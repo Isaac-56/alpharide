@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../account/account_ui.dart';
 import '../models/ride_backend.dart';
@@ -865,6 +866,24 @@ class _AssignedDriverCard extends StatelessWidget {
 
   final RideDriverSummary driver;
 
+  Future<void> _callDriver(BuildContext context) async {
+    final Uri phoneUri = Uri(scheme: 'tel', path: driver.phoneNumber);
+    try {
+      final bool opened = await launchUrl(phoneUri);
+      if (opened || !context.mounted) return;
+    } on Object {
+      if (!context.mounted) return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('The phone dialer could not be opened.'),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color textColor = AlphaColors.text(context);
@@ -910,23 +929,43 @@ class _AssignedDriverCard extends StatelessWidget {
               ],
             ),
           ),
-          if (driver.plateNumber.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: AlphaColors.background(context),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AlphaColors.border(context)),
-              ),
-              child: Text(
-                driver.plateNumber,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (driver.plateNumber.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AlphaColors.background(context),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AlphaColors.border(context)),
+                  ),
+                  child: Text(
+                    driver.plateNumber,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              if (driver.plateNumber.isNotEmpty &&
+                  driver.phoneNumber.isNotEmpty)
+                const SizedBox(width: 8),
+              if (driver.phoneNumber.isNotEmpty)
+                IconButton.filled(
+                  key: const Key('callAssignedDriver'),
+                  tooltip: 'Call driver',
+                  onPressed: () => _callDriver(context),
+                  style: IconButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.call_rounded),
+                ),
+            ],
+          ),
         ],
       ),
     );
