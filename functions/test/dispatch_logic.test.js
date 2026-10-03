@@ -324,6 +324,7 @@ test("public driver summary exposes rider-safe identity and vehicle fields", () 
       model: "Corolla",
       color: "White",
       plateNumber: "SSD 1234",
+      phoneNumber: "+211900000000",
     },
   );
 });
@@ -340,7 +341,15 @@ test("public driver summary falls back safely when profile data is absent", () =
     model: "",
     color: "",
     plateNumber: "",
+    phoneNumber: "",
   });
+});
+
+test("public driver summary rejects malformed phone numbers", () => {
+  assert.equal(
+    buildDriverPublicSummary({ phoneNumber: "not-a-phone" }).phoneNumber,
+    "",
+  );
 });
 
 test("ride ids are validated before callable actions", () => {

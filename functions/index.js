@@ -985,6 +985,9 @@ exports.createRide = onCall(
     try {
       const passengerId = requireAuthenticatedUser(request);
       const input = validateCreateRideInput(request.data);
+      const customerPhone = typeof request.auth?.token?.phone_number === "string"
+        ? request.auth.token.phone_number.trim()
+        : "";
       const [route, accountingConfigSnapshot] = await Promise.all([
         computeTrustedRoute(input.pickup, input.destination),
         db.collection("platform_config").doc("accounting").get(),
@@ -1028,6 +1031,7 @@ exports.createRide = onCall(
         transaction.create(rideRef, {
           schemaVersion: 1,
           passengerId,
+          customerPhone,
           driverId: null,
           driverSummary: null,
           status: "requested",

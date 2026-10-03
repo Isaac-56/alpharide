@@ -23,6 +23,11 @@ function _publicText(value, maximumLength = 80) {
   return value.trim().slice(0, maximumLength);
 }
 
+function _publicPhone(value) {
+  const phoneNumber = _publicText(value, 20).replace(/\s+/g, "");
+  return /^\+[1-9]\d{7,14}$/.test(phoneNumber) ? phoneNumber : "";
+}
+
 function buildDriverPublicSummary(profile) {
   if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
     return Object.freeze({
@@ -36,6 +41,7 @@ function buildDriverPublicSummary(profile) {
       model: "",
       color: "",
       plateNumber: "",
+      phoneNumber: "",
     });
   }
 
@@ -64,6 +70,7 @@ function buildDriverPublicSummary(profile) {
     model: _publicText(registration.model, 60),
     color: _publicText(registration.color, 40),
     plateNumber: _publicText(registration.plateNumber, 40),
+    phoneNumber: _publicPhone(profile.phoneNumber),
   });
 }
 
