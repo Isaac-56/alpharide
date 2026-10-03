@@ -57,6 +57,15 @@
             "value": "public,max-age=3600"
           }
         ]
+      },
+      {
+        "source": "/dispatch/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
+        ]
       }
     ]
   }

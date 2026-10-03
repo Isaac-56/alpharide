@@ -261,6 +261,16 @@ function renderSuggestions(container, results, choose) {
   container.hidden = false;
 }
 
+function renderSearchStatus(container, message, tone = "neutral") {
+  container.replaceChildren();
+  const status = document.createElement("div");
+  status.className = "suggestion search-status";
+  status.dataset.tone = tone;
+  status.textContent = message;
+  container.append(status);
+  container.hidden = false;
+}
+
 function setupPlaceSearch({ input, results, selected, assign }) {
   input.addEventListener("input", () => {
     assign(null);
@@ -274,6 +284,7 @@ function setupPlaceSearch({ input, results, selected, assign }) {
       return;
     }
     searchTimers.set(input, setTimeout(async () => {
+      renderSearchStatus(results, "Searching locations…");
       try {
         const response = await api.searchPlaces({ query });
         if (input.value.trim() !== query) return;
@@ -300,8 +311,10 @@ function setupPlaceSearch({ input, results, selected, assign }) {
           }
         });
       } catch (error) {
-        results.hidden = true;
-        showToast(readableError(error), "error");
+        if (input.value.trim() !== query) return;
+        const message = readableError(error);
+        renderSearchStatus(results, message, "error");
+        showToast(message, "error");
       }
     }, 320));
   });
