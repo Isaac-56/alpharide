@@ -57,6 +57,7 @@ const {
   validatePlaceId,
   validatePlaceSearchQuery,
 } = require("./call_center_logic");
+const { createTtlCache } = require("./runtime_cache");
 
 initializeApp();
 
@@ -66,6 +67,9 @@ const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
 
 const REGION = "africa-south1";
 const ROUTE_PREVIEW_LIMIT_COLLECTION = "route_preview_limits";
+const placeSearchCache = createTtlCache({ ttlMs: 5 * 60 * 1000, maxEntries: 250 });
+const placeDetailsCache = createTtlCache({ ttlMs: 30 * 60 * 1000, maxEntries: 500 });
+const routePreviewCache = createTtlCache({ ttlMs: 3 * 60 * 1000, maxEntries: 150 });
 const ACTIVE_RIDE_STATUSES = new Set([
   "requested",
   "offered",
@@ -74,6 +78,15 @@ const ACTIVE_RIDE_STATUSES = new Set([
   "arrived",
   "in_progress",
 ]);
+
+function routePreviewCacheKey(pickup, destination) {
+  return [
+    pickup.latitude,
+    pickup.longitude,
+    destination.latitude,
+    destination.longitude,
+  ].map((coordinate) => Number(coordinate).toFixed(5)).join(":");
+}
 
 function requireAuthenticatedUser(request) {
   const uid = request.auth?.uid;
@@ -501,7 +514,9 @@ exports.customerServiceSearchPlaces = onCall(
     try {
       const agentId = requireCustomerServiceAgent(request);
       const query = validatePlaceSearchQuery(request.data?.query);
-      await enforceRoutePreviewLimit(`customer_service_${agentId}`);
+      const cacheKey = query.toLocaleLowerCase("en");
+      const cachedResults = placeSearchCache.get(cacheKey);
+      if (cachedResults) return { results: cachedResults };
       const searchGooglePlaces = async (input, restrictToSouthSudan) =>
         fetchGooglePlaces(
           "https://places.googleapis.com/v1/places:autocomplete",
@@ -533,14 +548,21 @@ exports.customerServiceSearchPlaces = onCall(
           },
         );
 
-      let results = parseGooglePlacePredictions(
-        await searchGooglePlaces(query, true),
-      );
-      if (!results.length) {
-        results = parseGooglePlacePredictions(
-          await searchGooglePlaces(`${query}, South Sudan`, false),
-        );
-      }
+      const [, results] = await Promise.all([
+        enforceRoutePreviewLimit(`customer_service_${agentId}`),
+        (async () => {
+          let predictions = parseGooglePlacePredictions(
+            await searchGooglePlaces(query, true),
+          );
+          if (!predictions.length) {
+            predictions = parseGooglePlacePredictions(
+              await searchGooglePlaces(`${query}, South Sudan`, false),
+            );
+          }
+          return predictions;
+        })(),
+      ]);
+      placeSearchCache.set(cacheKey, results);
       return { results };
     } catch (error) {
       throw callableError(error, "Unable to search for locations.");
@@ -559,6 +581,8 @@ exports.customerServiceGetPlace = onCall(
     try {
       requireCustomerServiceAgent(request);
       const placeId = validatePlaceId(request.data?.placeId);
+      const cachedPlace = placeDetailsCache.get(placeId);
+      if (cachedPlace) return cachedPlace;
       const payload = await fetchGooglePlaces(
         `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
         "That location could not be loaded right now.",
@@ -569,7 +593,10 @@ exports.customerServiceGetPlace = onCall(
           },
         },
       );
-      return parseGooglePlaceDetails(payload, placeId);
+      return placeDetailsCache.set(
+        placeId,
+        parseGooglePlaceDetails(payload, placeId),
+      );
     } catch (error) {
       throw callableError(error, "Unable to load the location.");
     }
@@ -592,12 +619,19 @@ exports.customerServiceQuoteRide = onCall(
         rideOptionId: request.data?.rideOptionId,
         paymentMethod: "cash",
       });
-      await enforceRoutePreviewLimit(`customer_service_${agentId}`);
-      const route = await computeTrustedRoute(
-        input.pickup,
-        input.destination,
-        { includePolyline: true },
-      );
+      const cacheKey = routePreviewCacheKey(input.pickup, input.destination);
+      let route = routePreviewCache.get(cacheKey);
+      if (!route) {
+        const [, computedRoute] = await Promise.all([
+          enforceRoutePreviewLimit(`customer_service_${agentId}`),
+          computeTrustedRoute(
+            input.pickup,
+            input.destination,
+            { includePolyline: true },
+          ),
+        ]);
+        route = routePreviewCache.set(cacheKey, computedRoute);
+      }
       return {
         estimatedFare: calculateFare({
           rideOptionId: input.rideOptionId,

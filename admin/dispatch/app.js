@@ -47,12 +47,25 @@ let pickupMarker = null;
 let destinationMarker = null;
 let routeLine = null;
 const searchTimers = new Map();
+const placeSearchCache = new Map();
+const placeDetailsCache = new Map();
+const quoteCache = new Map();
 
 const rideOption = () => document.querySelector('input[name="ride-option"]:checked')?.value || "standard";
 const money = (value) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(value) || 0);
 const dateTime = (millis) => millis ? new Date(millis).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Just now";
 const readableError = (error) => (typeof error?.message === "string" ? error.message : "")
   .replace(/^Firebase:\s*/i, "").replace(/^Functions:\s*/i, "").replace(/\s*\([^)]*\)\.?$/, "").trim() || "The operation could not be completed.";
+
+function routeCacheKey(start, end, option) {
+  return [
+    start.latitude,
+    start.longitude,
+    end.latitude,
+    end.longitude,
+    option,
+  ].map((value) => typeof value === "number" ? value.toFixed(5) : value).join(":");
+}
 
 function showToast(message, tone = "success") {
   clearTimeout(toastTimer);
@@ -212,6 +225,18 @@ async function refreshQuote() {
     return;
   }
   const sequence = ++quoteSequence;
+  const cacheKey = routeCacheKey(pickup, destination, rideOption());
+  const cachedQuote = quoteCache.get(cacheKey);
+  if (cachedQuote) {
+    quote = cachedQuote;
+    el.quoteFare.textContent = `${money(cachedQuote.estimatedFare)} ${cachedQuote.currencyCode || "SSP"}`;
+    el.quoteDistance.textContent = `${(Number(cachedQuote.routeDistanceMeters) / 1000).toFixed(1)} km`;
+    el.quoteDuration.textContent = `${Math.max(1, Math.round(Number(cachedQuote.routeDurationSeconds) / 60))} min`;
+    drawRoute(cachedQuote.encodedPolyline);
+    el.mapStatus.textContent = "Road route and fare are ready.";
+    el.createBooking.disabled = false;
+    return;
+  }
   quote = null;
   el.quoteFare.textContent = "Calculating…";
   el.quoteDistance.textContent = "Road route";
@@ -222,6 +247,7 @@ async function refreshQuote() {
     const { data } = await api.quoteRide(selectedPayload());
     if (sequence !== quoteSequence) return;
     quote = data;
+    quoteCache.set(cacheKey, data);
     el.quoteFare.textContent = `${money(data.estimatedFare)} ${data.currencyCode || "SSP"}`;
     el.quoteDistance.textContent = `${(Number(data.routeDistanceMeters) / 1000).toFixed(1)} km`;
     el.quoteDuration.textContent = `${Math.max(1, Math.round(Number(data.routeDurationSeconds) / 60))} min`;
@@ -284,39 +310,53 @@ function setupPlaceSearch({ input, results, selected, assign }) {
       return;
     }
     searchTimers.set(input, setTimeout(async () => {
+      const cacheKey = query.toLocaleLowerCase("en");
+      const cachedResults = placeSearchCache.get(cacheKey);
+      if (cachedResults) {
+        renderSuggestions(results, cachedResults, chooseSuggestion);
+        return;
+      }
       renderSearchStatus(results, "Searching locations…");
       try {
         const response = await api.searchPlaces({ query });
         if (input.value.trim() !== query) return;
-        renderSuggestions(results, response.data.results || [], async (suggestion) => {
-          results.hidden = true;
-          input.value = suggestion.description || suggestion.primaryText;
-          input.disabled = true;
-          try {
-            const placeResponse = await api.getPlace({ placeId: suggestion.placeId });
-            const place = placeResponse.data;
-            assign(place);
-            updateMap();
-            input.value = place.address;
-            selected.textContent = "Location selected";
-            selected.hidden = false;
-            await refreshQuote();
-          } catch (error) {
-            assign(null);
-            selected.hidden = true;
-            showToast(readableError(error), "error");
-          } finally {
-            input.disabled = false;
-            input.focus();
-          }
-        });
+        const matches = response.data.results || [];
+        placeSearchCache.set(cacheKey, matches);
+        renderSuggestions(results, matches, chooseSuggestion);
       } catch (error) {
         if (input.value.trim() !== query) return;
         const message = readableError(error);
         renderSearchStatus(results, message, "error");
         showToast(message, "error");
       }
-    }, 320));
+    }, 160));
+
+    async function chooseSuggestion(suggestion) {
+      results.hidden = true;
+      input.value = suggestion.description || suggestion.primaryText;
+      input.disabled = true;
+      try {
+        let place = placeDetailsCache.get(suggestion.placeId);
+        if (!place) {
+          const placeResponse = await api.getPlace({ placeId: suggestion.placeId });
+          place = placeResponse.data;
+          placeDetailsCache.set(suggestion.placeId, place);
+        }
+        assign(place);
+        updateMap();
+        input.value = place.address;
+        selected.textContent = "Location selected";
+        selected.hidden = false;
+        await refreshQuote();
+      } catch (error) {
+        assign(null);
+        selected.hidden = true;
+        showToast(readableError(error), "error");
+      } finally {
+        input.disabled = false;
+        input.focus();
+      }
+    }
   });
   input.addEventListener("blur", () => setTimeout(() => { results.hidden = true; }, 180));
 }
