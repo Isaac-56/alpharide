@@ -61,6 +61,21 @@ label small { display: block; margin-top: 5px; font-weight: 500; }
 .suggestion:hover, .suggestion:focus { background: var(--soft); }
 .suggestion b, .suggestion small { display: block; }
 .selected-place { margin: 7px 0 0; color: var(--green-dark); font-size: 12px; font-weight: 700; }
+.map-card { overflow: hidden; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--soft); }
+.map-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; background: var(--paper); }
+.map-heading > div:first-child { display: grid; gap: 2px; }
+.map-heading b { font-size: 13px; }
+.map-heading > div:first-child span { color: var(--muted); font-size: 11px; }
+.map-legend { display: flex; gap: 12px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.map-legend span { display: flex; align-items: center; gap: 5px; }
+.map-legend i { width: 9px; height: 9px; border-radius: 50%; }
+.pickup-pin { background: var(--green); }
+.destination-pin { background: var(--navy); }
+#dispatch-map { z-index: 1; width: 100%; height: 330px; background: #dfe9e4; }
+.alpha-map-pin { width: 28px; height: 28px; border: 4px solid white; border-radius: 50% 50% 50% 0; box-shadow: 0 3px 10px #0005; transform: rotate(-45deg); }
+.alpha-map-pin.pickup { background: var(--green); }
+.alpha-map-pin.destination { background: var(--navy); }
+.leaflet-popup-content { margin: 10px 12px; font-family: inherit; font-weight: 700; }
 fieldset { margin: 0 0 20px; padding: 0; border: 0; }
 legend { margin-bottom: 8px; }
 .ride-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -95,4 +110,4 @@ legend { margin-bottom: 8px; }
 .toast { position: fixed; z-index: 100; right: 20px; bottom: 20px; max-width: min(420px, calc(100vw - 40px)); padding: 13px 16px; border-radius: 12px; background: var(--navy); color: white; box-shadow: 0 16px 45px #0004; font-weight: 700; }
 .toast[data-tone="error"] { background: #7a271a; }
 @media (max-width: 980px) { .workspace { grid-template-columns: 1fr; } .bookings-list { max-height: none; } }
-@media (max-width: 640px) { .topbar { align-items: flex-start; padding: 13px 16px; } .operator { align-items: flex-end; flex-direction: column; gap: 6px; } #agent-email { max-width: 160px; overflow: hidden; text-overflow: ellipsis; } .workspace { padding: 12px; } .booking-panel, .bookings-panel { padding: 18px; border-radius: 19px; } .field-grid, .route-grid { grid-template-columns: 1fr; } .ride-options { grid-template-columns: 1fr; } .ride-option span { min-height: 58px; } .section-heading { align-items: center; } .secure-chip { display: none; } }
+@media (max-width: 640px) { .topbar { align-items: flex-start; padding: 13px 16px; } .operator { align-items: flex-end; flex-direction: column; gap: 6px; } #agent-email { max-width: 160px; overflow: hidden; text-overflow: ellipsis; } .workspace { padding: 12px; } .booking-panel, .bookings-panel { padding: 18px; border-radius: 19px; } .field-grid, .route-grid { grid-template-columns: 1fr; } .ride-options { grid-template-columns: 1fr; } .ride-option span { min-height: 58px; } .section-heading { align-items: center; } .secure-chip { display: none; } .map-heading { align-items: flex-start; flex-direction: column; } #dispatch-map { height: 290px; } }

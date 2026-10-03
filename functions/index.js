@@ -51,6 +51,8 @@ const {
   CALL_CENTER_BOOKING_SOURCE,
   callCenterPassengerId,
   maskPhoneNumber,
+  parseGooglePlaceDetails,
+  parseGooglePlacePredictions,
   validateCallCenterRideInput,
   validatePlaceId,
   validatePlaceSearchQuery,
@@ -466,10 +468,13 @@ function customerServiceRidePayload(rideId, data = {}) {
   };
 }
 
-async function fetchGooglePlaces(url, fallbackMessage) {
+async function fetchGooglePlaces(url, fallbackMessage, options = {}) {
   let response;
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    response = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(10000),
+    });
   } catch (error) {
     logger.error("Google Places could not be reached", error);
     throw new HttpsError("unavailable", fallbackMessage);
@@ -482,15 +487,7 @@ async function fetchGooglePlaces(url, fallbackMessage) {
     });
     throw new HttpsError("unavailable", fallbackMessage);
   }
-  const payload = await response.json();
-  if (payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
-    logger.error("Google Places returned an error status", {
-      status: payload.status,
-      message: payload.error_message,
-    });
-    throw new HttpsError("unavailable", fallbackMessage);
-  }
-  return payload;
+  return response.json();
 }
 
 exports.customerServiceSearchPlaces = onCall(
@@ -505,29 +502,34 @@ exports.customerServiceSearchPlaces = onCall(
       const agentId = requireCustomerServiceAgent(request);
       const query = validatePlaceSearchQuery(request.data?.query);
       await enforceRoutePreviewLimit(`customer_service_${agentId}`);
-      const parameters = new URLSearchParams({
-        input: query,
-        components: "country:SS",
-        location: "4.8594,31.5713",
-        radius: "75000",
-        language: "en",
-        key: googleRoutesApiKey.value(),
-      });
       const payload = await fetchGooglePlaces(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?${parameters}`,
+        "https://places.googleapis.com/v1/places:autocomplete",
         "Location search is temporarily unavailable.",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": googleRoutesApiKey.value(),
+            "X-Goog-FieldMask": [
+              "suggestions.placePrediction.placeId",
+              "suggestions.placePrediction.text",
+              "suggestions.placePrediction.structuredFormat",
+            ].join(","),
+          },
+          body: JSON.stringify({
+            input: query,
+            includedRegionCodes: ["ss"],
+            languageCode: "en",
+            locationBias: {
+              circle: {
+                center: { latitude: 4.8594, longitude: 31.5713 },
+                radius: 75000,
+              },
+            },
+          }),
+        },
       );
-      return {
-        results: (payload.predictions ?? []).slice(0, 8).map((prediction) => ({
-          placeId: safeText(prediction.place_id),
-          primaryText: safeText(prediction.structured_formatting?.main_text) ||
-            safeText(prediction.description),
-          secondaryText: safeText(
-            prediction.structured_formatting?.secondary_text,
-          ),
-          description: safeText(prediction.description),
-        })),
-      };
+      return { results: parseGooglePlacePredictions(payload) };
     } catch (error) {
       throw callableError(error, "Unable to search for locations.");
     }
@@ -545,28 +547,17 @@ exports.customerServiceGetPlace = onCall(
     try {
       requireCustomerServiceAgent(request);
       const placeId = validatePlaceId(request.data?.placeId);
-      const parameters = new URLSearchParams({
-        place_id: placeId,
-        fields: "place_id,name,formatted_address,geometry/location",
-        language: "en",
-        key: googleRoutesApiKey.value(),
-      });
       const payload = await fetchGooglePlaces(
-        `https://maps.googleapis.com/maps/api/place/details/json?${parameters}`,
+        `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
         "That location could not be loaded right now.",
+        {
+          headers: {
+            "X-Goog-Api-Key": googleRoutesApiKey.value(),
+            "X-Goog-FieldMask": "id,displayName,formattedAddress,location",
+          },
+        },
       );
-      const place = payload.result;
-      const latitude = place?.geometry?.location?.lat;
-      const longitude = place?.geometry?.location?.lng;
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        throw new HttpsError("not-found", "That location has no map point.");
-      }
-      return {
-        placeId,
-        address: safeText(place.formatted_address) || safeText(place.name),
-        latitude,
-        longitude,
-      };
+      return parseGooglePlaceDetails(payload, placeId);
     } catch (error) {
       throw callableError(error, "Unable to load the location.");
     }
@@ -583,13 +574,18 @@ exports.customerServiceQuoteRide = onCall(
   async (request) => {
     try {
       const agentId = requireCustomerServiceAgent(request);
-      const input = validateCallCenterRideInput({
-        ...request.data,
-        customerName: request.data?.customerName || "Phone customer",
-        customerPhone: request.data?.customerPhone || "+211900000000",
+      const input = validateCreateRideInput({
+        pickup: request.data?.pickup,
+        destination: request.data?.destination,
+        rideOptionId: request.data?.rideOptionId,
+        paymentMethod: "cash",
       });
       await enforceRoutePreviewLimit(`customer_service_${agentId}`);
-      const route = await computeTrustedRoute(input.pickup, input.destination);
+      const route = await computeTrustedRoute(
+        input.pickup,
+        input.destination,
+        { includePolyline: true },
+      );
       return {
         estimatedFare: calculateFare({
           rideOptionId: input.rideOptionId,
@@ -598,6 +594,7 @@ exports.customerServiceQuoteRide = onCall(
         currencyCode: CURRENCY_CODE,
         routeDistanceMeters: Math.round(route.distanceMeters),
         routeDurationSeconds: Math.round(route.durationSeconds),
+        encodedPolyline: route.encodedPolyline,
       };
     } catch (error) {
       throw callableError(error, "Unable to calculate the phone-booking fare.");

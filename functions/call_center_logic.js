@@ -104,6 +104,50 @@ function validatePlaceId(value) {
   return placeId;
 }
 
+function parseGooglePlacePredictions(payload) {
+  const suggestions = Array.isArray(payload?.suggestions)
+    ? payload.suggestions
+    : [];
+  return suggestions
+    .map((suggestion) => suggestion?.placePrediction)
+    .filter((prediction) => prediction && typeof prediction === "object")
+    .map((prediction) => ({
+      placeId: typeof prediction.placeId === "string"
+        ? prediction.placeId.trim()
+        : "",
+      primaryText:
+        typeof prediction.structuredFormat?.mainText?.text === "string"
+          ? prediction.structuredFormat.mainText.text.trim()
+          : "",
+      secondaryText:
+        typeof prediction.structuredFormat?.secondaryText?.text === "string"
+          ? prediction.structuredFormat.secondaryText.text.trim()
+          : "",
+      description: typeof prediction.text?.text === "string"
+        ? prediction.text.text.trim()
+        : "",
+    }))
+    .filter((prediction) => prediction.placeId && prediction.description)
+    .slice(0, 8);
+}
+
+function parseGooglePlaceDetails(payload, placeId) {
+  const latitude = payload?.location?.latitude;
+  const longitude = payload?.location?.longitude;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new RangeError("Google Places returned no map point");
+  }
+  const formattedAddress = typeof payload.formattedAddress === "string"
+    ? payload.formattedAddress.trim()
+    : "";
+  const displayName = typeof payload.displayName?.text === "string"
+    ? payload.displayName.text.trim()
+    : "";
+  const address = formattedAddress || displayName;
+  if (!address) throw new RangeError("Google Places returned no address");
+  return Object.freeze({ placeId, address, latitude, longitude });
+}
+
 module.exports = {
   CALL_CENTER_BOOKING_SOURCE,
   callCenterPassengerId,
@@ -111,6 +155,8 @@ module.exports = {
   normalizeBookingNote,
   normalizeCustomerName,
   normalizeSouthSudanPhone,
+  parseGooglePlaceDetails,
+  parseGooglePlacePredictions,
   validateCallCenterRideInput,
   validatePlaceId,
   validatePlaceSearchQuery,
