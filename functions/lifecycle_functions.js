@@ -20,12 +20,14 @@ const {
   STALE_ACTIVE_RIDE_STATUSES,
   isStaleActiveRide,
   normalizeDriverRideStatus,
+  resolveDriverRideLock,
   resolveCompletedRideFare,
   resolveWaitingInterval,
   validateDriverRideTransition,
 } = require("./lifecycle_logic");
 const { waitingPolicyFor } = require("./ride_logic");
 const { buildReceiptNumber } = require("./receipt_logic");
+const { effectiveVehicleClassForProfile } = require("./vehicle_logic");
 
 const REGION = "africa-south1";
 const SCHEDULE_REGION = "europe-west1";
@@ -51,6 +53,18 @@ async function syncDriverPresenceRide(driverId, rideId, completed) {
   });
 }
 
+function rideActivityAt(rideSnapshot) {
+  return [
+    "updatedAt",
+    "startedAt",
+    "arrivedAt",
+    "acceptedAt",
+    "createdAt",
+  ]
+    .map((field) => rideSnapshot.get(field))
+    .find((value) => value instanceof Timestamp) ?? null;
+}
+
 async function closeStaleActiveRide(rideReference, now) {
   let staleRide = null;
 
@@ -58,15 +72,7 @@ async function closeStaleActiveRide(rideReference, now) {
     const rideSnapshot = await transaction.get(rideReference);
     if (!rideSnapshot.exists) return;
 
-    const activityAt = [
-      "updatedAt",
-      "startedAt",
-      "arrivedAt",
-      "acceptedAt",
-      "createdAt",
-    ]
-      .map((field) => rideSnapshot.get(field))
-      .find((value) => value instanceof Timestamp);
+    const activityAt = rideActivityAt(rideSnapshot);
     if (!(activityAt instanceof Timestamp)) return;
     if (!isStaleActiveRide({
       status: rideSnapshot.get("status"),
@@ -139,6 +145,136 @@ async function closeStaleActiveRide(rideReference, now) {
 
   return staleRide;
 }
+
+async function deleteMatchingActiveDriverRide(driverId, rideId) {
+  const activeDriverRef = db.collection("active_driver_rides").doc(driverId);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(activeDriverRef);
+    if (snapshot.exists && snapshot.get("rideId") === rideId) {
+      transaction.delete(activeDriverRef);
+    }
+  });
+}
+
+async function driverRideLock(driverId, rideId) {
+  const rideRef = db.collection("rides").doc(rideId);
+  const rideSnapshot = await rideRef.get();
+  const assignedDriverId = rideSnapshot.exists
+    ? rideSnapshot.get("driverId")
+    : null;
+  const status = rideSnapshot.exists &&
+      typeof rideSnapshot.get("status") === "string"
+    ? rideSnapshot.get("status").trim().toLowerCase()
+    : "";
+  const activityAt = rideSnapshot.exists ? rideActivityAt(rideSnapshot) : null;
+  return {
+    rideRef,
+    value: resolveDriverRideLock({
+      status,
+      assignedDriverId,
+      driverId,
+      updatedAtMillis: activityAt instanceof Timestamp
+        ? activityAt.toMillis()
+        : null,
+      nowMillis: Date.now(),
+    }),
+  };
+}
+
+async function prepareDriverActiveRide(driverId) {
+  const activeDriverRef = db.collection("active_driver_rides").doc(driverId);
+  const presenceRef = realtimeDb.ref(`driver_locations/${driverId}`);
+  const [activeSnapshot, presenceSnapshot] = await Promise.all([
+    activeDriverRef.get(),
+    presenceRef.get(),
+  ]);
+  const activeRideId = activeSnapshot.exists &&
+      typeof activeSnapshot.get("rideId") === "string"
+    ? activeSnapshot.get("rideId").trim()
+    : "";
+  const presence = presenceSnapshot.exists() &&
+      presenceSnapshot.val() &&
+      typeof presenceSnapshot.val() === "object"
+    ? presenceSnapshot.val()
+    : {};
+  const presenceRideId = typeof presence.activeRideId === "string"
+    ? presence.activeRideId.trim()
+    : "";
+  const candidateRideIds = [...new Set([activeRideId, presenceRideId])]
+    .filter(Boolean);
+
+  for (const rideId of candidateRideIds) {
+    const rideLock = await driverRideLock(driverId, rideId);
+
+    if (rideLock.value === "active") {
+      await activeDriverRef.set({
+        driverId,
+        rideId,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      await syncDriverPresenceRide(driverId, rideId, false);
+      return rideId;
+    }
+
+    if (rideLock.value === "stale") {
+      await closeStaleActiveRide(rideLock.rideRef, Timestamp.now());
+    } else {
+      await deleteMatchingActiveDriverRide(driverId, rideId);
+    }
+    await syncDriverPresenceRide(driverId, rideId, true);
+  }
+
+  return null;
+}
+
+exports.prepareDriverAvailability = onCall(
+  {
+    region: REGION,
+    timeoutSeconds: 15,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedDriver(request);
+      const profileSnapshot = await db.collection("drivers").doc(driverId).get();
+      if (!profileSnapshot.exists) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Complete your driver registration before going online.",
+        );
+      }
+
+      const profile = profileSnapshot.data();
+      const reviewStatus = typeof profile.reviewStatus === "string"
+        ? profile.reviewStatus.trim().toLowerCase()
+        : "";
+      if (reviewStatus !== "approved") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Your driver account must be approved before you can go online.",
+        );
+      }
+
+      const vehicleType = effectiveVehicleClassForProfile(profile);
+      if (!vehicleType) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Alpha must assign your ride category before you can go online.",
+        );
+      }
+
+      const activeRideId = await prepareDriverActiveRide(driverId);
+      return { driverId, vehicleType, activeRideId };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("Unable to prepare driver availability", error);
+      throw new HttpsError(
+        "internal",
+        "Alpha Plus could not verify your availability right now.",
+      );
+    }
+  },
+);
 
 exports.expireStaleActiveRides = onSchedule(
   {

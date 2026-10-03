@@ -39,6 +39,28 @@ function isStaleActiveRide({ status, updatedAtMillis, nowMillis }) {
   return nowMillis - updatedAtMillis >= STALE_ACTIVE_RIDE_TIMEOUT_MS;
 }
 
+function resolveDriverRideLock({
+  status,
+  assignedDriverId,
+  driverId,
+  updatedAtMillis,
+  nowMillis,
+}) {
+  if (typeof driverId !== "string" || !driverId.trim()) return "release";
+  if (assignedDriverId !== driverId) return "release";
+  if (typeof status !== "string") return "release";
+
+  const normalizedStatus = status.trim().toLowerCase();
+  if (!STALE_ACTIVE_RIDE_STATUSES.has(normalizedStatus)) return "release";
+  if (!Number.isFinite(updatedAtMillis)) return "active";
+
+  return isStaleActiveRide({
+    status: normalizedStatus,
+    updatedAtMillis,
+    nowMillis,
+  }) ? "stale" : "active";
+}
+
 function normalizeDriverRideStatus(value) {
   if (typeof value !== "string") {
     throw new TypeError("ride status must be a string");
@@ -156,6 +178,7 @@ module.exports = {
   STATUS_TIMESTAMP_FIELDS,
   isStaleActiveRide,
   normalizeDriverRideStatus,
+  resolveDriverRideLock,
   resolveCompletedRideFare,
   resolveWaitingInterval,
   validateDriverRideTransition,
