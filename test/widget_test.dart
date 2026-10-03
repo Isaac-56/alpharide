@@ -38,6 +38,7 @@ void main() {
     'order panel requires an explicit ride choice before continuing',
     (WidgetTester tester) async {
       RideOption? confirmedRide;
+      int confirmationCount = 0;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -49,6 +50,7 @@ void main() {
               onDestinationTap: () {},
               onConfirmRide: (RideOption ride, _) {
                 confirmedRide = ride;
+                confirmationCount++;
               },
               collapsed: false,
               onExpand: () {},
@@ -77,9 +79,15 @@ void main() {
       await tester.pump();
 
       expect(confirmedRide?.estimatedFare, 37500);
+      expect(confirmationCount, 1);
 
-      // Let the OrderPanel confirmation lock timer finish before the test ends.
-      await tester.pump(const Duration(milliseconds: 701));
+      // The anti-double-tap lock releases quickly so a failed navigation or
+      // other immediate retry never makes the interface feel frozen.
+      await tester.pump(const Duration(milliseconds: 181));
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(confirmationCount, 2);
+      await tester.pump(const Duration(milliseconds: 181));
     },
   );
 

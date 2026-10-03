@@ -207,7 +207,7 @@ class _OrderPanelState extends State<OrderPanel> {
       );
     } finally {
       Future<void>.delayed(
-        const Duration(milliseconds: 550),
+        const Duration(milliseconds: 180),
         () {
           if (!mounted) return;
 
@@ -263,7 +263,7 @@ class _OrderPanelState extends State<OrderPanel> {
       );
     } finally {
       Future<void>.delayed(
-        const Duration(milliseconds: 700),
+        const Duration(milliseconds: 180),
         () {
           if (!mounted) return;
 

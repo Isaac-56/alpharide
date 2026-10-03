@@ -805,7 +805,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _sheetController.animateTo(
       0.68,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
     );
   }
@@ -815,7 +815,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _sheetController.animateTo(
       0.20,
-      duration: const Duration(milliseconds: 360),
+      duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
     );
   }
