@@ -28,6 +28,7 @@ const { waitingPolicyFor } = require("./ride_logic");
 const { buildReceiptNumber } = require("./receipt_logic");
 
 const REGION = "africa-south1";
+const SCHEDULE_REGION = "europe-west1";
 const db = getFirestore();
 const realtimeDb = getDatabase();
 
@@ -141,7 +142,7 @@ async function closeStaleActiveRide(rideReference, now) {
 
 exports.expireStaleActiveRides = onSchedule(
   {
-    region: REGION,
+    region: SCHEDULE_REGION,
     schedule: "every 5 minutes",
     timeZone: "Africa/Juba",
     timeoutSeconds: 120,

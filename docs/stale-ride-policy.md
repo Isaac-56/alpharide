@@ -15,6 +15,9 @@ The `expireStaleActiveRides` scheduled function runs every five minutes and:
 A stale ride is never completed automatically. It does not create a receipt,
 increase ride totals, or debit the driver's prepaid wallet.
 
+The scheduler runs from `europe-west1`, a Cloud Scheduler-supported location,
+while continuing to use the same Firebase project and Firestore database.
+
 Deploy the function with:
 
 ```powershell
