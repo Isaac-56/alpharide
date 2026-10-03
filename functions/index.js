@@ -526,7 +526,7 @@ exports.customerServiceSearchPlaces = onCall(
               locationBias: {
                 circle: {
                   center: { latitude: 4.8594, longitude: 31.5713 },
-                  radius: 75000,
+                  radius: 50000,
                 },
               },
             }),
