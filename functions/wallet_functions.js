@@ -10,6 +10,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { normalizePhoneNumber } = require("./account_role_logic");
 const { PLATFORM_COMMISSION_BPS } = require("./accounting_logic");
+const { driverReviewPayload } = require("./driver_review_logic");
 const {
   effectiveVehicleClassForProfile,
   effectiveVehicleClassesForProfile,
@@ -141,6 +142,20 @@ function cleanDriverId(value) {
   return normalized;
 }
 
+function timestampMillis(value) {
+  return typeof value?.toMillis === "function" ? value.toMillis() : null;
+}
+
+async function authenticatedPhoneNumber(driverId) {
+  try {
+    const user = await auth.getUser(driverId);
+    return typeof user.phoneNumber === "string" ? user.phoneNumber : "";
+  } catch (error) {
+    if (error?.code === "auth/user-not-found") return "";
+    throw error;
+  }
+}
+
 async function resolveDriverId(data) {
   if (typeof data?.driverId === "string" && data.driverId.trim()) {
     return cleanDriverId(data.driverId);
@@ -244,6 +259,7 @@ exports.adminListDrivers = callable(async (request) => {
           typeof profile?.reviewStatus === "string"
             ? profile.reviewStatus
             : "pending",
+        onboardingCompleted: profile?.onboardingCompleted === true,
         vehicleType:
           typeof registration?.vehicleType === "string"
             ? registration.vehicleType
@@ -272,6 +288,41 @@ exports.adminListDrivers = callable(async (request) => {
 
   return { drivers };
 }, "The driver directory could not be loaded.");
+
+exports.adminGetDriverReview = callable(async (request) => {
+  requireAdmin(request);
+  const driverId = await resolveDriverId(request.data);
+  const [profileSnapshot, verifiedPhoneNumber] = await Promise.all([
+    db.collection("drivers").doc(driverId).get(),
+    authenticatedPhoneNumber(driverId),
+  ]);
+  if (!profileSnapshot.exists) {
+    throw new HttpsError("not-found", "Driver profile not found.");
+  }
+
+  const profile = profileSnapshot.data();
+  const review = driverReviewPayload({
+    driverId,
+    profile,
+    authenticatedPhoneNumber: verifiedPhoneNumber,
+  });
+  const licence = profile?.documents?.driverLicence;
+  return {
+    ...review,
+    createdAtMillis: timestampMillis(profile.createdAt),
+    updatedAtMillis: timestampMillis(profile.updatedAt),
+    onboardingCompletedAtMillis:
+      timestampMillis(profile.onboardingCompletedAt),
+    reviewedAtMillis: timestampMillis(profile.reviewedAt),
+    documents: {
+      ...review.documents,
+      driverLicence: {
+        ...review.documents.driverLicence,
+        uploadedAtMillis: timestampMillis(licence?.uploadedAt),
+      },
+    },
+  };
+}, "The driver review information could not be loaded.");
 
 exports.adminCreditDriverWallet = callable(async (request) => {
   const administrator = requireAdmin(request);
@@ -509,6 +560,9 @@ exports.adminSetDriverReviewStatus = callable(async (request) => {
   const note = cleanText(request.data?.note, "note", 240);
   const profileRef = db.collection("drivers").doc(driverId);
   const auditRef = db.collection("admin_audit_log").doc();
+  const verifiedPhoneNumber = reviewStatus === "approved"
+    ? await authenticatedPhoneNumber(driverId)
+    : "";
 
   await db.runTransaction(async (transaction) => {
     const profileSnapshot = await transaction.get(profileRef);
@@ -516,6 +570,20 @@ exports.adminSetDriverReviewStatus = callable(async (request) => {
       throw new HttpsError("not-found", "Driver profile not found.");
     }
     const profile = profileSnapshot.data();
+    if (reviewStatus === "approved") {
+      const review = driverReviewPayload({
+        driverId,
+        profile,
+        authenticatedPhoneNumber: verifiedPhoneNumber,
+      });
+      if (!review.readyForApproval) {
+        throw new HttpsError(
+          "failed-precondition",
+          `Complete the review first: ${review.missingRequirements.join("; ")}.`,
+          { missingRequirements: review.missingRequirements },
+        );
+      }
+    }
     if (
       reviewStatus === "approved" &&
       effectiveVehicleClassesForProfile(profile).length === 0
