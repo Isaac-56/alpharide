@@ -10,6 +10,11 @@ separately from the passenger and driver apps.
 - An account must also have the custom claim `admin: true`.
 - Wallet credit, suspension and driver review actions use callable Cloud
   Functions. The browser cannot write directly to driver wallets.
+- Driver licence images are read from Firebase Storage with the signed-in
+  administrator token. The portal does not create permanent public links.
+- Driver approval is blocked unless the Firebase-authenticated phone number,
+  registration details, onboarding state, and both licence images pass the
+  server-side readiness checks.
 - Every recharge stores the administrator UID/email, receipt reference,
   before/after balances and timestamp in the driver's wallet ledger.
 - Driver apps have read-only access to their own wallet and ledger.
@@ -43,7 +48,7 @@ From the AlphaRide repository root:
 ```powershell
 $env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"
 firebase use alpha-ride-29708
-firebase deploy --only "firestore:rules,functions,hosting"
+firebase deploy --only "firestore:rules,storage,functions,hosting"
 Remove-Item Env:FUNCTIONS_DISCOVERY_TIMEOUT -ErrorAction SilentlyContinue
 ```
 
@@ -59,6 +64,22 @@ Firebase prints the Hosting URL when deployment completes.
 - Bajaj/Tuk-tuk registrations use the Rickshaw passenger service automatically.
 - A new regular car cannot be approved or go online until its Alpha ride class
   is assigned. Legacy `Car` profiles remain Standard until reclassified.
+
+## Driver approval procedure
+
+1. Select a pending driver in the Drivers workspace.
+2. Confirm that Firebase OTP is marked **Verified** and the profile phone
+   number matches the registration.
+3. Compare the submitted identity and vehicle details with the physical
+   driver, vehicle, and plate.
+4. Open and inspect both the front and back licence images.
+5. Assign one or more Alpha ride classes when the vehicle requires manual
+   classification.
+6. Record an approval or rejection note and save the review status.
+
+The approval button remains disabled while any required check is missing. The
+callable backend repeats the same checks, so bypassing the browser cannot
+approve an incomplete driver.
 
 ## Office recharge procedure
 
