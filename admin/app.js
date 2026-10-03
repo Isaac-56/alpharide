@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, getIdTokenResult, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
+import { getBlob, getStorage, ref as storageRef } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBQfe36JwUXD4-Xq9_ky2IQD3mLwOORUhk",
@@ -13,11 +14,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const storage = getStorage(app);
 const functions = getFunctions(app, "africa-south1");
 const call = (name) => httpsCallable(functions, name);
 const api = {
   overview: call("adminGetOperationsOverview"),
   drivers: call("adminListDrivers"),
+  driverReview: call("adminGetDriverReview"),
   rides: call("adminListRides"),
   receipts: call("adminListReceipts"),
   recharges: call("adminListRecharges"),
@@ -42,6 +45,10 @@ const el = {
   walletBalance: $("#wallet-balance"), walletStatus: $("#wallet-status"), walletCredits: $("#wallet-credits"), walletDebits: $("#wallet-debits"),
   vehicleType: $("#vehicle-type"), plateNumber: $("#plate-number"), vehicleClasses: $("#vehicle-classes"), vehicleClassHint: $("#vehicle-class-hint"), saveVehicleClass: $("#save-vehicle-class"),
   reviewStatus: $("#review-status"), saveReview: $("#save-review"), walletStatusSelect: $("#wallet-status-select"), saveWalletStatus: $("#save-wallet-status"), ledger: $("#ledger-body"),
+  reviewNote: $("#review-note"), reviewReadiness: $("#review-readiness"), reviewChecklist: $("#review-checklist"),
+  identityDetails: $("#identity-details"), vehicleDetails: $("#vehicle-details"), licenceDetails: $("#licence-details"),
+  licenceFrontLink: $("#licence-front-link"), licenceFrontImage: $("#licence-front-image"), licenceFrontStatus: $("#licence-front-status"), licenceFrontPlaceholder: $("#licence-front-placeholder"),
+  licenceBackLink: $("#licence-back-link"), licenceBackImage: $("#licence-back-image"), licenceBackStatus: $("#licence-back-status"), licenceBackPlaceholder: $("#licence-back-placeholder"),
   refreshRecharges: $("#refresh-recharges"), rechargeForm: $("#recharge-form"), rechargeDriver: $("#recharge-driver"), rechargeAmount: $("#recharge-amount"), rechargeReference: $("#recharge-reference"), rechargeNote: $("#recharge-note"), rechargePagePreview: $("#recharge-page-preview"), rechargesBody: $("#recharges-body"),
   refreshRides: $("#refresh-rides"), rideSearch: $("#ride-search"), rideFilter: $("#ride-filter"), rideCount: $("#ride-count"), ridesBody: $("#rides-body"),
   refreshReceipts: $("#refresh-receipts"), receiptSearch: $("#receipt-search"), receiptCount: $("#receipt-count"), receiptsBody: $("#receipts-body"),
@@ -55,6 +62,8 @@ let rides = [];
 let receipts = [];
 let recharges = [];
 let selectedDriverId = null;
+const driverReviews = new Map();
+let documentRenderId = 0;
 let toastTimer = null;
 let confirmResolver = null;
 
@@ -170,7 +179,114 @@ async function loadDrivers({ preserveSelection = true } = {}) {
   finally { setBusy(el.refreshDrivers, false); }
 }
 
-async function selectDriver(driverId) { selectedDriverId = driverId; renderDriverList(); renderDriverDetail(selectedDriver()); await loadLedger(driverId); }
+async function selectDriver(driverId) {
+  selectedDriverId = driverId;
+  renderDriverList();
+  renderDriverDetail(selectedDriver());
+  await Promise.all([loadLedger(driverId), loadDriverReview(driverId)]);
+}
+
+function detailRows(container, values) {
+  container.replaceChildren();
+  for (const [label, value] of values) {
+    const row = document.createElement("div");
+    const term = document.createElement("dt"); term.textContent = label;
+    const description = document.createElement("dd"); description.textContent = value || "Not provided";
+    row.append(term, description); container.append(row);
+  }
+}
+
+function resetDocumentPreview(link, image, status, placeholder, message) {
+  if (link.dataset.objectUrl) URL.revokeObjectURL(link.dataset.objectUrl);
+  delete link.dataset.objectUrl;
+  link.hidden = true; link.removeAttribute("href"); image.removeAttribute("src");
+  status.textContent = message; placeholder.textContent = message; placeholder.hidden = false;
+}
+
+async function renderDocumentPreview({ path, link, image, status, placeholder, renderId }) {
+  if (!path) {
+    resetDocumentPreview(link, image, status, placeholder, "Not uploaded");
+    return;
+  }
+  resetDocumentPreview(link, image, status, placeholder, "Loading secure image…");
+  try {
+    const blob = await getBlob(storageRef(storage, path), 10 * 1024 * 1024);
+    if (renderId !== documentRenderId) return;
+    const url = URL.createObjectURL(blob); link.dataset.objectUrl = url;
+    link.href = url; image.src = url; link.hidden = false; placeholder.hidden = true; status.textContent = "Uploaded — open full size";
+  } catch (error) {
+    if (renderId !== documentRenderId) return;
+    resetDocumentPreview(link, image, status, placeholder, "Image unavailable");
+    placeholder.textContent = readableError(error);
+  }
+}
+
+function updateReviewButtonState() {
+  const review = selectedDriverId ? driverReviews.get(selectedDriverId) : null;
+  el.saveReview.disabled = el.reviewStatus.value === "approved" && review?.readyForApproval !== true;
+}
+
+function renderDriverReview(review) {
+  const renderId = ++documentRenderId;
+  if (!review) {
+    el.reviewReadiness.textContent = "Loading…"; delete el.reviewReadiness.dataset.ready;
+    el.reviewChecklist.replaceChildren();
+    detailRows(el.identityDetails, [["Status", "Loading review information…"]]);
+    detailRows(el.vehicleDetails, [["Status", "Loading review information…"]]);
+    detailRows(el.licenceDetails, [["Status", "Loading review information…"]]);
+    resetDocumentPreview(el.licenceFrontLink, el.licenceFrontImage, el.licenceFrontStatus, el.licenceFrontPlaceholder, "Loading…");
+    resetDocumentPreview(el.licenceBackLink, el.licenceBackImage, el.licenceBackStatus, el.licenceBackPlaceholder, "Loading…");
+    updateReviewButtonState();
+    return;
+  }
+
+  el.reviewReadiness.textContent = review.readyForApproval ? "Ready for approval" : `${review.missingRequirements?.length || 0} item(s) missing`;
+  el.reviewReadiness.dataset.ready = String(review.readyForApproval === true);
+  el.reviewChecklist.replaceChildren();
+  for (const check of review.checks || []) {
+    const item = document.createElement("div"); item.className = `review-check${check.passed ? " passed" : ""}`; item.textContent = check.label; el.reviewChecklist.append(item);
+  }
+  const identity = review.identity || {}; const registration = review.registration || {};
+  detailRows(el.identityDetails, [
+    ["Full name", `${identity.firstName || ""} ${identity.lastName || ""}`.trim()],
+    ["Phone", identity.phoneNumber],
+    ["Firebase OTP", identity.phoneVerified ? "Verified" : "Not verified"],
+    ["Submitted", dateTime(review.onboardingCompletedAtMillis)],
+  ]);
+  detailRows(el.vehicleDetails, [
+    ["Service", registration.serviceType], ["Vehicle type", registration.vehicleType],
+    ["Make and model", `${registration.make || ""} ${registration.model || ""}`.trim()],
+    ["Colour", registration.color], ["Year", registration.manufactureYear], ["Plate", registration.plateNumber],
+  ]);
+  detailRows(el.licenceDetails, [
+    ["Country", registration.licenceCountry],
+    ["Name", `${registration.licenceFirstName || ""} ${registration.licenceLastName || ""}`.trim()],
+    ["Licence number", registration.licenceNumber], ["Issue date", registration.licenceIssueDate],
+    ["Upload check", review.documents?.driverLicence?.qualityChecked ? "Passed" : "Not passed"],
+  ]);
+  const licence = review.documents?.driverLicence || {};
+  void renderDocumentPreview({ path: licence.frontStoragePath, link: el.licenceFrontLink, image: el.licenceFrontImage, status: el.licenceFrontStatus, placeholder: el.licenceFrontPlaceholder, renderId });
+  void renderDocumentPreview({ path: licence.backStoragePath, link: el.licenceBackLink, image: el.licenceBackImage, status: el.licenceBackStatus, placeholder: el.licenceBackPlaceholder, renderId });
+  el.reviewNote.value = review.reviewNote || "";
+  updateReviewButtonState();
+}
+
+async function loadDriverReview(driverId) {
+  if (driverReviews.has(driverId)) { renderDriverReview(driverReviews.get(driverId)); return; }
+  renderDriverReview(null);
+  try {
+    const result = await api.driverReview({ driverId });
+    if (selectedDriverId !== driverId) return;
+    driverReviews.set(driverId, result.data || {});
+    renderDriverReview(driverReviews.get(driverId));
+  } catch (error) {
+    if (selectedDriverId !== driverId) return;
+    el.reviewReadiness.textContent = "Review unavailable"; el.reviewReadiness.dataset.ready = "false";
+    el.reviewChecklist.replaceChildren();
+    const item = document.createElement("div"); item.className = "review-check"; item.textContent = readableError(error); el.reviewChecklist.append(item);
+    updateReviewButtonState();
+  }
+}
 
 function renderDriverDetail(driver) {
   if (!driver) { el.empty.hidden = false; el.detail.hidden = true; return; }
@@ -186,6 +302,7 @@ function renderDriverDetail(driver) {
   el.saveVehicleClass.disabled = !driver.requiresVehicleClass;
   el.vehicleClassHint.textContent = driver.requiresVehicleClass ? (classes.length ? "A car may qualify for more than one service class after inspection." : "Choose at least one class before approving this vehicle.") : `Automatically classified as ${classes.map(vehicleClassLabel).join(", ") || "its fixed local category"}.`;
   el.reviewStatus.value = driver.reviewStatus || "pending"; el.walletStatusSelect.value = wallet.status || "active";
+  renderDriverReview(driverReviews.get(driver.driverId));
 }
 
 function cellRow(values, classes = {}) {
@@ -299,6 +416,7 @@ document.addEventListener("keydown", (event) => { if (event.key === "Escape" && 
 el.refreshOverview.addEventListener("click", loadOverview); el.refreshDrivers.addEventListener("click", () => loadDrivers()); el.driverSearch.addEventListener("input", renderDriverList); el.driverFilter.addEventListener("change", renderDriverList);
 el.refreshRides.addEventListener("click", loadRides); el.rideSearch.addEventListener("input", renderRides); el.rideFilter.addEventListener("change", renderRides); el.refreshActivity.addEventListener("click", loadActivity);
 el.refreshRecharges.addEventListener("click", loadRecharges); el.refreshReceipts.addEventListener("click", loadReceipts); el.receiptSearch.addEventListener("input", renderReceipts); el.refreshCommission.addEventListener("click", loadCommission);
+el.reviewStatus.addEventListener("change", updateReviewButtonState);
 $$('[data-recharge-amount]').forEach((button) => button.addEventListener("click", () => { el.rechargeAmount.value = button.dataset.rechargeAmount; updateRechargePagePreview(); })); el.rechargeAmount.addEventListener("input", updateRechargePagePreview); el.rechargeDriver.addEventListener("change", updateRechargePagePreview); el.commissionPercent.addEventListener("input", updateCommissionPreview);
 
 el.rechargeForm.addEventListener("submit", async (event) => {
@@ -312,7 +430,7 @@ el.rechargeForm.addEventListener("submit", async (event) => {
 el.saveVehicleClass.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver?.requiresVehicleClass) return; const vehicleClasses = $$("#vehicle-classes input:checked").map((input) => input.value); if (!vehicleClasses.length) return showToast("Select at least one Alpha ride class.", "error"); const labels = vehicleClasses.map(vehicleClassLabel).join(", "); const approved = await confirmAction({ title: "Change ride classes?", message: `Assign ${el.name.textContent} to ${labels} after physical inspection?`, confirmLabel: "Save classes" }); if (!approved) return; setBusy(el.saveVehicleClass, true); try { await api.vehicleClass({ driverId: driver.driverId, vehicleClasses }); showToast("Driver ride classes updated."); await Promise.all([loadDrivers(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveVehicleClass, false); } });
 
 el.commissionForm.addEventListener("submit", async (event) => { event.preventDefault(); const commissionPercent = Number(el.commissionPercent.value); const approved = await confirmAction({ title: "Update commission rate?", message: `New rides will use a ${commissionPercent}% Alpha commission. Existing rides keep the rate they were created with.`, confirmLabel: "Save rate" }); if (!approved) return; const button = el.commissionForm.querySelector("button[type=submit]"); setBusy(button, true, "Saving…"); try { const result = await api.setCommission({ commissionPercent }); el.commissionPercent.value = result.data.commissionPercent; updateCommissionPreview(); showToast("Commission rate updated for new rides."); await Promise.all([loadActivity(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); } });
-el.saveReview.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.reviewStatus.value; const approved = await confirmAction({ title: `${rideStatusLabel(status)} this driver?`, message: `Change ${el.name.textContent}'s review status to ${status}.`, confirmLabel: "Save status" }); if (!approved) return; setBusy(el.saveReview, true); try { await api.reviewStatus({ driverId: driver.driverId, reviewStatus: status, note: "Updated from Alpha Admin" }); showToast("Driver review status updated."); await Promise.all([loadDrivers(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveReview, false); } });
+el.saveReview.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.reviewStatus.value; const review = driverReviews.get(driver.driverId); if (status === "approved" && review?.readyForApproval !== true) return showToast("Complete every identity and document check before approval.", "error"); const note = el.reviewNote.value.trim(); const approved = await confirmAction({ title: `${rideStatusLabel(status)} this driver?`, message: status === "approved" ? `Approve ${el.name.textContent} after checking the identity, vehicle and both licence images?` : `Change ${el.name.textContent}'s review status to ${status}${note ? ` with note: ${note}` : "."}`, confirmLabel: "Save status" }); if (!approved) return; setBusy(el.saveReview, true); try { await api.reviewStatus({ driverId: driver.driverId, reviewStatus: status, note }); driverReviews.delete(driver.driverId); showToast("Driver review status updated."); await Promise.all([loadDrivers(), loadOverview(), loadDriverReview(driver.driverId)]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveReview, false); updateReviewButtonState(); } });
 el.saveWalletStatus.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.walletStatusSelect.value; const approved = await confirmAction({ title: status === "suspended" ? "Suspend wallet access?" : "Restore wallet access?", message: status === "suspended" ? `${el.name.textContent} will be unable to go online or accept rides.` : `${el.name.textContent} may work again if the wallet has enough credit.`, confirmLabel: status === "suspended" ? "Suspend access" : "Restore access" }); if (!approved) return; setBusy(el.saveWalletStatus, true); try { await api.walletStatus({ driverId: driver.driverId, status, note: "Updated from Alpha Admin" }); showToast("Wallet access updated."); await Promise.all([loadDrivers(), loadLedger(driver.driverId), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveWalletStatus, false); } });
 
 onAuthStateChanged(auth, async (user) => {
