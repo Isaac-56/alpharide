@@ -7,6 +7,7 @@ const {
   STALE_ACTIVE_RIDE_TIMEOUT_MS,
   isStaleActiveRide,
   resolveCompletedRideFare,
+  resolveDriverRideLock,
   resolveWaitingInterval,
   validateDriverRideTransition,
 } = require("../lifecycle_logic");
@@ -73,6 +74,51 @@ test("rides with missing or future activity timestamps stay untouched", () => {
     }),
     false,
   );
+});
+
+test("driver availability preserves only a current assigned ride lock", () => {
+  const nowMillis = 1_800_000_000_000;
+
+  assert.equal(resolveDriverRideLock({
+    status: "in_progress",
+    assignedDriverId: "driver-1",
+    driverId: "driver-1",
+    updatedAtMillis: nowMillis - 1000,
+    nowMillis,
+  }), "active");
+  assert.equal(resolveDriverRideLock({
+    status: "in_progress",
+    assignedDriverId: "driver-1",
+    driverId: "driver-1",
+    updatedAtMillis: null,
+    nowMillis,
+  }), "active");
+});
+
+test("driver availability releases terminal, foreign and stale ride locks", () => {
+  const nowMillis = 1_800_000_000_000;
+
+  assert.equal(resolveDriverRideLock({
+    status: "completed",
+    assignedDriverId: "driver-1",
+    driverId: "driver-1",
+    updatedAtMillis: nowMillis - 1000,
+    nowMillis,
+  }), "release");
+  assert.equal(resolveDriverRideLock({
+    status: "in_progress",
+    assignedDriverId: "driver-2",
+    driverId: "driver-1",
+    updatedAtMillis: nowMillis - 1000,
+    nowMillis,
+  }), "release");
+  assert.equal(resolveDriverRideLock({
+    status: "in_progress",
+    assignedDriverId: "driver-1",
+    driverId: "driver-1",
+    updatedAtMillis: nowMillis - STALE_ACTIVE_RIDE_TIMEOUT_MS,
+    nowMillis,
+  }), "stale");
 });
 
 test("driver ride lifecycle advances in the required order", () => {
