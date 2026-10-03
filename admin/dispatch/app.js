@@ -31,6 +31,7 @@ const el = {
   bookingForm: $("#booking-form"), customerName: $("#customer-name"), customerPhone: $("#customer-phone"), customerNote: $("#customer-note"),
   pickupSearch: $("#pickup-search"), pickupResults: $("#pickup-results"), pickupSelected: $("#pickup-selected"),
   destinationSearch: $("#destination-search"), destinationResults: $("#destination-results"), destinationSelected: $("#destination-selected"),
+  dispatchMap: $("#dispatch-map"), mapStatus: $("#map-status"),
   quoteCard: $("#quote-card"), quoteFare: $("#quote-fare"), quoteDistance: $("#quote-distance"), quoteDuration: $("#quote-duration"),
   bookingError: $("#booking-error"), createBooking: $("#create-booking"), refreshBookings: $("#refresh-bookings"), bookingsList: $("#bookings-list"), toast: $("#toast"),
 };
@@ -41,6 +42,10 @@ let destination = null;
 let quote = null;
 let quoteSequence = 0;
 let toastTimer = null;
+let map = null;
+let pickupMarker = null;
+let destinationMarker = null;
+let routeLine = null;
 const searchTimers = new Map();
 
 const rideOption = () => document.querySelector('input[name="ride-option"]:checked')?.value || "standard";
@@ -79,6 +84,119 @@ function selectedPayload() {
   };
 }
 
+function mapIcon(kind) {
+  return window.L.divIcon({
+    className: "",
+    html: `<div class="alpha-map-pin ${kind}"></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28],
+  });
+}
+
+function ensureMap() {
+  if (map || !window.L || !el.dispatchMap) return;
+  map = window.L.map(el.dispatchMap, { zoomControl: true }).setView(
+    [4.8594, 31.5713],
+    13,
+  );
+  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(map);
+}
+
+function removeMapLayer(layer) {
+  if (map && layer) map.removeLayer(layer);
+}
+
+function decodePolyline(encoded) {
+  if (typeof encoded !== "string" || !encoded) return [];
+  const points = [];
+  let index = 0;
+  let latitude = 0;
+  let longitude = 0;
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    latitude += result & 1 ? ~(result >> 1) : result >> 1;
+    result = 0;
+    shift = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    longitude += result & 1 ? ~(result >> 1) : result >> 1;
+    points.push([latitude / 1e5, longitude / 1e5]);
+  }
+  return points;
+}
+
+function drawRoute(encodedPolyline) {
+  ensureMap();
+  removeMapLayer(routeLine);
+  routeLine = null;
+  const points = decodePolyline(encodedPolyline);
+  if (!map || points.length < 2) return;
+  routeLine = window.L.polyline(points, {
+    color: "#08783c",
+    weight: 6,
+    opacity: 0.88,
+    lineCap: "round",
+  }).addTo(map);
+  map.fitBounds(routeLine.getBounds(), { padding: [36, 36], maxZoom: 16 });
+}
+
+function updateMap() {
+  ensureMap();
+  if (!map) return;
+  removeMapLayer(pickupMarker);
+  removeMapLayer(destinationMarker);
+  removeMapLayer(routeLine);
+  pickupMarker = null;
+  destinationMarker = null;
+  routeLine = null;
+  if (pickup) {
+    const pickupPopup = document.createElement("span");
+    pickupPopup.textContent = `Pickup: ${pickup.address}`;
+    pickupMarker = window.L.marker([pickup.latitude, pickup.longitude], {
+      icon: mapIcon("pickup"),
+      title: "Pickup",
+    }).addTo(map).bindPopup(pickupPopup);
+  }
+  if (destination) {
+    const destinationPopup = document.createElement("span");
+    destinationPopup.textContent = `Destination: ${destination.address}`;
+    destinationMarker = window.L.marker(
+      [destination.latitude, destination.longitude],
+      { icon: mapIcon("destination"), title: "Destination" },
+    ).addTo(map).bindPopup(destinationPopup);
+  }
+  if (pickup && destination) {
+    map.fitBounds(
+      [[pickup.latitude, pickup.longitude], [destination.latitude, destination.longitude]],
+      { padding: [42, 42], maxZoom: 16 },
+    );
+    el.mapStatus.textContent = "Locations selected. Calculating the road route…";
+  } else if (pickup || destination) {
+    const point = pickup || destination;
+    map.setView([point.latitude, point.longitude], 16);
+    el.mapStatus.textContent = pickup
+      ? "Pickup selected. Now choose the destination."
+      : "Destination selected. Now choose the pickup.";
+  } else {
+    map.setView([4.8594, 31.5713], 13);
+    el.mapStatus.textContent = "Select pickup and destination from the search results.";
+  }
+}
+
 function clearQuote(message = "Select both locations") {
   quoteSequence += 1;
   quote = null;
@@ -107,6 +225,8 @@ async function refreshQuote() {
     el.quoteFare.textContent = `${money(data.estimatedFare)} ${data.currencyCode || "SSP"}`;
     el.quoteDistance.textContent = `${(Number(data.routeDistanceMeters) / 1000).toFixed(1)} km`;
     el.quoteDuration.textContent = `${Math.max(1, Math.round(Number(data.routeDurationSeconds) / 60))} min`;
+    drawRoute(data.encodedPolyline);
+    el.mapStatus.textContent = "Road route and fare are ready.";
     el.createBooking.disabled = false;
   } catch (error) {
     if (sequence !== quoteSequence) return;
@@ -144,6 +264,7 @@ function renderSuggestions(container, results, choose) {
 function setupPlaceSearch({ input, results, selected, assign }) {
   input.addEventListener("input", () => {
     assign(null);
+    updateMap();
     selected.hidden = true;
     clearQuote();
     clearTimeout(searchTimers.get(input));
@@ -164,6 +285,7 @@ function setupPlaceSearch({ input, results, selected, assign }) {
             const placeResponse = await api.getPlace({ placeId: suggestion.placeId });
             const place = placeResponse.data;
             assign(place);
+            updateMap();
             input.value = place.address;
             selected.textContent = "Location selected";
             selected.hidden = false;
@@ -256,6 +378,7 @@ function resetBookingForm() {
   destination = null;
   el.pickupSelected.hidden = true;
   el.destinationSelected.hidden = true;
+  updateMap();
   clearQuote();
   el.customerName.focus();
 }
@@ -312,6 +435,8 @@ onAuthStateChanged(auth, async (user) => {
     el.agentEmail.textContent = user.email || "Authorized operator";
     el.loginView.hidden = true;
     el.dispatchView.hidden = false;
+    ensureMap();
+    setTimeout(() => map?.invalidateSize(), 80);
     await loadBookings();
   } catch (error) {
     await signOut(auth);

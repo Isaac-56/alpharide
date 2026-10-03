@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#101d19">
   <title>Alpha Dispatch</title>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -64,6 +65,14 @@
             </div>
           </div>
 
+          <section class="map-card" aria-labelledby="map-title">
+            <div class="map-heading">
+              <div><b id="map-title">Trip map</b><span id="map-status">Select pickup and destination from the search results.</span></div>
+              <div class="map-legend"><span><i class="pickup-pin"></i>Pickup</span><span><i class="destination-pin"></i>Destination</span></div>
+            </div>
+            <div id="dispatch-map" aria-label="Map showing the selected trip"></div>
+          </section>
+
           <fieldset>
             <legend>Ride category</legend>
             <div class="ride-options">
@@ -96,6 +105,7 @@
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
