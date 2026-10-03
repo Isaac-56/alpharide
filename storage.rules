@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function ownsDriverFiles(driverId) {
+      return signedIn() && request.auth.uid == driverId;
+    }
+
+    function ownsPassengerPhoto(fileName) {
+      return signedIn() &&
+          request.auth.token.phone_number is string &&
+          fileName == request.auth.token.phone_number + '.jpg';
+    }
+
+    function isSafeJpeg() {
+      return request.resource != null &&
+          request.resource.size < 10 * 1024 * 1024 &&
+          request.resource.contentType == 'image/jpeg';
+    }
+
+    match /drivers/{driverId}/documents/driver_licence/{fileName} {
+      allow read: if ownsDriverFiles(driverId) || isAdmin();
+      allow create, update:
+          if ownsDriverFiles(driverId) &&
+             fileName in ['front.jpg', 'back.jpg'] &&
+             isSafeJpeg();
+      allow delete: if ownsDriverFiles(driverId);
+    }
+
+    match /drivers/{driverId}/documents/photo_checks/{fileName} {
+      allow read: if ownsDriverFiles(driverId) || isAdmin();
+      allow create, update:
+          if ownsDriverFiles(driverId) && isSafeJpeg();
+      allow delete: if ownsDriverFiles(driverId);
+    }
+
+    // Keep the existing AlphaRide passenger profile-photo flow working.
+    // The filename must match the phone number verified by Firebase Auth.
+    match /user_photos/{fileName} {
+      allow read: if signedIn() || isAdmin();
+      allow create, update:
+          if ownsPassengerPhoto(fileName) && isSafeJpeg();
+      allow delete: if ownsPassengerPhoto(fileName);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
