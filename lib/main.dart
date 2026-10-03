@@ -44,7 +44,7 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Alpha Passenger',
           themeMode: themeMode,
-          themeAnimationDuration: const Duration(milliseconds: 600),
+          themeAnimationDuration: const Duration(milliseconds: 250),
           themeAnimationCurve: Curves.easeInOutCubicEmphasized,
           theme: ThemeData(
             useMaterial3: true,
@@ -57,7 +57,7 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: Colors.white,
             fontFamily: 'Roboto',
             dividerColor: const Color(0xFFE8EBE8),
-            splashFactory: InkSparkle.splashFactory,
+            splashFactory: InkRipple.splashFactory,
             pageTransitionsTheme: const PageTransitionsTheme(
               builders: <TargetPlatform, PageTransitionsBuilder>{
                 TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
@@ -87,7 +87,7 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: const Color(0xFF101210),
             fontFamily: 'Roboto',
             dividerColor: const Color(0xFF292D29),
-            splashFactory: InkSparkle.splashFactory,
+            splashFactory: InkRipple.splashFactory,
             pageTransitionsTheme: const PageTransitionsTheme(
               builders: <TargetPlatform, PageTransitionsBuilder>{
                 TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),

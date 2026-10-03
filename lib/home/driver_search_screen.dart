@@ -137,18 +137,20 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     final bool externallyTerminal =
         state.status == 'cancelled' || state.status == 'expired';
 
-    if (externallyTerminal && !_terminalHandled && !_isCancelling) {
+    if (externallyTerminal && !_terminalHandled) {
       _terminalHandled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
 
-        final String message = state.status == 'expired'
-            ? 'No driver accepted this request in time.'
-            : 'Your ride was cancelled.';
+        if (!_isCancelling || state.status == 'expired') {
+          final String message = state.status == 'expired'
+              ? 'No driver accepted this request in time.'
+              : 'Your ride was cancelled.';
 
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(content: Text(message)));
+        }
         Navigator.pop(context);
       });
       return;
@@ -345,6 +347,15 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     setState(() {
       _isCancelling = true;
     });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 2),
+          content: Text('Cancelling your ride…'),
+        ),
+      );
 
     bool cancelled = false;
     try {
@@ -888,58 +899,62 @@ class _AssignedDriverCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color textColor = AlphaColors.text(context);
     final Color mutedColor = AlphaColors.muted(context);
+    final Color surfaceColor = AlphaColors.surface(context);
+    final Color borderColor = AlphaColors.border(context);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AlphaColors.surface(context),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AlphaColors.border(context)),
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
       ),
-      child: Row(
+      child: Column(
         children: <Widget>[
-          const CircleAvatar(
-            radius: 23,
-            backgroundColor: primaryColor,
-            child: Icon(Icons.person_rounded, color: Colors.black),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  driver.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  driver.vehicleLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: mutedColor, fontSize: 13),
-                ),
-              ],
-            ),
-          ),
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              if (driver.plateNumber.isNotEmpty)
+              const CircleAvatar(
+                radius: 24,
+                backgroundColor: primaryColor,
+                child: Icon(Icons.person_rounded, color: Colors.black),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      driver.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      driver.vehicleLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: mutedColor, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              if (driver.plateNumber.isNotEmpty) ...<Widget>[
+                const SizedBox(width: 10),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: AlphaColors.background(context),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AlphaColors.border(context)),
+                    border: Border.all(color: borderColor),
                   ),
                   child: Text(
                     driver.plateNumber,
@@ -950,22 +965,73 @@ class _AssignedDriverCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (driver.plateNumber.isNotEmpty &&
-                  driver.phoneNumber.isNotEmpty)
-                const SizedBox(width: 8),
-              if (driver.phoneNumber.isNotEmpty)
-                IconButton.filled(
-                  key: const Key('callAssignedDriver'),
-                  tooltip: 'Call driver',
-                  onPressed: () => _callDriver(context),
-                  style: IconButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.black,
-                  ),
-                  icon: const Icon(Icons.call_rounded),
-                ),
+              ],
             ],
           ),
+          if (driver.phoneNumber.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 14),
+            Semantics(
+              button: true,
+              excludeSemantics: true,
+              label:
+                  'Call driver ${driver.displayName} at ${driver.phoneNumber}',
+              child: Material(
+                color: primaryColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(15),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: const Key('callAssignedDriver'),
+                  onTap: () => _callDriver(context),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 11,
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        const CircleAvatar(
+                          radius: 18,
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.black,
+                          child: Icon(Icons.call_rounded, size: 19),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Call driver',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                driver.phoneNumber,
+                                style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          color: textColor,
+                          size: 15,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
