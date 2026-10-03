@@ -4,10 +4,76 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  STALE_ACTIVE_RIDE_TIMEOUT_MS,
+  isStaleActiveRide,
   resolveCompletedRideFare,
   resolveWaitingInterval,
   validateDriverRideTransition,
 } = require("../lifecycle_logic");
+
+test("assigned rides expire after 24 hours without lifecycle activity", () => {
+  const nowMillis = 1_800_000_000_000;
+
+  for (const status of [
+    "accepted",
+    "driver_arriving",
+    "arrived",
+    "in_progress",
+  ]) {
+    assert.equal(
+      isStaleActiveRide({
+        status,
+        updatedAtMillis: nowMillis - STALE_ACTIVE_RIDE_TIMEOUT_MS,
+        nowMillis,
+      }),
+      true,
+    );
+  }
+});
+
+test("recent and terminal rides never expire as stale active rides", () => {
+  const nowMillis = 1_800_000_000_000;
+
+  assert.equal(
+    isStaleActiveRide({
+      status: "in_progress",
+      updatedAtMillis: nowMillis - STALE_ACTIVE_RIDE_TIMEOUT_MS + 1,
+      nowMillis,
+    }),
+    false,
+  );
+  for (const status of ["requested", "offered", "completed", "cancelled"]) {
+    assert.equal(
+      isStaleActiveRide({
+        status,
+        updatedAtMillis: nowMillis - STALE_ACTIVE_RIDE_TIMEOUT_MS * 3,
+        nowMillis,
+      }),
+      false,
+    );
+  }
+});
+
+test("rides with missing or future activity timestamps stay untouched", () => {
+  const nowMillis = 1_800_000_000_000;
+
+  assert.equal(
+    isStaleActiveRide({
+      status: "in_progress",
+      updatedAtMillis: null,
+      nowMillis,
+    }),
+    false,
+  );
+  assert.equal(
+    isStaleActiveRide({
+      status: "in_progress",
+      updatedAtMillis: nowMillis + 1,
+      nowMillis,
+    }),
+    false,
+  );
+});
 
 test("driver ride lifecycle advances in the required order", () => {
   assert.deepEqual(
