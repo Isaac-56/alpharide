@@ -19,6 +19,26 @@ const STATUS_TIMESTAMP_FIELDS = Object.freeze({
   completed: "completedAt",
 });
 
+const STALE_ACTIVE_RIDE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const STALE_ACTIVE_RIDE_STATUSES = Object.freeze(new Set([
+  "accepted",
+  "driver_arriving",
+  "arrived",
+  "in_progress",
+]));
+
+function isStaleActiveRide({ status, updatedAtMillis, nowMillis }) {
+  if (typeof status !== "string") return false;
+  const normalizedStatus = status.trim().toLowerCase();
+  if (!STALE_ACTIVE_RIDE_STATUSES.has(normalizedStatus)) return false;
+  if (!Number.isFinite(updatedAtMillis) || !Number.isFinite(nowMillis)) {
+    return false;
+  }
+  if (nowMillis < updatedAtMillis) return false;
+
+  return nowMillis - updatedAtMillis >= STALE_ACTIVE_RIDE_TIMEOUT_MS;
+}
+
 function normalizeDriverRideStatus(value) {
   if (typeof value !== "string") {
     throw new TypeError("ride status must be a string");
@@ -131,7 +151,10 @@ function resolveWaitingInterval({
 
 module.exports = {
   DRIVER_RIDE_TRANSITIONS,
+  STALE_ACTIVE_RIDE_STATUSES,
+  STALE_ACTIVE_RIDE_TIMEOUT_MS,
   STATUS_TIMESTAMP_FIELDS,
+  isStaleActiveRide,
   normalizeDriverRideStatus,
   resolveCompletedRideFare,
   resolveWaitingInterval,
