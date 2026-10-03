@@ -1215,25 +1215,30 @@ exports.cancelRide = onCall(
         offeredDriverIds.push(assignedDriverId);
       }
 
-      if (assignedDriverId) {
-        await clearDriverPresenceBusy(assignedDriverId, rideId).catch(
+      const cleanupTasks = [
+        markOffers(rideId, offeredDriverIds, "cancelled").catch(
           (cleanupError) => {
-            logger.warn("Could not clear cancelled driver presence", {
+            logger.warn("Could not close cancelled ride offers", {
               rideId,
-              driverId: assignedDriverId,
               error: cleanupError,
             });
           },
+        ),
+      ];
+      if (assignedDriverId) {
+        cleanupTasks.push(
+          clearDriverPresenceBusy(assignedDriverId, rideId).catch(
+            (cleanupError) => {
+              logger.warn("Could not clear cancelled driver presence", {
+                rideId,
+                driverId: assignedDriverId,
+                error: cleanupError,
+              });
+            },
+          ),
         );
       }
-      await markOffers(rideId, offeredDriverIds, "cancelled").catch(
-        (cleanupError) => {
-          logger.warn("Could not close cancelled ride offers", {
-            rideId,
-            error: cleanupError,
-          });
-        },
-      );
+      await Promise.all(cleanupTasks);
       return { rideId, status: "cancelled" };
     } catch (error) {
       throw callableError(error, "Unable to cancel the ride.");
