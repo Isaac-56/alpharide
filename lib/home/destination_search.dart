@@ -334,17 +334,17 @@ class _DestinationSearchState extends State<DestinationSearch> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  24,
+                  AlphaSpacing.page,
                   16,
-                  24,
+                  AlphaSpacing.page,
                   0,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     SizedBox(
-                      width: 46,
-                      height: 46,
+                      width: AlphaSpacing.controlHeight,
+                      height: AlphaSpacing.controlHeight,
                       child: Material(
                         color: surfaceColor,
                         shape: CircleBorder(
@@ -443,15 +443,21 @@ class _DestinationSearchState extends State<DestinationSearch> {
                           vertical: 18,
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(
+                            AlphaSpacing.controlRadius,
+                          ),
                           borderSide: BorderSide(color: borderColor),
                         ),
                         disabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(
+                            AlphaSpacing.controlRadius,
+                          ),
                           borderSide: BorderSide(color: borderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(
+                            AlphaSpacing.controlRadius,
+                          ),
                           borderSide: BorderSide(
                             color: textColor,
                             width: 1.4,
@@ -478,7 +484,9 @@ class _DestinationSearchState extends State<DestinationSearch> {
                             horizontal: 17,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(
+                              AlphaSpacing.controlRadius,
+                            ),
                           ),
                         ),
                         child: Row(

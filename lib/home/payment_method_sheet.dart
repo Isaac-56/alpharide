@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../account/account_ui.dart';
+import '../core/widgets/alpha_components.dart';
 import '../models/ride_option.dart';
 
 const Color _primaryColor = Color(0xFF39FF14);
@@ -47,41 +48,27 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final Color backgroundColor = AlphaColors.background(context);
-
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
         decoration: BoxDecoration(
-          color: backgroundColor,
+          color: AlphaColors.surface(context),
           borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(28),
+            top: Radius.circular(AlphaSpacing.sheetRadius),
           ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AlphaColors.border(context),
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
+            const AlphaSheetHandle(),
             const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'Payment method',
-                    style: TextStyle(
-                      color: AlphaColors.text(context),
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4,
-                    ),
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
                 TextButton(
@@ -155,7 +142,7 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
 
     return Material(
       color: enabled ? surfaceColor : surfaceColor.withValues(alpha: 0.62),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(AlphaSpacing.cardRadius),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: enabled
@@ -169,7 +156,7 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.all(17),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(AlphaSpacing.cardRadius),
             border: Border.all(
               color: selected ? _primaryColor : Colors.transparent,
               width: 1.6,

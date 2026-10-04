@@ -1,38 +1,9 @@
 import 'package:flutter/material.dart';
 
-abstract final class AlphaColors {
-  static const Color primary = Color(0xFF39FF14);
-  static const Color ink = Color(0xFF101310);
-  static const Color darkBackground = Color(0xFF101210);
-  static const Color darkSurface = Color(0xFF202320);
-  static const Color danger = Color(0xFFE5484D);
-  static const Color warning = Color(0xFFFFB020);
+import '../core/theme/alpha_theme.dart';
 
-  static Color background(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? darkBackground
-          : const Color(0xFFF8FAF8);
-
-  static Color surface(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? darkSurface
-          : Colors.white;
-
-  static Color text(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? const Color(0xFFF7F9F7)
-          : ink;
-
-  static Color muted(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? const Color(0xFF9DA39D)
-          : const Color(0xFF6B716B);
-
-  static Color border(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? const Color(0xFF303430)
-          : const Color(0xFFE4E8E4);
-}
+export '../core/theme/alpha_theme.dart'
+    show AlphaColors, AlphaSpacing, AlphaThemeContext;
 
 class AlphaPageScaffold extends StatelessWidget {
   final String title;
@@ -50,7 +21,7 @@ class AlphaPageScaffold extends StatelessWidget {
     this.action,
     this.onBack,
     this.scrollable = true,
-    this.padding = const EdgeInsets.fromLTRB(22, 12, 22, 28),
+    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 28),
     this.floatingActionButton,
   });
 
@@ -74,7 +45,7 @@ class AlphaPageScaffold extends StatelessWidget {
         child: Column(
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
                 children: <Widget>[
                   AlphaBackButton(onPressed: onBack),
@@ -84,18 +55,12 @@ class AlphaPageScaffold extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 14, 22, 12),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   title,
-                  style: TextStyle(
-                    color: AlphaColors.text(context),
-                    fontSize: 30,
-                    height: 1.08,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.8,
-                  ),
+                  style: Theme.of(context).textTheme.headlineLarge,
                 ),
               ),
             ),
@@ -128,12 +93,12 @@ class AlphaBackButton extends StatelessWidget {
       child: InkWell(
         onTap: onPressed ?? () => Navigator.maybePop(context),
         child: SizedBox(
-          width: 52,
-          height: 52,
+          width: 48,
+          height: 48,
           child: Icon(
             closeIcon ? Icons.close_rounded : Icons.arrow_back_rounded,
             color: AlphaColors.text(context),
-            size: 27,
+            size: 24,
           ),
         ),
       ),
