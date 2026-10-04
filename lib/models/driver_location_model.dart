@@ -32,7 +32,9 @@ class DriverLocationModel {
       heading: _toDouble(data['heading'] ?? data['bearing']),
       isOnline: _toBool(data['isOnline'] ?? data['online']),
       updatedAt: _toInt(data['updatedAt'] ?? data['lastUpdated']) ?? 0,
-      vehicleType: data['vehicleType']?.toString() ?? 'standard',
+      vehicleType:
+          (data['vehicleType'] ?? data['vehicleClass'])?.toString() ??
+          'standard',
       activeRideId: _nonEmptyString(data['activeRideId']),
     );
   }

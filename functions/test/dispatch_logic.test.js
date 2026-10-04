@@ -77,12 +77,49 @@ test("candidate selection keeps fresh matching nearby drivers sorted", () => {
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.driverId),
-    ["near", "wrongType", "farther"],
+    ["near", "farther", "wrongType"],
   );
   assert.ok(
     candidates[0].distanceToPickupMeters <
-      candidates[2].distanceToPickupMeters,
+      candidates[1].distanceToPickupMeters,
   );
+});
+
+test("Boda presence is prioritised before profile verification", () => {
+  const nowMs = 1_800_000_000_000;
+  const pickup = { latitude: 4.8517, longitude: 31.5825 };
+  const candidates = selectPresenceCandidates({
+    nowMs,
+    pickup,
+    requiredVehicleType: "boda",
+    limit: 2,
+    presenceMap: {
+      nearestCar: {
+        isOnline: true,
+        vehicleType: "standard",
+        latitude: 4.8518,
+        longitude: 31.5826,
+        updatedAt: nowMs - 1000,
+      },
+      compatibleBoda: {
+        online: true,
+        vehicleClass: "Boda boda (motorcycle)",
+        latitude: 4.853,
+        longitude: 31.584,
+        lastUpdated: nowMs - 1200,
+      },
+      secondCar: {
+        isOnline: true,
+        vehicleType: "standard",
+        latitude: 4.852,
+        longitude: 31.583,
+        updatedAt: nowMs - 900,
+      },
+    },
+  });
+
+  assert.equal(candidates[0].driverId, "compatibleBoda");
+  assert.equal(candidates[0].vehicleType, "boda");
 });
 
 test("drivers outside the dispatch radius are excluded", () => {
