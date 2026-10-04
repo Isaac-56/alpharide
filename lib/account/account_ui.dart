@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/alpha_theme.dart';
+import '../core/widgets/alpha_components.dart';
 
 export '../core/theme/alpha_theme.dart'
     show AlphaColors, AlphaSpacing, AlphaThemeContext;
@@ -13,6 +14,7 @@ class AlphaPageScaffold extends StatelessWidget {
   final bool scrollable;
   final EdgeInsetsGeometry padding;
   final FloatingActionButton? floatingActionButton;
+  final String? subtitle;
 
   const AlphaPageScaffold({
     super.key,
@@ -23,6 +25,7 @@ class AlphaPageScaffold extends StatelessWidget {
     this.scrollable = true,
     this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 28),
     this.floatingActionButton,
+    this.subtitle,
   });
 
   @override
@@ -45,25 +48,16 @@ class AlphaPageScaffold extends StatelessWidget {
         child: Column(
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: <Widget>[
-                  AlphaBackButton(onPressed: onBack),
-                  const Spacer(),
-                  if (action != null) action!,
-                ],
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: AlphaFlowHeader(
+                title: title,
+                subtitle: subtitle,
+                compact: true,
+                leading: AlphaBackButton(onPressed: onBack),
+                trailing: action,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineLarge,
-                ),
-              ),
-            ),
+            Divider(height: 1, color: AlphaColors.border(context)),
             Expanded(child: content),
           ],
         ),
