@@ -7,6 +7,7 @@ import '../account/feedback_screens.dart';
 import '../account/profile_screens.dart';
 import '../account/settings_screens.dart';
 import '../account/wallet_screens.dart';
+import '../authentication/auth_flow_navigation.dart';
 import '../services/firestore_service.dart';
 import '../theme_controller.dart';
 
@@ -359,11 +360,7 @@ class CustomDrawer extends StatelessWidget {
 
     await auth.signOut();
     if (!navigator.mounted) return;
-
-    navigator.pushNamedAndRemoveUntil(
-      '/login',
-      (Route<dynamic> route) => false,
-    );
+    AuthFlowNavigation.returnToRoot(navigator.context);
   }
 }
 

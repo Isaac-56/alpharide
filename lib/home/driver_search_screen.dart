@@ -152,7 +152,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
             ..hideCurrentSnackBar()
             ..showSnackBar(SnackBar(content: Text(message)));
         }
-        Navigator.pop(context);
+        _closeRideFlow();
       });
       return;
     }
@@ -342,6 +342,15 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     if (mounted) setState(() {});
   }
 
+  void _closeRideFlow() {
+    final ModalRoute<dynamic>? rideRoute = ModalRoute.of(context);
+    if (rideRoute == null || !rideRoute.isActive) return;
+
+    final NavigatorState navigator = Navigator.of(context);
+    navigator.popUntil((Route<dynamic> route) => route == rideRoute);
+    if (rideRoute.isCurrent) navigator.pop();
+  }
+
   Future<void> _cancelRide(String reason) async {
     if (_isCancelling) return;
 
@@ -387,7 +396,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     if (cancelled && mounted) {
       _terminalHandled = true;
-      Navigator.pop(context);
+      _closeRideFlow();
     }
   }
 
@@ -596,7 +605,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(sheetContext);
-                      if (mounted) Navigator.pop(context);
+                      if (mounted) _closeRideFlow();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,

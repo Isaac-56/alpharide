@@ -18,6 +18,25 @@ class CancelReasonScreen extends StatelessWidget {
     'Custom reason',
   ];
 
+  Future<void> _selectReason(BuildContext context, String reason) async {
+    if (reason != 'Custom reason') {
+      Navigator.pop(context, reason);
+      return;
+    }
+
+    final String? customReason = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: AlphaColors.background(context),
+      builder: (_) => const _CustomCancellationReasonSheet(),
+    );
+
+    if (customReason == null || !context.mounted) return;
+    Navigator.pop(context, customReason);
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color backgroundColor = AlphaColors.background(context);
@@ -69,7 +88,7 @@ class CancelReasonScreen extends StatelessWidget {
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
                       child: InkWell(
-                        onTap: () => Navigator.pop(context, reason),
+                        onTap: () => _selectReason(context, reason),
                         borderRadius: BorderRadius.circular(16),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
@@ -123,6 +142,86 @@ class CancelReasonScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CustomCancellationReasonSheet extends StatefulWidget {
+  const _CustomCancellationReasonSheet();
+
+  @override
+  State<_CustomCancellationReasonSheet> createState() =>
+      _CustomCancellationReasonSheetState();
+}
+
+class _CustomCancellationReasonSheetState
+    extends State<_CustomCancellationReasonSheet> {
+  final TextEditingController _controller = TextEditingController();
+  bool _canSubmit = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _update(String value) {
+    final bool canSubmit = value.trim().length >= 3;
+    if (canSubmit != _canSubmit) setState(() => _canSubmit = canSubmit);
+  }
+
+  void _submit() {
+    if (!_canSubmit) return;
+    Navigator.pop(context, _controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final EdgeInsets keyboard = MediaQuery.viewInsetsOf(context);
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.fromLTRB(22, 0, 22, 22 + keyboard.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            'Tell us why you are cancelling',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'A short explanation helps AlphaRide improve future requests.',
+            style: TextStyle(color: AlphaColors.muted(context), height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            key: const Key('customCancellationReasonField'),
+            controller: _controller,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 5,
+            maxLength: 120,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: _update,
+            onSubmitted: (_) => _submit(),
+            decoration: alphaInputDecoration(
+              context,
+              label: 'Cancellation reason',
+              hint: 'What made you cancel this ride?',
+              prefixIcon: Icons.edit_note_rounded,
+            ),
+          ),
+          const SizedBox(height: 12),
+          AlphaPrimaryButton(
+            label: 'Continue cancellation',
+            icon: Icons.arrow_forward_rounded,
+            onPressed: _canSubmit ? _submit : null,
+          ),
+        ],
       ),
     );
   }
