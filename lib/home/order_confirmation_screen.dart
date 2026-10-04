@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../account/account_ui.dart';
+import '../core/widgets/alpha_components.dart';
 import '../models/ride_backend.dart';
 import '../models/ride_contract.dart';
 import '../models/ride_option.dart';
@@ -494,34 +495,31 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
   }
 
   Widget _confirmationPanel() {
-    final Color backgroundColor = AlphaColors.background(context);
     final Color surfaceColor = AlphaColors.surface(context);
     final Color textColor = AlphaColors.text(context);
     final Color mutedColor = AlphaColors.muted(context);
 
     return SafeArea(
       top: false,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(28),
-          ),
-        ),
+      child: AlphaMapSheet(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AlphaColors.border(context),
-                borderRadius: BorderRadius.circular(99),
+            AlphaFlowHeader(
+              title: 'Confirm your ride',
+              subtitle: 'Check the route and price before requesting a driver.',
+              compact: true,
+              trailing: AlphaStatusPill(
+                label: widget.ride.name,
+                icon: widget.ride.id == 'boda'
+                    ? Icons.two_wheeler_rounded
+                    : widget.ride.id == 'rickshaw'
+                    ? Icons.electric_rickshaw_rounded
+                    : Icons.local_taxi_rounded,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -547,6 +545,26 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                AlphaMetricChip(
+                  icon: Icons.people_alt_outlined,
+                  label: '${widget.ride.seats} seats',
+                ),
+                AlphaMetricChip(
+                  icon: Icons.payments_outlined,
+                  label: _paymentLabel(widget.paymentMethod),
+                ),
+                const AlphaMetricChip(
+                  icon: Icons.verified_user_outlined,
+                  label: 'Verified driver',
+                  emphasized: true,
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(
@@ -575,13 +593,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        '${widget.ride.seats} seats • ${_paymentLabel(widget.paymentMethod)}',
-                        style: TextStyle(
-                          color: mutedColor,
-                          fontSize: 12,
-                        ),
-                      ),
+                      Text('Estimated total', style: TextStyle(color: mutedColor, fontSize: 12)),
                     ],
                   ),
                 ),
