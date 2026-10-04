@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/alpha_theme.dart';
+import '../core/widgets/alpha_components.dart';
 import '../models/ride_option.dart';
 import 'payment_method_sheet.dart';
 import 'ride_option_details_screen.dart';
@@ -67,19 +69,15 @@ class _OrderPanelState extends State<OrderPanel> {
 
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
 
-  Color get backgroundColor =>
-      _isDarkMode ? const Color(0xFF101210) : Colors.white;
+  Color get backgroundColor => context.alphaSurface;
 
-  Color get surfaceColor =>
-      _isDarkMode ? const Color(0xFF202320) : const Color(0xFFF3F5F3);
+  Color get surfaceColor => context.alphaSoftSurface;
 
-  Color get textColor => _isDarkMode ? Colors.white : const Color(0xFF111311);
+  Color get textColor => context.alphaInk;
 
-  Color get mutedColor =>
-      _isDarkMode ? const Color(0xFF9A9F9A) : const Color(0xFF687068);
+  Color get mutedColor => context.alphaMuted;
 
-  Color get dividerColor =>
-      _isDarkMode ? const Color(0xFF303330) : const Color(0xFFE1E6E1);
+  Color get dividerColor => context.alphaBorder;
 
   bool get _hasRouteEstimate =>
       (widget.routeDistanceMeters ?? 0) > 0 && widget.routeDuration != null;
@@ -337,26 +335,12 @@ class _OrderPanelState extends State<OrderPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Center(
-              child: AnimatedContainer(
-                duration: const Duration(
-                  milliseconds: 260,
-                ),
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: _isDarkMode
-                      ? const Color(0xFF4B4F4B)
-                      : const Color(0xFFC7CCC7),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
+            const AlphaSheetHandle(),
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                20,
                 16,
-                20,
+                16,
+                16,
                 12,
               ),
               child: Text(
@@ -371,14 +355,14 @@ class _OrderPanelState extends State<OrderPanel> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 20,
+                horizontal: 16,
               ),
               child: _routeCard(),
             ),
             if (routeSummary != null) ...<Widget>[
               const SizedBox(height: 7),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: <Widget>[
@@ -403,7 +387,7 @@ class _OrderPanelState extends State<OrderPanel> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 20,
+                horizontal: 16,
               ),
               child: Row(
                 children: <Widget>[
@@ -433,7 +417,7 @@ class _OrderPanelState extends State<OrderPanel> {
               height: 100,
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
+                  horizontal: 16,
                 ),
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(
@@ -456,7 +440,7 @@ class _OrderPanelState extends State<OrderPanel> {
             const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 20,
+                horizontal: 16,
               ),
               child: _actionTile(
                 icon: _paymentIcon,
@@ -468,7 +452,7 @@ class _OrderPanelState extends State<OrderPanel> {
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 20,
+                horizontal: 16,
               ),
               child: SizedBox(
                 width: double.infinity,
@@ -486,7 +470,9 @@ class _OrderPanelState extends State<OrderPanel> {
                     ),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(17),
+                      borderRadius: BorderRadius.circular(
+                        AlphaSpacing.controlRadius,
+                      ),
                     ),
                   ),
                   child: AnimatedSwitcher(
@@ -547,7 +533,7 @@ class _OrderPanelState extends State<OrderPanel> {
             Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
+                  horizontal: 16,
                 ),
                 child: Text(
                   !_hasRouteEstimate
@@ -581,16 +567,7 @@ class _OrderPanelState extends State<OrderPanel> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Container(
-            width: 42,
-            height: 4,
-            decoration: BoxDecoration(
-              color: _isDarkMode
-                  ? const Color(0xFF4B4F4B)
-                  : const Color(0xFFC7CCC7),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
+          const AlphaSheetHandle(),
           const SizedBox(height: 6),
           Semantics(
             button: true,

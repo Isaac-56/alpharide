@@ -29,7 +29,7 @@ class CancelReasonScreen extends StatelessWidget {
       backgroundColor: backgroundColor,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -42,12 +42,12 @@ class CancelReasonScreen extends StatelessWidget {
                 child: InkWell(
                   onTap: () => Navigator.pop(context),
                   child: SizedBox(
-                    width: 54,
-                    height: 54,
+                    width: AlphaSpacing.controlHeight,
+                    height: AlphaSpacing.controlHeight,
                     child: Icon(
                       Icons.close_rounded,
                       color: textColor,
-                      size: 29,
+                      size: 24,
                     ),
                   ),
                 ),
@@ -55,12 +55,7 @@ class CancelReasonScreen extends StatelessWidget {
               const SizedBox(height: 38),
               Text(
                 'Cancel order',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.65,
-                ),
+                style: Theme.of(context).textTheme.headlineLarge,
               ),
               const SizedBox(height: 22),
               Expanded(
