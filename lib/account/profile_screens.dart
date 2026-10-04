@@ -7,9 +7,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../authentication/auth_flow_navigation.dart';
 import '../home/map_location_picker.dart';
 import '../models/location_selection.dart';
 import '../services/firestore_service.dart';
+import '../services/session_service.dart';
 import 'account_ui.dart';
 
 class ProfileMenuScreen extends StatefulWidget {
@@ -347,11 +349,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
       }
 
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/login',
-        (Route<dynamic> route) => false,
-      );
+      AuthFlowNavigation.returnToRoot(context);
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
 
@@ -373,13 +371,9 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
   }
 
   Future<void> _logout() async {
-    await widget.auth.signOut();
-    if (!mounted) return;
-
-    Navigator.pushNamedAndRemoveUntil(
+    await AuthFlowNavigation.signOutAndReturnToRoot(
       context,
-      '/login',
-      (Route<dynamic> route) => false,
+      SessionService.instance.signOutCurrentDevice,
     );
   }
 

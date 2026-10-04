@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:passengerapp/services/firestore_service.dart';
 
+import '../services/session_service.dart';
+import 'auth_flow_navigation.dart';
+
 class SignUpScreen extends StatefulWidget {
   final String phoneNumber;
 
@@ -38,6 +41,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
   bool _isSelectingImage = false;
   bool _showConfirmButtons = false;
+  bool _isLeavingRegistration = false;
 
   File? _image;
 
@@ -326,29 +330,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
   }
 
-  void _goBack() {
-    if (_isLoading) return;
+  Future<void> _leaveRegistration() async {
+    if (_isLoading || _isLeavingRegistration) return;
 
     FocusScope.of(context).unfocus();
+    setState(() => _isLeavingRegistration = true);
 
-    final NavigatorState navigator = Navigator.of(context);
-
-    if (navigator.canPop()) {
-      navigator.pop();
-    } else {
-      navigator.pushReplacementNamed('/login');
+    try {
+      await AuthFlowNavigation.signOutAndReturnToRoot(
+        context,
+        SessionService.instance.signOutCurrentDevice,
+      );
+    } finally {
+      if (mounted) setState(() => _isLeavingRegistration = false);
     }
-  }
-
-  void _logOut() {
-    if (_isLoading) return;
-
-    FocusScope.of(context).unfocus();
-
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/login',
-      (Route<dynamic> route) => false,
-    );
   }
 
   Future<void> _register() async {
@@ -465,8 +460,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildContent() {
     return Scaffold(
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
@@ -498,7 +492,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: InkWell(
-                              onTap: _isLoading ? null : _goBack,
+                              onTap: _isLoading || _isLeavingRegistration
+                                  ? null
+                                  : _leaveRegistration,
                               customBorder: const CircleBorder(),
                               child: Icon(
                                 Icons.arrow_back_rounded,
@@ -892,7 +888,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const SizedBox(height: 10),
                       Center(
                         child: TextButton(
-                          onPressed: _isLoading ? null : _logOut,
+                          onPressed: _isLoading || _isLeavingRegistration
+                              ? null
+                              : _leaveRegistration,
                           child: const Text(
                             'Log out',
                             style: TextStyle(
@@ -913,6 +911,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop) _leaveRegistration();
+      },
+      child: _buildContent(),
     );
   }
 }

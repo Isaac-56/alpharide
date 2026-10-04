@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../authentication/auth_flow_navigation.dart';
 import '../models/location_selection.dart';
 import '../models/ride_option.dart';
 import '../services/firestore_service.dart';
@@ -102,13 +103,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final User? user = _auth.currentUser;
 
     if (user == null) {
-      if (!mounted) return;
-
-      Navigator.pushReplacementNamed(
-        context,
-        '/login',
-      );
-
+      // AuthWrapper owns the signed-out transition. Replacing the app's root
+      // route here would remove that authentication listener.
       return;
     }
 
@@ -406,13 +402,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut() async {
-    await SessionService.instance.signOutCurrentDevice();
-
-    if (!mounted) return;
-
-    Navigator.pushReplacementNamed(
+    await AuthFlowNavigation.signOutAndReturnToRoot(
       context,
-      '/login',
+      SessionService.instance.signOutCurrentDevice,
     );
   }
 
