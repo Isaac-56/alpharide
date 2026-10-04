@@ -22,12 +22,15 @@ class LiveDriverMarkerPolicy {
   static String normalizedVehicleType(String vehicleType) {
     final String normalized = vehicleType.trim().toLowerCase();
 
-    if (normalized.contains('boda') || normalized.contains('motor')) {
+    if (normalized.contains('boda') ||
+        normalized.contains('motor') ||
+        normalized.contains('scooter')) {
       return 'boda';
     }
     if (normalized.contains('rickshaw') ||
         normalized.contains('tuk') ||
-        normalized.contains('three')) {
+        normalized.contains('three') ||
+        normalized.contains('bajaj')) {
       return 'rickshaw';
     }
 
@@ -100,11 +103,19 @@ class LiveDriverMarkerController extends ChangeNotifier {
         alpha: driver.alpha.clamp(0.0, 1.0).toDouble(),
         infoWindow: InfoWindow(
           title: _driverIdFilter == null
-              ? 'Alpha driver nearby'
+              ? _nearbyDriverLabel(driver.vehicleType)
               : 'Your Alpha driver',
         ),
       );
     }).toSet();
+  }
+
+  String _nearbyDriverLabel(String vehicleType) {
+    return switch (LiveDriverMarkerPolicy.normalizedVehicleType(vehicleType)) {
+      'boda' => 'Alpha Boda nearby',
+      'rickshaw' => 'Alpha Rickshaw nearby',
+      _ => 'Alpha driver nearby',
+    };
   }
 
   Future<void> start() async {

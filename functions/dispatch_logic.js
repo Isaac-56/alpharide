@@ -99,9 +99,13 @@ function presenceAllowsAcceptance({
   if (!presence || typeof presence !== "object" || Array.isArray(presence)) {
     return false;
   }
-  if (presence.isOnline !== true) return false;
+  const rawOnline = presence.isOnline ?? presence.online;
+  const isOnline = rawOnline === true || rawOnline === 1 ||
+    (typeof rawOnline === "string" &&
+      ["true", "online", "1"].includes(rawOnline.trim().toLowerCase()));
+  if (!isOnline) return false;
 
-  const updatedAt = Number(presence.updatedAt);
+  const updatedAt = Number(presence.updatedAt ?? presence.lastUpdated);
   if (!Number.isFinite(updatedAt)) return false;
   const ageMs = nowMs - updatedAt;
   if (ageMs < 0 || ageMs > PRESENCE_FRESH_MS) return false;
@@ -202,9 +206,14 @@ function selectPresenceCandidates({
     });
     if (distanceToPickupMeters > radiusMeters) continue;
 
+    const presenceVehicleType = normalizeVehicleType(
+      raw.vehicleType ?? raw.vehicleClass,
+    );
     candidates.push({
       driverId,
-      vehicleType: normalizeVehicleType(raw.vehicleType),
+      vehicleType: presenceVehicleType,
+      presenceVehicleMatches:
+        Boolean(required) && presenceVehicleType === required,
       latitude,
       longitude,
       distanceToPickupMeters: Math.round(distanceToPickupMeters),
@@ -214,6 +223,13 @@ function selectPresenceCandidates({
 
   candidates.sort(
     (first, second) => {
+      // Presence is public and therefore not authoritative for acceptance,
+      // but prioritising the requested class prevents a nearby fleet of cars
+      // from pushing a valid Boda/Rickshaw beyond the verification scan.
+      const vehicleMatch = Number(second.presenceVehicleMatches) -
+        Number(first.presenceVehicleMatches);
+      if (vehicleMatch !== 0) return vehicleMatch;
+
       const distance =
         first.distanceToPickupMeters - second.distanceToPickupMeters;
       if (distance !== 0) return distance;

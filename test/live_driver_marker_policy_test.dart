@@ -13,7 +13,15 @@ void main() {
         'assets/images/vehicles/alpha_boda_top.webp',
       );
       expect(
+        LiveDriverMarkerPolicy.markerAssetForVehicle('Scooter'),
+        'assets/images/vehicles/alpha_boda_top.webp',
+      );
+      expect(
         LiveDriverMarkerPolicy.markerAssetForVehicle('Tuk Tuk'),
+        'assets/images/vehicles/alpha_rickshaw_top.webp',
+      );
+      expect(
+        LiveDriverMarkerPolicy.markerAssetForVehicle('Bajaj'),
         'assets/images/vehicles/alpha_rickshaw_top.webp',
       );
     });

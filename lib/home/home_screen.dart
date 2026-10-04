@@ -804,7 +804,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_sheetController.isAttached) return;
 
     await _sheetController.animateTo(
-      0.68,
+      0.78,
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
     );
@@ -814,7 +814,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_sheetController.isAttached) return;
 
     await _sheetController.animateTo(
-      0.20,
+      0.27,
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
     );
@@ -869,26 +869,70 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             top: 50,
             left: 16,
-            child: CircleAvatar(
-              radius: 24,
-              backgroundColor: mapControlColor,
-              child: IconButton(
-                icon: Icon(
-                  Icons.menu_rounded,
-                  color: mapControlIconColor,
+            child: Material(
+              color: mapControlColor,
+              elevation: 5,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(28),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 16, 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: const BoxDecoration(
+                          color: primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.person_rounded,
+                          color: Color(0xFF071007),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            'AlphaRide',
+                            style: TextStyle(
+                              color: mapControlIconColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          Text(
+                            'Tap for your account',
+                            style: TextStyle(
+                              color: mapControlIconColor.withValues(alpha: 0.6),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
               ),
             ),
           ),
           Positioned(
             top: 50,
             right: 16,
-            child: CircleAvatar(
-              radius: 24,
-              backgroundColor: mapControlColor,
+            child: Material(
+              color: mapControlColor,
+              elevation: 5,
+              shadowColor: Colors.black26,
+              shape: const CircleBorder(),
               child: IconButton(
                 icon: Icon(
                   Icons.my_location_rounded,
@@ -900,13 +944,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           DraggableScrollableSheet(
             controller: _sheetController,
-            initialChildSize: 0.20,
-            minChildSize: 0.20,
-            maxChildSize: 0.68,
+            initialChildSize: 0.27,
+            minChildSize: 0.27,
+            maxChildSize: 0.78,
             snap: true,
             snapSizes: const <double>[
-              0.20,
-              0.68,
+              0.27,
+              0.78,
             ],
             builder: (
               BuildContext context,
@@ -916,7 +960,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onNotification: (
                   DraggableScrollableNotification notification,
                 ) {
-                  final bool collapsed = notification.extent < 0.30;
+                  final bool collapsed = notification.extent < 0.38;
 
                   if (collapsed != _isSheetCollapsed) {
                     setState(() {
@@ -934,7 +978,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           )
                         : Colors.white,
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(30),
+                      top: Radius.circular(26),
                     ),
                     boxShadow: const <BoxShadow>[
                       BoxShadow(
