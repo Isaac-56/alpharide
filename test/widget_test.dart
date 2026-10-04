@@ -115,10 +115,10 @@ void main() {
         ),
       );
 
-      expect(find.text('View ride options'), findsOneWidget);
-      expect(find.text('Select ride'), findsOneWidget);
+      expect(find.text('Where to?'), findsOneWidget);
+      expect(find.text('Ride options'), findsOneWidget);
 
-      await tester.tap(find.text('View ride options'));
+      await tester.tap(find.text('Ride options'));
       await tester.pump();
 
       expect(expanded, true);
@@ -145,8 +145,8 @@ void main() {
         ),
       );
 
-      expect(find.text('Choose destination'), findsOneWidget);
-      expect(find.text('Fare after destination'), findsOneWidget);
+      expect(find.text('Where to?'), findsOneWidget);
+      expect(find.text('Enter destination'), findsOneWidget);
       expect(find.textContaining('68,000'), findsNothing);
       expect(find.textContaining('10,500'), findsNothing);
     },

@@ -563,45 +563,50 @@ class _OrderPanelState extends State<OrderPanel> {
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       color: backgroundColor,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const AlphaSheetHandle(),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
+          Text(
+            'Where to?',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.7,
+            ),
+          ),
+          const SizedBox(height: 10),
           Semantics(
             button: true,
-            label: 'Order now. Choose a ride that fits you.',
+            label: 'Choose your destination',
             child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(18),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                onTap: widget.onExpand,
+                onTap: () => _handleLocationTap(widget.onDestinationTap),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: <Widget>[
-                      SizedBox(
-                        width: 68,
-                        height: 44,
-                        child: Image.asset(
-                          'assets/images/vehicles/alpha_standard.webp',
-                          fit: BoxFit.contain,
-                          cacheWidth: 240,
-                          filterQuality: FilterQuality.high,
-                          gaplessPlayback: true,
-                          errorBuilder: (
-                            BuildContext context,
-                            Object error,
-                            StackTrace? stackTrace,
-                          ) {
-                            return Icon(
-                              Icons.directions_car_filled_rounded,
-                              color: mutedColor,
-                              size: 30,
-                            );
-                          },
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: const BoxDecoration(
+                          color: primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.search_rounded,
+                          color: Color(0xFF071007),
+                          size: 23,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -610,24 +615,26 @@ class _OrderPanelState extends State<OrderPanel> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              'Order now',
+                              widget.destinationAddress.trim().isEmpty
+                                  ? 'Enter destination'
+                                  : widget.destinationAddress,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: textColor,
-                                fontSize: 17,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.2,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Choose a ride that fits you',
+                              'From ${widget.pickupAddress.trim().isEmpty ? 'your location' : widget.pickupAddress}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: mutedColor,
-                                fontSize: 11.5,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -643,7 +650,7 @@ class _OrderPanelState extends State<OrderPanel> {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          Icons.keyboard_arrow_up_rounded,
+                          Icons.arrow_forward_rounded,
                           color: textColor,
                         ),
                       ),
@@ -653,70 +660,68 @@ class _OrderPanelState extends State<OrderPanel> {
               ),
             ),
           ),
-          const SizedBox(height: 7),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _isInteractionLocked ? null : _confirmRide,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: const Color(0xFF071007),
-                disabledBackgroundColor: primaryColor.withValues(alpha: 0.52),
-                disabledForegroundColor:
-                    const Color(0xFF071007).withValues(alpha: 0.62),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _compactShortcut(
+                  icon: Icons.my_location_rounded,
+                  label: 'Pickup',
+                  onTap: () => _handleLocationTap(widget.onPickupTap),
                 ),
               ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                child: _isConfirmingRide
-                    ? const SizedBox(
-                        key: ValueKey<String>('compact-confirming-ride'),
-                        width: 21,
-                        height: 21,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.3,
-                          color: Color(0xFF071007),
-                        ),
-                      )
-                    : Row(
-                        key: const ValueKey<String>('compact-confirm-ride'),
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              _primaryActionLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.15,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                _selectedFareLabel,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _compactShortcut(
+                  icon: Icons.directions_car_filled_rounded,
+                  label: 'Ride options',
+                  onTap: widget.onExpand,
+                ),
               ),
-            ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _compactShortcut({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: backgroundColor,
+      borderRadius: BorderRadius.circular(15),
+      child: InkWell(
+        onTap: _isInteractionLocked ? null : onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: dividerColor),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon, size: 18, color: textColor),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
