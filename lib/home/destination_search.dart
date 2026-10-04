@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../account/account_ui.dart';
+import '../core/widgets/alpha_components.dart';
 import '../models/location_selection.dart';
 import '../models/prediction_model.dart';
 import 'map_location_picker.dart';
@@ -342,60 +343,99 @@ class _DestinationSearchState extends State<DestinationSearch> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    SizedBox(
-                      width: AlphaSpacing.controlHeight,
-                      height: AlphaSpacing.controlHeight,
-                      child: Material(
-                        color: surfaceColor,
-                        shape: CircleBorder(
-                          side: BorderSide(color: borderColor),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: _isResolvingPlace || _isOpeningMap
-                              ? null
-                              : _closePage,
-                          customBorder: const CircleBorder(),
-                          child: Icon(
-                            Icons.close_rounded,
-                            color: textColor,
-                            size: 25,
+                    AlphaFlowHeader(
+                      title: widget.isPickup
+                          ? 'Choose pickup'
+                          : 'Where are you going?',
+                      subtitle: widget.isPickup
+                          ? 'Move the pickup or search for a nearby place.'
+                          : 'Search by place, street or landmark.',
+                      compact: true,
+                      leading: SizedBox(
+                        width: AlphaSpacing.controlHeight,
+                        height: AlphaSpacing.controlHeight,
+                        child: Material(
+                          color: surfaceColor,
+                          shape: CircleBorder(
+                            side: BorderSide(color: borderColor),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: _isResolvingPlace || _isOpeningMap
+                                ? null
+                                : _closePage,
+                            customBorder: const CircleBorder(),
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: textColor,
+                              size: 25,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 26),
-                    Text(
-                      'Pick-up address',
-                      style: TextStyle(
-                        color: secondaryTextColor,
-                        fontSize: 13.5,
-                        height: 1.3,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.pickupAddress.trim().isEmpty
-                          ? 'My location'
-                          : widget.pickupAddress,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: 19,
-                        height: 1.3,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: borderColor,
-                    ),
                     const SizedBox(height: 22),
+                    AlphaSurfaceCard(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Column(
+                            children: <Widget>[
+                              const Icon(
+                                Icons.radio_button_checked_rounded,
+                                color: primaryColor,
+                                size: 19,
+                              ),
+                              Container(
+                                width: 2,
+                                height: 23,
+                                color: borderColor,
+                              ),
+                              Icon(
+                                widget.isPickup
+                                    ? Icons.my_location_rounded
+                                    : Icons.location_on_rounded,
+                                color: textColor,
+                                size: 19,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  widget.pickupAddress.trim().isEmpty
+                                      ? 'My location'
+                                      : widget.pickupAddress,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 23),
+                                Text(
+                                  widget.isPickup
+                                      ? 'Choose a different pickup'
+                                      : 'Choose your destination',
+                                  style: TextStyle(
+                                    color: secondaryTextColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: _searchController,
                       focusNode: _searchFocusNode,
@@ -411,16 +451,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: InputDecoration(
-                        labelText: fieldLabel,
-                        labelStyle: TextStyle(
-                          color: secondaryTextColor,
-                          fontSize: 14,
-                        ),
-                        floatingLabelStyle: TextStyle(
-                          color: textColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        hintText: fieldLabel,
                         prefixIcon: Icon(
                           Icons.search_rounded,
                           color: textColor,

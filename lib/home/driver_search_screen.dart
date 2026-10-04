@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../account/account_ui.dart';
+import '../core/widgets/alpha_components.dart';
 import '../models/ride_backend.dart';
 import '../models/ride_option.dart';
 import '../services/ride_service.dart';
@@ -721,7 +722,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   Widget _searchPanel() {
-    final Color backgroundColor = AlphaColors.background(context);
     final Color surfaceColor = AlphaColors.surface(context);
     final Color textColor = AlphaColors.text(context);
     final Color mutedColor = AlphaColors.muted(context);
@@ -729,61 +729,54 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     return SafeArea(
       top: false,
-      child: Container(
-        width: double.infinity,
+      child: AlphaMapSheet(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.68,
         ),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _searchTitle,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 25,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '${widget.ride.name} • ~ ${RideOption.formatAmount(_liveState?.estimatedFare ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
-                        style: TextStyle(color: mutedColor, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _statusLabel,
-                        style: const TextStyle(
-                          color: primaryColor,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+            AlphaFlowHeader(
+              title: _searchTitle,
+              subtitle: _statusMessage,
+              compact: true,
+              trailing: SizedBox(
+                width: 90,
+                height: 58,
+                child: Image.asset(
+                  widget.ride.assetPath,
+                  fit: BoxFit.contain,
+                  cacheWidth: 280,
+                  filterQuality: FilterQuality.medium,
                 ),
-                SizedBox(
-                  width: 86,
-                  height: 58,
-                  child: Image.asset(
-                    widget.ride.assetPath,
-                    fit: BoxFit.contain,
-                    cacheWidth: 280,
-                    filterQuality: FilterQuality.medium,
-                  ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                AlphaMetricChip(
+                  icon: widget.ride.id == 'boda'
+                      ? Icons.two_wheeler_rounded
+                      : widget.ride.id == 'rickshaw'
+                      ? Icons.electric_rickshaw_rounded
+                      : Icons.local_taxi_rounded,
+                  label: widget.ride.name,
+                ),
+                AlphaMetricChip(
+                  icon: Icons.payments_outlined,
+                  label:
+                      '~ ${RideOption.formatAmount(_liveState?.estimatedFare ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
+                ),
+                AlphaMetricChip(
+                  icon: _isSearching
+                      ? Icons.radar_rounded
+                      : Icons.navigation_rounded,
+                  label: _statusLabel,
+                  emphasized: true,
                 ),
               ],
             ),
@@ -811,14 +804,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 valueColor: const AlwaysStoppedAnimation<Color>(primaryColor),
               ),
             const SizedBox(height: 14),
-            Text(
-              _statusMessage,
-              style: TextStyle(
-                color: mutedColor,
-                fontSize: 13.5,
-                height: 1.35,
-              ),
-            ),
             if (_liveState?.isWaiting == true) ...<Widget>[
               const SizedBox(height: 14),
               _PassengerWaitingCard(state: _liveState!),
