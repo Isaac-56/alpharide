@@ -18,6 +18,7 @@ function driverReviewPayload({
   driverId,
   profile,
   authenticatedPhoneNumber,
+  photoCheck,
 }) {
   const safeProfile = object(profile);
   const registration = object(safeProfile.registration);
@@ -30,6 +31,13 @@ function driverReviewPayload({
   const verifiedPhone = normalizedPhone(authenticatedPhoneNumber);
   const phoneVerified = verifiedPhone.length > 0 &&
     verifiedPhone === normalizedPhone(phoneNumber);
+  const safePhotoCheck = object(photoCheck);
+  const photoStoragePath = text(safePhotoCheck.storagePath);
+  const photoPrefix = `drivers/${driverId}/documents/photo_checks/`;
+  const photoStatus = text(safePhotoCheck.status) || "not_submitted";
+  const photoSubmitted = safePhotoCheck.automatedScreeningPassed === true &&
+    photoStoragePath.startsWith(photoPrefix) &&
+    ["pending", "approved"].includes(photoStatus);
 
   const checks = [
     {
@@ -80,6 +88,11 @@ function driverReviewPayload({
         backStoragePath.startsWith(documentPrefix),
     },
     {
+      key: "photo",
+      label: "Driver identity photo submitted",
+      passed: photoSubmitted,
+    },
+    {
       key: "onboarding",
       label: "Alpha Plus registration submitted",
       passed: safeProfile.onboardingCompleted === true,
@@ -115,6 +128,13 @@ function driverReviewPayload({
         qualityChecked: licence.qualityChecked === true,
         frontStoragePath,
         backStoragePath,
+      },
+      identityPhoto: {
+        status: photoStatus,
+        automatedScreeningPassed:
+          safePhotoCheck.automatedScreeningPassed === true,
+        storagePath: photoStoragePath,
+        reviewerMessage: text(safePhotoCheck.reviewerMessage),
       },
     },
     onboardingCompleted: safeProfile.onboardingCompleted === true,

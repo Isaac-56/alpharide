@@ -292,9 +292,10 @@ exports.adminListDrivers = callable(async (request) => {
 exports.adminGetDriverReview = callable(async (request) => {
   requireAdmin(request);
   const driverId = await resolveDriverId(request.data);
-  const [profileSnapshot, verifiedPhoneNumber] = await Promise.all([
+  const [profileSnapshot, verifiedPhoneNumber, photoCheckSnapshot] = await Promise.all([
     db.collection("drivers").doc(driverId).get(),
     authenticatedPhoneNumber(driverId),
+    db.collection("driver_photo_checks").doc(driverId).get(),
   ]);
   if (!profileSnapshot.exists) {
     throw new HttpsError("not-found", "Driver profile not found.");
@@ -305,6 +306,7 @@ exports.adminGetDriverReview = callable(async (request) => {
     driverId,
     profile,
     authenticatedPhoneNumber: verifiedPhoneNumber,
+    photoCheck: photoCheckSnapshot.exists ? photoCheckSnapshot.data() : {},
   });
   const licence = profile?.documents?.driverLicence;
   return {
@@ -319,6 +321,11 @@ exports.adminGetDriverReview = callable(async (request) => {
       driverLicence: {
         ...review.documents.driverLicence,
         uploadedAtMillis: timestampMillis(licence?.uploadedAt),
+      },
+      identityPhoto: {
+        ...review.documents.identityPhoto,
+        submittedAtMillis: timestampMillis(photoCheckSnapshot.data()?.submittedAt),
+        updatedAtMillis: timestampMillis(photoCheckSnapshot.data()?.updatedAt),
       },
     },
   };
@@ -559,6 +566,7 @@ exports.adminSetDriverReviewStatus = callable(async (request) => {
   }
   const note = cleanText(request.data?.note, "note", 240);
   const profileRef = db.collection("drivers").doc(driverId);
+  const photoCheckRef = db.collection("driver_photo_checks").doc(driverId);
   const auditRef = db.collection("admin_audit_log").doc();
   const verifiedPhoneNumber = reviewStatus === "approved"
     ? await authenticatedPhoneNumber(driverId)
@@ -571,10 +579,12 @@ exports.adminSetDriverReviewStatus = callable(async (request) => {
     }
     const profile = profileSnapshot.data();
     if (reviewStatus === "approved") {
+      const photoCheckSnapshot = await transaction.get(photoCheckRef);
       const review = driverReviewPayload({
         driverId,
         profile,
         authenticatedPhoneNumber: verifiedPhoneNumber,
+        photoCheck: photoCheckSnapshot.exists ? photoCheckSnapshot.data() : {},
       });
       if (!review.readyForApproval) {
         throw new HttpsError(

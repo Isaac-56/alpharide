@@ -40,11 +40,21 @@ function completeProfile(driverId = "driver-1") {
   };
 }
 
+function completePhotoCheck(driverId = "driver-1") {
+  return {
+    driverId,
+    storagePath: `drivers/${driverId}/documents/photo_checks/1720000000000.jpg`,
+    status: "pending",
+    automatedScreeningPassed: true,
+  };
+}
+
 test("complete Firebase-verified driver registration is approval ready", () => {
   const result = driverReviewPayload({
     driverId: "driver-1",
     profile: completeProfile(),
     authenticatedPhoneNumber: "+211 912 345 678",
+    photoCheck: completePhotoCheck(),
   });
 
   assert.equal(result.readyForApproval, true);
@@ -62,6 +72,7 @@ test("approval stays blocked until licence images and OTP identity are valid", (
     driverId: "driver-1",
     profile,
     authenticatedPhoneNumber: "+211900000000",
+    photoCheck: completePhotoCheck(),
   });
 
   assert.equal(result.readyForApproval, false);
@@ -69,5 +80,23 @@ test("approval stays blocked until licence images and OTP identity are valid", (
   assert.deepEqual(result.missingRequirements, [
     "Firebase phone number verified",
     "Front and back licence images uploaded",
+  ]);
+});
+
+test("approval stays blocked until a valid driver identity photo is submitted", () => {
+  const result = driverReviewPayload({
+    driverId: "driver-1",
+    profile: completeProfile(),
+    authenticatedPhoneNumber: "+211912345678",
+    photoCheck: {
+      storagePath: "drivers/another-driver/documents/photo_checks/photo.jpg",
+      status: "pending",
+      automatedScreeningPassed: true,
+    },
+  });
+
+  assert.equal(result.readyForApproval, false);
+  assert.deepEqual(result.missingRequirements, [
+    "Driver identity photo submitted",
   ]);
 });
