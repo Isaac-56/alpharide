@@ -6,6 +6,11 @@ import 'package:passengerapp/home/order_panel.dart';
 import 'package:passengerapp/models/ride_option.dart';
 
 void main() {
+  test('Standard is the first passenger ride option', () {
+    expect(RideOption.options.first.id, 'standard');
+    expect(RideOption.options.first.name, 'Alpha Standard');
+  });
+
   test('ride options expand as soon as a destination exists', () {
     expect(
       shouldExpandRideOptionsAfterLocationSelection(hasDestination: true),

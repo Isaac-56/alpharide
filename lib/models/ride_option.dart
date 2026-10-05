@@ -102,6 +102,17 @@ class RideOption {
 
   static const List<RideOption> options = <RideOption>[
     RideOption(
+      id: 'standard',
+      name: 'Alpha Standard',
+      description: 'Affordable everyday car rides',
+      assetPath: 'assets/images/vehicles/alpha_standard.webp',
+      seats: 4,
+      minimumFare: 10000,
+      baseFare: 10000,
+      waitingPerMinute: 100,
+      perKilometer: 9000,
+    ),
+    RideOption(
       id: 'boda',
       name: 'Alpha Boda',
       description: 'Fast and affordable for one passenger',
@@ -122,17 +133,6 @@ class RideOption {
       baseFare: 0,
       waitingPerMinute: 100,
       perKilometer: 5000,
-    ),
-    RideOption(
-      id: 'standard',
-      name: 'Alpha Standard',
-      description: 'Affordable everyday car rides',
-      assetPath: 'assets/images/vehicles/alpha_standard.webp',
-      seats: 4,
-      minimumFare: 10000,
-      baseFare: 10000,
-      waitingPerMinute: 100,
-      perKilometer: 9000,
     ),
     RideOption(
       id: 'comfort',
