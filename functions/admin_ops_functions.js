@@ -1,6 +1,10 @@
 "use strict";
 
-const { getFirestore, Timestamp } = require("firebase-admin/firestore");
+const {
+  AggregateField,
+  getFirestore,
+  Timestamp,
+} = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const {
@@ -457,34 +461,51 @@ exports.adminSetBusinessSettings = callable(async (request) => {
 }, "The finance settings could not be updated.");
 
 exports.adminGetCommissionReport = callable(async () => {
-  const snapshot = await db
-    .collection("ride_receipts")
+  const receipts = db.collection("ride_receipts");
+  const recentSnapshot = await receipts
     .orderBy("completedAt", "desc")
     .limit(5000)
     .get();
   const nowJuba = Date.now() + 2 * 60 * 60 * 1000;
   const todayKey = new Date(nowJuba).toISOString().slice(0, 10);
+  const startOfJubaDay = Timestamp.fromMillis(
+    Date.parse(`${todayKey}T00:00:00.000Z`) - 2 * 60 * 60 * 1000,
+  );
+  const [allTimeAggregate, todayAggregate, ...categoryAggregates] =
+    await Promise.all([
+      receipts.aggregate({
+        amount: AggregateField.sum("platformFee"),
+        count: AggregateField.count(),
+      }).get(),
+      receipts.where("completedAt", ">=", startOfJubaDay).aggregate({
+        amount: AggregateField.sum("platformFee"),
+      }).get(),
+      ...FINANCE_CATEGORIES.map((id) =>
+        receipts.where("rideOptionId", "==", id).aggregate({
+          amount: AggregateField.sum("platformFee"),
+        }).get(),
+      ),
+    ]);
   const byDay = new Map();
-  const byCategory = Object.fromEntries(FINANCE_CATEGORIES.map((id) => [id, 0]));
-  let allTime = 0;
-  let today = 0;
-  for (const doc of snapshot.docs) {
+  for (const doc of recentSnapshot.docs) {
     const data = doc.data();
     const fee = number(data.platformFee);
     const completed = millis(data.completedAt);
     if (!completed) continue;
     const day = new Date(completed + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    allTime += fee;
-    if (day === todayKey) today += fee;
     byDay.set(day, (byDay.get(day) ?? 0) + fee);
-    const category = text(data.rideOptionId);
-    if (Object.hasOwn(byCategory, category)) byCategory[category] += fee;
   }
+  const byCategory = Object.fromEntries(
+    FINANCE_CATEGORIES.map((id, index) => [
+      id,
+      number(categoryAggregates[index].data().amount),
+    ]),
+  );
   return {
     currencyCode: "SSP",
-    today,
-    allTime,
-    completedRideCount: snapshot.size,
+    today: number(todayAggregate.data().amount),
+    allTime: number(allTimeAggregate.data().amount),
+    completedRideCount: number(allTimeAggregate.data().count),
     byCategory,
     daily: [...byDay.entries()].slice(0, 30).map(([date, amount]) => ({ date, amount })),
     generatedAtMillis: Date.now(),
