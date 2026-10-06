@@ -12,10 +12,11 @@ void main() {
   test('live dispatch only enables compatible launch products', () {
     expect(
       RideContract.liveRideOptions,
-      <String>{'boda', 'rickshaw', 'standard'},
+      <String>{'boda', 'rickshaw', 'standard', 'comfort', 'premium'},
     );
     expect(RideContract.isLiveRideOption('standard'), isTrue);
-    expect(RideContract.isLiveRideOption('comfort'), isFalse);
+    expect(RideContract.isLiveRideOption('comfort'), isTrue);
+    expect(RideContract.isLiveRideOption('ev'), isFalse);
   });
 
   test('valid requested ride parses without assigned driver', () {

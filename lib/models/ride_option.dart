@@ -85,6 +85,29 @@ class RideOption {
     );
   }
 
+  RideOption withServerPricing({
+    required int fare,
+    required int minimumFare,
+    required int baseFare,
+    required int perKilometer,
+    required int waitingPerMinute,
+  }) {
+    return RideOption(
+      id: id,
+      name: name,
+      description: description,
+      assetPath: assetPath,
+      seats: seats,
+      estimatedFare: fare,
+      minimumFare: minimumFare,
+      baseFare: baseFare,
+      waitingPerMinute: waitingPerMinute,
+      perKilometer: perKilometer,
+      isElectric: isElectric,
+      isCorporate: isCorporate,
+    );
+  }
+
   static String formatAmount(int amount) {
     final String digits = amount.abs().toString();
     final StringBuffer formatted = StringBuffer();
@@ -146,18 +169,6 @@ class RideOption {
       perKilometer: 4600,
     ),
     RideOption(
-      id: 'ev',
-      name: 'Alpha EV',
-      description: 'A quiet, lower-emission ride',
-      assetPath: 'assets/images/vehicles/alpha_ev.webp',
-      seats: 4,
-      minimumFare: 13000,
-      baseFare: 8000,
-      waitingPerMinute: 500,
-      perKilometer: 5000,
-      isElectric: true,
-    ),
-    RideOption(
       id: 'premium',
       name: 'Alpha Premium',
       description: 'Luxury vehicles and top drivers',
@@ -169,9 +180,21 @@ class RideOption {
       perKilometer: 6350,
     ),
     RideOption(
+      id: 'ev',
+      name: 'Alpha EV',
+      description: 'Coming soon',
+      assetPath: 'assets/images/vehicles/alpha_ev.webp',
+      seats: 4,
+      minimumFare: 13000,
+      baseFare: 8000,
+      waitingPerMinute: 500,
+      perKilometer: 5000,
+      isElectric: true,
+    ),
+    RideOption(
       id: 'corporate',
       name: 'Alpha Corporate',
-      description: 'Executive rides for business and hotel transfers',
+      description: 'Coming soon',
       assetPath: 'assets/images/vehicles/alpha_corporate.webp',
       seats: 4,
       minimumFare: 20000,

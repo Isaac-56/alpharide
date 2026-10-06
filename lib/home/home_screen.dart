@@ -57,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<LatLng> _routePoints = const <LatLng>[];
   int? _routeDistanceMeters;
   Duration? _routeDuration;
+  Map<String, RideFareQuote> _fareEstimates = const <String, RideFareQuote>{};
   int _routeRequestId = 0;
   bool _isCalculatingFare = false;
   String? _fareCalculationError;
@@ -559,6 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _routePoints = const <LatLng>[];
         _routeDistanceMeters = null;
         _routeDuration = null;
+        _fareEstimates = const <String, RideFareQuote>{};
         _isCalculatingFare = false;
         _fareCalculationError = null;
         _polylines.clear();
@@ -592,6 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _routePoints = route.points;
         _routeDistanceMeters = route.distanceMeters;
         _routeDuration = route.duration;
+        _fareEstimates = route.fareEstimates;
         _isCalculatingFare = false;
         _fareCalculationError = null;
         _polylines
@@ -1001,6 +1004,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onExpand: _expandOrderPanel,
                       routeDistanceMeters: _routeDistanceMeters,
                       routeDuration: _routeDuration,
+                      fareEstimates: _fareEstimates,
                       isCalculatingFare: _isCalculatingFare,
                       fareCalculationError: _fareCalculationError,
                       onCancelFareCalculation: _cancelFareCalculation,

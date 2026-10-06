@@ -5,11 +5,13 @@ class DrivingRoute {
   final List<LatLng> points;
   final int distanceMeters;
   final Duration duration;
+  final Map<String, RideFareQuote> fareEstimates;
 
   const DrivingRoute({
     required this.points,
     required this.distanceMeters,
     required this.duration,
+    this.fareEstimates = const <String, RideFareQuote>{},
   });
 
   factory DrivingRoute.fromCallableData(Object? raw) {
@@ -35,6 +37,17 @@ class DrivingRoute {
         ? (data['encodedPolyline'] as String).trim()
         : '';
     final List<LatLng> points = _decodePolyline(encodedPolyline);
+    final Map<String, RideFareQuote> fareEstimates = <String, RideFareQuote>{};
+    final Object? rawFares = data['fareEstimates'];
+    if (rawFares is Map) {
+      for (final MapEntry<Object?, Object?> entry in rawFares.entries) {
+        if (entry.value is Map) {
+          fareEstimates[entry.key.toString()] = RideFareQuote.fromMap(
+            entry.value as Map,
+          );
+        }
+      }
+    }
 
     if (points.length < 2) {
       throw const FormatException('The route polyline is invalid.');
@@ -44,6 +57,7 @@ class DrivingRoute {
       points: List<LatLng>.unmodifiable(points),
       distanceMeters: distanceMeters,
       duration: Duration(seconds: durationSeconds),
+      fareEstimates: Map<String, RideFareQuote>.unmodifiable(fareEstimates),
     );
   }
 
@@ -97,6 +111,39 @@ class DrivingRoute {
 
     final int value = (result & 1) != 0 ? ~(result >> 1) : result >> 1;
     return _DecodedValue(value, index);
+  }
+}
+
+class RideFareQuote {
+  const RideFareQuote({
+    required this.estimatedFare,
+    required this.minimumFare,
+    required this.baseFare,
+    required this.perKilometer,
+    required this.waitingPerMinute,
+  });
+
+  final int estimatedFare;
+  final int minimumFare;
+  final int baseFare;
+  final int perKilometer;
+  final int waitingPerMinute;
+
+  factory RideFareQuote.fromMap(Map<dynamic, dynamic> data) {
+    int read(String key) {
+      final Object? value = data[key];
+      if (value is! num || !value.isFinite || value < 0) {
+        throw FormatException('The $key fare value is invalid.');
+      }
+      return value.round();
+    }
+    return RideFareQuote(
+      estimatedFare: read('estimatedFare'),
+      minimumFare: read('minimumFare'),
+      baseFare: read('baseFare'),
+      perKilometer: read('perKilometer'),
+      waitingPerMinute: read('waitingPerMinute'),
+    );
   }
 }
 

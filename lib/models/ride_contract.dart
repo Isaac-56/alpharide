@@ -73,8 +73,8 @@ abstract final class RideContract {
     'rickshaw',
     'standard',
     'comfort',
-    'ev',
     'premium',
+    'ev',
     'corporate',
   };
 
@@ -82,12 +82,16 @@ abstract final class RideContract {
     'boda',
     'rickshaw',
     'standard',
+    'comfort',
+    'premium',
   };
 
   static const Set<String> liveVehicleTypes = <String>{
     'boda',
     'rickshaw',
     'standard',
+    'comfort',
+    'premium',
   };
 
   static const Set<String> livePaymentMethods = <String>{'cash'};
