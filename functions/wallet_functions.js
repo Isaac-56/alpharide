@@ -335,13 +335,13 @@ exports.adminCreditDriverWallet = callable(async (request) => {
   const administrator = requireAdmin(request);
   const driverId = await resolveDriverId(request.data);
   const amount = normalizeTopUpAmount(request.data?.amount);
-  const reference = cleanText(request.data?.reference, "reference", 80);
   const note = cleanText(request.data?.note, "note", 240);
   const profileRef = db.collection("drivers").doc(driverId);
   const walletRef = walletReference(driverId);
   const transactionRef = walletRef.collection("transactions").doc();
   const auditRef = db.collection("admin_audit_log").doc();
   let response;
+  let receipt;
 
   await db.runTransaction(async (transaction) => {
     const [profileSnapshot, walletSnapshot] = await Promise.all([
@@ -357,6 +357,31 @@ exports.adminCreditDriverWallet = callable(async (request) => {
 
     const before = walletState(walletSnapshot.exists ? walletSnapshot.data() : {});
     const after = applyWalletCredit({ wallet: before, amount });
+    const profile = profileSnapshot.data();
+    const registration = profile?.registration &&
+        typeof profile.registration === "object"
+      ? profile.registration
+      : {};
+    const plateNumber = cleanText(
+      registration.plateNumber,
+      "plateNumber",
+      40,
+    );
+    const plateToken = (plateNumber || driverId.slice(0, 8))
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 16);
+    const rechargeCount = walletSnapshot.exists &&
+        Number.isInteger(walletSnapshot.get("rechargeCount"))
+      ? walletSnapshot.get("rechargeCount") + 1
+      : 1;
+    const jubaDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const dateToken = [
+      jubaDate.getUTCFullYear(),
+      String(jubaDate.getUTCMonth() + 1).padStart(2, "0"),
+      String(jubaDate.getUTCDate()).padStart(2, "0"),
+    ].join("");
+    const reference = `ALP-${plateToken}-${dateToken}-${String(rechargeCount).padStart(4, "0")}`;
     const now = FieldValue.serverTimestamp();
     const walletData = {
       schemaVersion: WALLET_SCHEMA_VERSION,
@@ -368,6 +393,7 @@ exports.adminCreditDriverWallet = callable(async (request) => {
       isLowBalance: after.isLowBalance,
       canGoOnline: after.canGoOnline,
       lifetimeCredits: FieldValue.increment(amount),
+      rechargeCount,
       lifetimeDebits: walletSnapshot.exists
         ? walletSnapshot.get("lifetimeDebits") ?? 0
         : 0,
@@ -389,6 +415,10 @@ exports.adminCreditDriverWallet = callable(async (request) => {
       balanceAfter: after.balance,
       currencyCode: "SSP",
       reference,
+      receiptNumber: reference,
+      plateNumber,
+      driverName: `${cleanText(profile?.firstName, "firstName", 80)} ${cleanText(profile?.lastName, "lastName", 80)}`.trim(),
+      phoneNumber: cleanText(profile?.phoneNumber, "phoneNumber", 40),
       note,
       administratorUid: administrator.uid,
       administratorEmail: administrator.email,
@@ -399,6 +429,10 @@ exports.adminCreditDriverWallet = callable(async (request) => {
       driverId,
       amount,
       reference,
+      receiptNumber: reference,
+      plateNumber,
+      driverName: `${cleanText(profile?.firstName, "firstName", 80)} ${cleanText(profile?.lastName, "lastName", 80)}`.trim(),
+      phoneNumber: cleanText(profile?.phoneNumber, "phoneNumber", 40),
       note,
       balanceBefore: before.balance,
       balanceAfter: after.balance,
@@ -413,11 +447,26 @@ exports.adminCreditDriverWallet = callable(async (request) => {
           ? walletSnapshot.get("lifetimeCredits") ?? 0
           : 0) + amount,
     });
+    receipt = {
+      receiptNumber: reference,
+      driverId,
+      driverName: `${cleanText(profile?.firstName, "firstName", 80)} ${cleanText(profile?.lastName, "lastName", 80)}`.trim(),
+      phoneNumber: cleanText(profile?.phoneNumber, "phoneNumber", 40),
+      plateNumber,
+      amount,
+      balanceBefore: before.balance,
+      balanceAfter: after.balance,
+      rechargeCount,
+      createdAtMillis: Date.now(),
+      administratorEmail: administrator.email,
+      note,
+    };
   });
 
   return {
     wallet: response,
     transactionId: transactionRef.id,
+    receipt,
   };
 }, "The wallet recharge could not be completed.");
 
