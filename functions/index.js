@@ -32,6 +32,7 @@ const {
 const {
   CURRENCY_CODE,
   calculateFare,
+  farePolicyFor,
   isCancellableBeforePickup,
   validateCancellationReason,
   validateCreateRideInput,
@@ -632,10 +633,17 @@ exports.customerServiceQuoteRide = onCall(
         ]);
         route = routePreviewCache.set(cacheKey, computedRoute);
       }
+      const settingsSnapshot = await db
+        .collection("platform_config")
+        .doc("accounting")
+        .get();
+      const settings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
+      const farePolicy = farePolicyFor(settings, input.rideOptionId);
       return {
         estimatedFare: calculateFare({
           rideOptionId: input.rideOptionId,
           distanceMeters: route.distanceMeters,
+          farePolicy,
         }),
         currencyCode: CURRENCY_CODE,
         routeDistanceMeters: Math.round(route.distanceMeters),
@@ -665,14 +673,20 @@ exports.customerServiceCreateRide = onCall(
         computeTrustedRoute(input.pickup, input.destination),
         db.collection("platform_config").doc("accounting").get(),
       ]);
+      const accountingConfig = accountingConfigSnapshot.exists
+        ? accountingConfigSnapshot.data()
+        : {};
       const commissionBps = commissionBpsFromConfig(
-        accountingConfigSnapshot.exists ? accountingConfigSnapshot.data() : {},
+        accountingConfig,
+        input.rideOptionId,
       );
+      const farePolicy = farePolicyFor(accountingConfig, input.rideOptionId);
       const estimatedFare = calculateFare({
         rideOptionId: input.rideOptionId,
         distanceMeters: route.distanceMeters,
+        farePolicy,
       });
-      const waitingPolicy = waitingPolicyFor(input.rideOptionId);
+      const waitingPolicy = waitingPolicyFor(input.rideOptionId, farePolicy);
       const rideRef = db.collection("rides").doc();
       const activeRideRef = db.collection("active_passenger_rides").doc(passengerId);
       const bookingRef = db.collection("call_center_bookings").doc(rideRef.id);
@@ -957,16 +971,35 @@ exports.calculateRoute = onCall(
       const userId = requireAuthenticatedUser(request);
       const input = validateRoutePreviewInput(request.data);
       await enforceRoutePreviewLimit(userId);
-      const route = await computeTrustedRoute(
-        input.origin,
-        input.destination,
-        { includePolyline: true },
+      const [route, settingsSnapshot] = await Promise.all([
+        computeTrustedRoute(
+          input.origin,
+          input.destination,
+          { includePolyline: true },
+        ),
+        db.collection("platform_config").doc("accounting").get(),
+      ]);
+      const settings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
+      const fareEstimates = Object.fromEntries(
+        ["standard", "boda", "rickshaw", "comfort", "premium"].map((id) => {
+          const policy = farePolicyFor(settings, id);
+          return [id, {
+            estimatedFare: calculateFare({
+              rideOptionId: id,
+              distanceMeters: route.distanceMeters,
+              farePolicy: policy,
+            }),
+            ...policy,
+          }];
+        }),
       );
 
       return {
         distanceMeters: route.distanceMeters,
         durationSeconds: route.durationSeconds,
         encodedPolyline: route.encodedPolyline,
+        fareEstimates,
+        currencyCode: CURRENCY_CODE,
       };
     } catch (error) {
       throw callableError(error, "Unable to calculate the road route.");
@@ -992,14 +1025,20 @@ exports.createRide = onCall(
         computeTrustedRoute(input.pickup, input.destination),
         db.collection("platform_config").doc("accounting").get(),
       ]);
+      const accountingConfig = accountingConfigSnapshot.exists
+        ? accountingConfigSnapshot.data()
+        : {};
       const commissionBps = commissionBpsFromConfig(
-        accountingConfigSnapshot.exists ? accountingConfigSnapshot.data() : {},
+        accountingConfig,
+        input.rideOptionId,
       );
+      const farePolicy = farePolicyFor(accountingConfig, input.rideOptionId);
       const estimatedFare = calculateFare({
         rideOptionId: input.rideOptionId,
         distanceMeters: route.distanceMeters,
+        farePolicy,
       });
-      const waitingPolicy = waitingPolicyFor(input.rideOptionId);
+      const waitingPolicy = waitingPolicyFor(input.rideOptionId, farePolicy);
 
       const rideRef = db.collection("rides").doc();
       const activeRideRef = db

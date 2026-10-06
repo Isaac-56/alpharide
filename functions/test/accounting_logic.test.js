@@ -58,6 +58,16 @@ test("configured commission is normalized and frozen in basis points", () => {
   assert.equal(accounting.driverNetFare, 87500);
 });
 
+test("commission settings are independent by ride category", () => {
+  const config = {
+    commissionBps: 1000,
+    commissionByRideOption: { boda: 500, premium: 1750 },
+  };
+  assert.equal(commissionBpsFromConfig(config, "boda"), 500);
+  assert.equal(commissionBpsFromConfig(config, "premium"), 1750);
+  assert.equal(commissionBpsFromConfig(config, "standard"), 1000);
+});
+
 test("launch accounting rejects invalid fares and unimplemented payments", () => {
   assert.throws(
     () =>

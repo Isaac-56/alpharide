@@ -21,9 +21,16 @@ function normalizeCommissionBps(value, fallback = PLATFORM_COMMISSION_BPS) {
   return normalized;
 }
 
-function commissionBpsFromConfig(config = {}) {
+function commissionBpsFromConfig(config = {}, rideOptionId = "") {
+  const normalizedOption = typeof rideOptionId === "string"
+    ? rideOptionId.trim().toLowerCase()
+    : "";
+  const categoryValue = config && typeof config === "object"
+    ? config.commissionByRideOption?.[normalizedOption]
+    : undefined;
   return normalizeCommissionBps(
-    config && typeof config === "object" ? config.commissionBps : undefined,
+    categoryValue ??
+      (config && typeof config === "object" ? config.commissionBps : undefined),
   );
 }
 
