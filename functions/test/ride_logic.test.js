@@ -10,6 +10,7 @@ const {
   parseGoogleDurationSeconds,
   validateCancellationReason,
   validateCreateRideInput,
+  farePolicyFor,
 } = require("../ride_logic");
 
 test("boda fare matches the AlphaRide formula", () => {
@@ -30,6 +31,30 @@ test("standard fare matches the AlphaRide formula", () => {
     }),
     100000,
   );
+});
+
+test("server fare settings override defaults for future quotes", () => {
+  const policy = farePolicyFor({
+    faresByRideOption: {
+      standard: {
+        minimumFare: 15000,
+        baseFare: 12000,
+        perKilometer: 10000,
+        waitingPerMinute: 250,
+      },
+    },
+  }, "standard");
+  assert.deepEqual(policy, {
+    minimumFare: 15000,
+    baseFare: 12000,
+    perKilometer: 10000,
+    waitingPerMinute: 250,
+  });
+  assert.equal(calculateFare({
+    rideOptionId: "standard",
+    distanceMeters: 1000,
+    farePolicy: policy,
+  }), 22000);
 });
 
 test("zero-flag-down services charge only rounded road distance", () => {
@@ -87,7 +112,7 @@ test("non-live catalogue products cannot create rides", () => {
           latitude: 4.86,
           longitude: 31.59,
         },
-        rideOptionId: "premium",
+        rideOptionId: "ev",
         paymentMethod: "cash",
       }),
     /not enabled for live dispatch/,

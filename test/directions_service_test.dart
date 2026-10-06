@@ -9,6 +9,15 @@ void main() {
         'distanceMeters': 4321,
         'durationSeconds': 613,
         'encodedPolyline': '_p~iF~ps|U_ulLnnqC_mqNvxq`@',
+        'fareEstimates': <String, dynamic>{
+          'standard': <String, dynamic>{
+            'estimatedFare': 49000,
+            'minimumFare': 10000,
+            'baseFare': 10000,
+            'perKilometer': 9000,
+            'waitingPerMinute': 100,
+          },
+        },
       },
     );
 
@@ -17,6 +26,7 @@ void main() {
     expect(route.points.length, 3);
     expect(route.points.first, const LatLng(38.5, -120.2));
     expect(route.points.last, const LatLng(43.252, -126.453));
+    expect(route.fareEstimates['standard']?.estimatedFare, 49000);
   });
 
   test('trusted callable route data rejects malformed responses', () {

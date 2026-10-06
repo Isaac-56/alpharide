@@ -5,6 +5,7 @@ import '../core/widgets/alpha_components.dart';
 import '../models/ride_option.dart';
 import 'payment_method_sheet.dart';
 import 'ride_option_details_screen.dart';
+import 'services/directions_service.dart';
 
 typedef RideSelectionCallback = void Function(
   RideOption ride,
@@ -21,6 +22,7 @@ class OrderPanel extends StatefulWidget {
   final VoidCallback onExpand;
   final int? routeDistanceMeters;
   final Duration? routeDuration;
+  final Map<String, RideFareQuote> fareEstimates;
   final bool isCalculatingFare;
   final String? fareCalculationError;
   final VoidCallback? onCancelFareCalculation;
@@ -37,6 +39,7 @@ class OrderPanel extends StatefulWidget {
     required this.onExpand,
     this.routeDistanceMeters,
     this.routeDuration,
+    this.fareEstimates = const <String, RideFareQuote>{},
     this.isCalculatingFare = false,
     this.fareCalculationError,
     this.onCancelFareCalculation,
@@ -87,6 +90,9 @@ class _OrderPanelState extends State<OrderPanel> {
   int? _fareFor(RideOption ride) {
     if (!_hasRouteEstimate) return null;
 
+    final RideFareQuote? quote = widget.fareEstimates[ride.id];
+    if (quote != null) return quote.estimatedFare;
+
     return ride.calculateFare(
       distanceKilometers: widget.routeDistanceMeters! / 1000,
     );
@@ -102,6 +108,16 @@ class _OrderPanelState extends State<OrderPanel> {
       _hasRouteEstimate ? '~ ${_fareLabelFor(ride)}' : _fareLabelFor(ride);
 
   RideOption _pricedRide(RideOption ride) {
+    final RideFareQuote? quote = widget.fareEstimates[ride.id];
+    if (quote != null) {
+      return ride.withServerPricing(
+        fare: quote.estimatedFare,
+        minimumFare: quote.minimumFare,
+        baseFare: quote.baseFare,
+        perKilometer: quote.perKilometer,
+        waitingPerMinute: quote.waitingPerMinute,
+      );
+    }
     final int? fare = _fareFor(ride);
     return fare == null ? ride : ride.withEstimatedFare(fare);
   }
@@ -123,6 +139,12 @@ class _OrderPanelState extends State<OrderPanel> {
     RideOption ride,
   ) async {
     if (_isInteractionLocked) return;
+    if (ride.id == 'ev' || ride.id == 'corporate') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${ride.name} is coming soon.')),
+      );
+      return;
+    }
 
     if (_selectedRide?.id != ride.id) {
       setState(() {

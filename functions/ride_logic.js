@@ -1,6 +1,12 @@
 "use strict";
 
-const LIVE_RIDE_OPTIONS = new Set(["boda", "rickshaw", "standard"]);
+const LIVE_RIDE_OPTIONS = new Set([
+  "boda",
+  "rickshaw",
+  "standard",
+  "comfort",
+  "premium",
+]);
 const LIVE_PAYMENT_METHODS = new Set(["cash"]);
 const CURRENCY_CODE = "SSP";
 const FARE_ROUNDING = 500;
@@ -26,7 +32,47 @@ const FARES = Object.freeze({
     perKilometer: 9000,
     waitingPerMinute: 100,
   }),
+  comfort: Object.freeze({
+    minimumFare: 12000,
+    baseFare: 7500,
+    perKilometer: 4600,
+    waitingPerMinute: 500,
+  }),
+  premium: Object.freeze({
+    minimumFare: 18000,
+    baseFare: 11000,
+    perKilometer: 6350,
+    waitingPerMinute: 700,
+  }),
 });
+
+function normalizeFarePolicy(raw, fallback) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const integer = (value, defaultValue, minimum = 0) => {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= minimum && parsed <= 10000000
+      ? parsed
+      : defaultValue;
+  };
+  return Object.freeze({
+    minimumFare: integer(source.minimumFare, fallback.minimumFare),
+    baseFare: integer(source.baseFare, fallback.baseFare),
+    perKilometer: integer(source.perKilometer, fallback.perKilometer, 1),
+    waitingPerMinute: integer(
+      source.waitingPerMinute,
+      fallback.waitingPerMinute,
+      1,
+    ),
+  });
+}
+
+function farePolicyFor(config, rideOptionId) {
+  const normalizedRide = normalizeRideOption(rideOptionId);
+  const configured = config && typeof config === "object"
+    ? config.faresByRideOption?.[normalizedRide]
+    : null;
+  return normalizeFarePolicy(configured, FARES[normalizedRide]);
+}
 
 function normalizeRideOption(value) {
   if (typeof value !== "string") {
@@ -118,9 +164,9 @@ function validateCreateRideInput(raw) {
   });
 }
 
-function calculateFare({ rideOptionId, distanceMeters }) {
+function calculateFare({ rideOptionId, distanceMeters, farePolicy }) {
   const normalizedRide = normalizeRideOption(rideOptionId);
-  const pricing = FARES[normalizedRide];
+  const pricing = normalizeFarePolicy(farePolicy, FARES[normalizedRide]);
 
   if (
     typeof distanceMeters !== "number" ||
@@ -167,11 +213,12 @@ function calculateWaitingCharge({
     WAITING_CHARGE_ROUNDING;
 }
 
-function waitingPolicyFor(rideOptionId) {
+function waitingPolicyFor(rideOptionId, farePolicy) {
   const normalizedRide = normalizeRideOption(rideOptionId);
+  const pricing = normalizeFarePolicy(farePolicy, FARES[normalizedRide]);
   return Object.freeze({
     graceSeconds: WAITING_GRACE_SECONDS,
-    ratePerMinute: FARES[normalizedRide].waitingPerMinute,
+    ratePerMinute: pricing.waitingPerMinute,
   });
 }
 
@@ -223,6 +270,7 @@ module.exports = {
   LIVE_RIDE_OPTIONS,
   calculateFare,
   calculateWaitingCharge,
+  farePolicyFor,
   isCancellableBeforePickup,
   normalizePaymentMethod,
   normalizeRideOption,

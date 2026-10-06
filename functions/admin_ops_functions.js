@@ -7,6 +7,7 @@ const {
   PLATFORM_COMMISSION_BPS,
   normalizeCommissionBps,
 } = require("./accounting_logic");
+const { FARES, farePolicyFor } = require("./ride_logic");
 
 const REGION = "africa-south1";
 const ACTIVE_RIDE_STATUSES = [
@@ -18,6 +19,7 @@ const ACTIVE_RIDE_STATUSES = [
   "in_progress",
 ];
 const db = getFirestore();
+const FINANCE_CATEGORIES = ["standard", "boda", "rickshaw", "comfort", "premium"];
 
 function requireAdmin(request) {
   if (!request.auth?.uid) {
@@ -77,6 +79,8 @@ function ridePayload(document) {
   const summary = data.driverSummary && typeof data.driverSummary === "object"
     ? data.driverSummary
     : {};
+  const pickup = data.pickup && typeof data.pickup === "object" ? data.pickup : {};
+  const destination = data.destination && typeof data.destination === "object" ? data.destination : {};
   return {
     rideId: document.id,
     passengerId: text(data.passengerId),
@@ -84,6 +88,16 @@ function ridePayload(document) {
     driverName:
       `${text(summary.firstName)} ${text(summary.lastName)}`.trim() ||
       text(summary.name),
+    driverPhone: text(summary.phoneNumber),
+    driverPlateNumber: text(summary.plateNumber),
+    passengerName: text(data.customerName),
+    passengerPhone: text(data.customerPhone),
+    pickupAddress: text(pickup.address),
+    destinationAddress: text(destination.address),
+    pickupLatitude: number(pickup.latitude),
+    pickupLongitude: number(pickup.longitude),
+    destinationLatitude: number(destination.latitude),
+    destinationLongitude: number(destination.longitude),
     status: text(data.status),
     rideOptionId: text(data.rideOptionId),
     paymentMethod: text(data.paymentMethod),
@@ -203,7 +217,36 @@ exports.adminListRides = callable(async (request) => {
     .orderBy("updatedAt", "desc")
     .limit(limit)
     .get();
-  return { rides: snapshot.docs.map(ridePayload) };
+  const rides = snapshot.docs.map(ridePayload);
+  const passengerIds = [...new Set(rides.map((ride) => ride.passengerId).filter(Boolean))];
+  const driverIds = [...new Set(rides.map((ride) => ride.driverId).filter(Boolean))];
+  const [passengers, drivers] = await Promise.all([
+    passengerIds.length
+      ? db.getAll(...passengerIds.map((id) => db.collection("users").doc(id)))
+      : [],
+    driverIds.length
+      ? db.getAll(...driverIds.map((id) => db.collection("drivers").doc(id)))
+      : [],
+  ]);
+  const passengerMap = new Map(passengers.map((doc) => [doc.id, doc.exists ? doc.data() : {}]));
+  const driverMap = new Map(drivers.map((doc) => [doc.id, doc.exists ? doc.data() : {}]));
+  return {
+    rides: rides.map((ride) => {
+      const passenger = passengerMap.get(ride.passengerId) ?? {};
+      const driver = driverMap.get(ride.driverId) ?? {};
+      const registration = driver.registration && typeof driver.registration === "object"
+        ? driver.registration
+        : {};
+      return {
+        ...ride,
+        passengerName: ride.passengerName || profileName(passenger),
+        passengerPhone: ride.passengerPhone || text(passenger.phoneNumber),
+        driverName: ride.driverName || profileName(driver),
+        driverPhone: ride.driverPhone || text(driver.phoneNumber),
+        driverPlateNumber: ride.driverPlateNumber || text(registration.plateNumber),
+      };
+    }),
+  };
 }, "The recent ride list could not be loaded.");
 
 exports.adminListReceipts = callable(async (request) => {
@@ -268,6 +311,7 @@ exports.adminListAdminActivity = callable(async (request) => {
     if (action === "wallet_top_up") summary = `+${number(data.amount).toLocaleString("en-US")} SSP · ${text(data.reference) || "No reference"}`;
     if (action === "wallet_status") summary = `${text(data.previousStatus) || "active"} → ${text(data.status)}`;
     if (action === "commission_rate") summary = `${number(data.previousCommissionBps) / 100}% → ${number(data.commissionBps) / 100}%`;
+    if (action === "business_settings") summary = "Category fares, commission and exchange rates updated";
     return {
       activityId: document.id,
       action,
@@ -301,10 +345,10 @@ exports.adminListRecharges = callable(async (request) => {
       ...driverIds.map((driverId) => db.collection("drivers").doc(driverId)),
     )
     : [];
-  const names = new Map(
+  const profileData = new Map(
     profiles.map((profile) => [
       profile.id,
-      profile.exists ? profileName(profile.data()) : "",
+      profile.exists ? profile.data() : {},
     ]),
   );
   return {
@@ -313,7 +357,9 @@ exports.adminListRecharges = callable(async (request) => {
       return {
         rechargeId: document.id,
         driverId: text(data.driverId),
-        driverName: names.get(text(data.driverId)) || "",
+        driverName: text(data.driverName) || profileName(profileData.get(text(data.driverId))),
+        phoneNumber: text(data.phoneNumber) || text(profileData.get(text(data.driverId))?.phoneNumber),
+        plateNumber: text(data.plateNumber) || text(profileData.get(text(data.driverId))?.registration?.plateNumber),
         amount: number(data.amount),
         balanceBefore: number(data.balanceBefore),
         balanceAfter: number(data.balanceAfter),
@@ -328,45 +374,119 @@ exports.adminListRecharges = callable(async (request) => {
 
 exports.adminGetBusinessSettings = callable(async () => {
   const snapshot = await db.collection("platform_config").doc("accounting").get();
-  const commissionBps = snapshot.exists
-    ? normalizeCommissionBps(snapshot.get("commissionBps"))
-    : PLATFORM_COMMISSION_BPS;
+  const config = snapshot.exists ? snapshot.data() : {};
+  const categories = Object.fromEntries(FINANCE_CATEGORIES.map((id) => {
+    const commissionBps = normalizeCommissionBps(
+      config.commissionByRideOption?.[id] ?? config.commissionBps,
+    );
+    return [id, {
+      ...farePolicyFor(config, id),
+      commissionBps,
+      commissionPercent: commissionBps / 100,
+    }];
+  }));
   return {
     currencyCode: "SSP",
-    commissionBps,
-    commissionPercent: commissionBps / 100,
+    categories,
+    exchangeRates: {
+      usdToSsp: number(config.exchangeRates?.usdToSsp),
+      etbToSsp: number(config.exchangeRates?.etbToSsp),
+    },
     updatedAtMillis: snapshot.exists ? millis(snapshot.get("updatedAt")) : null,
   };
 }, "The business settings could not be loaded.");
 
-exports.adminSetCommissionRate = callable(async (request) => {
-  const percent = Number(request.data?.commissionPercent);
-  if (!Number.isFinite(percent)) {
-    throw new TypeError("commissionPercent must be a number");
+exports.adminSetBusinessSettings = callable(async (request) => {
+  const rawCategories = request.data?.categories;
+  if (!rawCategories || typeof rawCategories !== "object" || Array.isArray(rawCategories)) {
+    throw new TypeError("categories must be an object");
   }
-  const commissionBps = normalizeCommissionBps(Math.round(percent * 100));
+  const faresByRideOption = {};
+  const commissionByRideOption = {};
+  for (const id of FINANCE_CATEGORIES) {
+    const raw = rawCategories[id];
+    if (!raw || typeof raw !== "object") throw new TypeError(`${id} settings are required`);
+    const positiveInteger = (field, allowZero = false) => {
+      const value = Number(raw[field]);
+      if (!Number.isInteger(value) || value < (allowZero ? 0 : 1) || value > 10000000) {
+        throw new RangeError(`${id}.${field} is invalid`);
+      }
+      return value;
+    };
+    const commissionBps = normalizeCommissionBps(
+      Math.round(Number(raw.commissionPercent) * 100),
+    );
+    faresByRideOption[id] = {
+      minimumFare: positiveInteger("minimumFare", true),
+      baseFare: positiveInteger("baseFare", true),
+      perKilometer: positiveInteger("perKilometer"),
+      waitingPerMinute: positiveInteger("waitingPerMinute"),
+    };
+    commissionByRideOption[id] = commissionBps;
+  }
+  const exchange = request.data?.exchangeRates ?? {};
+  const exchangeRates = {};
+  for (const key of ["usdToSsp", "etbToSsp"]) {
+    const value = Number(exchange[key] ?? 0);
+    if (!Number.isFinite(value) || value < 0 || value > 100000000) {
+      throw new RangeError(`${key} is invalid`);
+    }
+    exchangeRates[key] = value;
+  }
   const settingsRef = db.collection("platform_config").doc("accounting");
   const auditRef = db.collection("admin_audit_log").doc();
   await db.runTransaction(async (transaction) => {
-    const previous = await transaction.get(settingsRef);
-    const previousCommissionBps = previous.exists
-      ? normalizeCommissionBps(previous.get("commissionBps"))
-      : PLATFORM_COMMISSION_BPS;
     const now = Timestamp.now();
     transaction.set(settingsRef, {
-      commissionBps,
+      faresByRideOption,
+      commissionByRideOption,
+      exchangeRates,
       updatedAt: now,
       updatedBy: request.auth.uid,
       updatedByEmail: text(request.auth.token?.email),
     }, { merge: true });
     transaction.set(auditRef, {
-      action: "commission_rate",
-      previousCommissionBps,
-      commissionBps,
+      action: "business_settings",
+      categories: FINANCE_CATEGORIES,
       administratorId: request.auth.uid,
       administratorEmail: text(request.auth.token?.email),
       createdAt: now,
     });
   });
-  return { commissionBps, commissionPercent: commissionBps / 100 };
-}, "The commission rate could not be updated.");
+  return { categories: rawCategories, exchangeRates };
+}, "The finance settings could not be updated.");
+
+exports.adminGetCommissionReport = callable(async () => {
+  const snapshot = await db
+    .collection("ride_receipts")
+    .orderBy("completedAt", "desc")
+    .limit(5000)
+    .get();
+  const nowJuba = Date.now() + 2 * 60 * 60 * 1000;
+  const todayKey = new Date(nowJuba).toISOString().slice(0, 10);
+  const byDay = new Map();
+  const byCategory = Object.fromEntries(FINANCE_CATEGORIES.map((id) => [id, 0]));
+  let allTime = 0;
+  let today = 0;
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const fee = number(data.platformFee);
+    const completed = millis(data.completedAt);
+    if (!completed) continue;
+    const day = new Date(completed + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    allTime += fee;
+    if (day === todayKey) today += fee;
+    byDay.set(day, (byDay.get(day) ?? 0) + fee);
+    const category = text(data.rideOptionId);
+    if (Object.hasOwn(byCategory, category)) byCategory[category] += fee;
+  }
+  return {
+    currencyCode: "SSP",
+    today,
+    allTime,
+    completedRideCount: snapshot.size,
+    byCategory,
+    daily: [...byDay.entries()].slice(0, 30).map(([date, amount]) => ({ date, amount })),
+    generatedAtMillis: Date.now(),
+  };
+}, "The commission report could not be loaded.");
