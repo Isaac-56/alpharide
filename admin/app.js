@@ -365,20 +365,33 @@ function updateRechargePagePreview() {
 }
 
 function pdfEscape(value) { return String(value ?? "").replace(/[^\x20-\x7E]/g, " ").replace(/[()\\]/g, "\\$&"); }
-function downloadRechargePdf(receipt) {
-  if (!receipt) return;
-  const lines = ["ALPHA RIDE - WALLET RECHARGE RECEIPT", `Receipt: ${receipt.receiptNumber}`, `Date: ${dateTime(receipt.createdAtMillis)}`, `Driver: ${receipt.driverName || receipt.driverId}`, `Phone: ${receipt.phoneNumber || "-"}`, `Plate: ${receipt.plateNumber || "-"}`, `Amount: ${money(receipt.amount)} SSP`, `Balance before: ${money(receipt.balanceBefore)} SSP`, `Balance after: ${money(receipt.balanceAfter)} SSP`, `Administrator: ${receipt.administratorEmail || "Authorized admin"}`, `Note: ${receipt.note || "-"}`];
-  const commands = ["BT", "/F1 15 Tf", "50 790 Td", `(${pdfEscape(lines[0])}) Tj`, "/F1 11 Tf"];
-  lines.slice(1).forEach((line) => commands.push("0 -28 Td", `(${pdfEscape(line)}) Tj`)); commands.push("ET");
+function safeDocumentToken(value, fallback) { const token = String(value || fallback).replace(/[^a-z0-9_-]/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, ""); return token || fallback; }
+function downloadPdfDocument(lines, filename) {
+  const safeLines = lines.map((line) => String(line ?? ""));
+  const commands = ["BT", "/F1 15 Tf", "50 790 Td", `(${pdfEscape(safeLines[0])}) Tj`, "/F1 11 Tf"];
+  safeLines.slice(1).forEach((line) => commands.push("0 -28 Td", `(${pdfEscape(line)}) Tj`)); commands.push("ET");
   const stream = commands.join("\n");
   const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>", `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
   let pdf = "%PDF-1.4\n"; const offsets = [0]; objects.forEach((object, index) => { offsets.push(pdf.length); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; }); const xref = pdf.length; pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`; offsets.slice(1).forEach((offset) => { pdf += `${String(offset).padStart(10, "0")} 00000 n \n`; }); pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" })); link.download = `${receipt.receiptNumber || "alpha-recharge"}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" })); link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+function downloadRechargePdf(receipt) {
+  if (!receipt) return;
+  const receiptNumber = receipt.receiptNumber || receipt.reference || `ALP-${safeDocumentToken(receipt.plateNumber, "DRIVER")}-${safeDocumentToken(receipt.rechargeId || receipt.transactionId, "RECHARGE")}`;
+  const lines = ["ALPHA RIDE - WALLET RECHARGE RECEIPT", `Receipt: ${receiptNumber}`, `Date: ${dateTime(receipt.createdAtMillis)}`, `Driver: ${receipt.driverName || receipt.driverId || "-"}`, `Phone: ${receipt.phoneNumber || "-"}`, `Plate: ${receipt.plateNumber || "-"}`, `Amount: ${money(receipt.amount)} SSP`, `Balance before: ${money(receipt.balanceBefore)} SSP`, `Balance after: ${money(receipt.balanceAfter)} SSP`, `Administrator: ${receipt.administratorEmail || "Authorized admin"}`, `Note: ${receipt.note || "-"}`];
+  downloadPdfDocument(lines, `AlphaRide-Recharge-${safeDocumentToken(receiptNumber, "Receipt")}.pdf`);
+}
+function downloadRideReceiptPdf(receipt) {
+  if (!receipt) return;
+  const receiptNumber = receipt.receiptNumber || `RIDE-${safeDocumentToken(receipt.rideId || receipt.receiptId, "RECEIPT")}`;
+  const lines = ["ALPHA RIDE - TRIP RECEIPT", `Receipt: ${receiptNumber}`, `Completed: ${dateTime(receipt.completedAtMillis)}`, `Ride: ${receipt.rideId || "-"}`, `Service: ${vehicleClassLabel(receipt.rideOptionId)}`, `Route: ${receipt.pickupAddress || "Pickup"} to ${receipt.destinationAddress || "Destination"}`, `Fare: ${money(receipt.finalFare)} ${receipt.currencyCode || "SSP"}`, `Waiting: ${money(receipt.waitingCharge)} SSP`, `Alpha fee: ${money(receipt.platformFee)} SSP`, `Driver net: ${money(receipt.driverNetFare)} SSP`, `Payment: ${receipt.paymentMethod || "cash"}`];
+  downloadPdfDocument(lines, `AlphaRide-Trip-${safeDocumentToken(receiptNumber, receipt.rideId || "Receipt")}.pdf`);
 }
 
 function showRechargeReceipt(receipt) {
-  latestRechargeReceipt = receipt; el.receiptContent.replaceChildren();
-  [["Receipt", receipt.receiptNumber], ["Driver", receipt.driverName], ["Phone", receipt.phoneNumber], ["Plate", receipt.plateNumber], ["Amount", `${money(receipt.amount)} SSP`], ["New balance", `${money(receipt.balanceAfter)} SSP`]].forEach(([label, value]) => { const row = document.createElement("p"); row.innerHTML = `<strong></strong><span></span>`; row.querySelector("strong").textContent = label; row.querySelector("span").textContent = value || "—"; el.receiptContent.append(row); });
+  const receiptNumber = receipt.receiptNumber || receipt.reference || `ALP-${safeDocumentToken(receipt.plateNumber, "DRIVER")}-${safeDocumentToken(receipt.rechargeId || receipt.transactionId, "RECHARGE")}`;
+  latestRechargeReceipt = { ...receipt, receiptNumber }; el.receiptContent.replaceChildren();
+  [["Receipt", receiptNumber], ["Driver", receipt.driverName], ["Phone", receipt.phoneNumber], ["Plate", receipt.plateNumber], ["Amount", `${money(receipt.amount)} SSP`], ["New balance", `${money(receipt.balanceAfter)} SSP`]].forEach(([label, value]) => { const row = document.createElement("p"); row.innerHTML = `<strong></strong><span></span>`; row.querySelector("strong").textContent = label; row.querySelector("span").textContent = value || "—"; el.receiptContent.append(row); });
   el.receiptDialog.hidden = false;
 }
 
@@ -396,8 +409,8 @@ function renderReceipts() {
   const query = el.receiptSearch.value.trim().toLowerCase();
   const filtered = receipts.filter((receipt) => !query || [receipt.receiptNumber, receipt.rideId, receipt.driverId, receipt.passengerId, receipt.pickupAddress, receipt.destinationAddress].join(" ").toLowerCase().includes(query));
   el.receiptCount.textContent = `${filtered.length} of ${receipts.length} receipts`; el.receiptsBody.replaceChildren();
-  filtered.forEach((item) => el.receiptsBody.append(cellRow([dateTime(item.completedAtMillis), item.receiptNumber || "Pending", vehicleClassLabel(item.rideOptionId), `${item.pickupAddress || "Pickup"} → ${item.destinationAddress || "Destination"}`, `${money(item.finalFare)} ${item.currencyCode || "SSP"}`, `${money(item.platformFee)} SSP`, `${money(item.driverNetFare)} SSP`], { 1: "receipt-number", 5: "credit" })));
-  if (!filtered.length) { const row = cellRow(["No receipts match this search."]); row.firstElementChild.colSpan = 7; el.receiptsBody.append(row); }
+  filtered.forEach((item) => { const row = cellRow([dateTime(item.completedAtMillis), item.receiptNumber || "Pending", vehicleClassLabel(item.rideOptionId), `${item.pickupAddress || "Pickup"} → ${item.destinationAddress || "Destination"}`, `${money(item.finalFare)} ${item.currencyCode || "SSP"}`, `${money(item.platformFee)} SSP`, `${money(item.driverNetFare)} SSP`, ""], { 1: "receipt-number", 5: "credit" }); const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "Download PDF"; button.addEventListener("click", () => downloadRideReceiptPdf(item)); row.lastElementChild.append(button); el.receiptsBody.append(row); });
+  if (!filtered.length) { const row = cellRow(["No receipts match this search."]); row.firstElementChild.colSpan = 8; el.receiptsBody.append(row); }
 }
 
 async function loadReceipts() {

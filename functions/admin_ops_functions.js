@@ -368,6 +368,7 @@ exports.adminListRecharges = callable(async (request) => {
         balanceBefore: number(data.balanceBefore),
         balanceAfter: number(data.balanceAfter),
         reference: text(data.reference),
+        receiptNumber: text(data.receiptNumber) || text(data.reference),
         note: text(data.note),
         administratorEmail: text(data.administratorEmail),
         createdAtMillis: millis(data.createdAt),
@@ -471,21 +472,6 @@ exports.adminGetCommissionReport = callable(async () => {
   const startOfJubaDay = Timestamp.fromMillis(
     Date.parse(`${todayKey}T00:00:00.000Z`) - 2 * 60 * 60 * 1000,
   );
-  const [allTimeAggregate, todayAggregate, ...categoryAggregates] =
-    await Promise.all([
-      receipts.aggregate({
-        amount: AggregateField.sum("platformFee"),
-        count: AggregateField.count(),
-      }).get(),
-      receipts.where("completedAt", ">=", startOfJubaDay).aggregate({
-        amount: AggregateField.sum("platformFee"),
-      }).get(),
-      ...FINANCE_CATEGORIES.map((id) =>
-        receipts.where("rideOptionId", "==", id).aggregate({
-          amount: AggregateField.sum("platformFee"),
-        }).get(),
-      ),
-    ]);
   const byDay = new Map();
   for (const doc of recentSnapshot.docs) {
     const data = doc.data();
@@ -495,17 +481,60 @@ exports.adminGetCommissionReport = callable(async () => {
     const day = new Date(completed + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
     byDay.set(day, (byDay.get(day) ?? 0) + fee);
   }
-  const byCategory = Object.fromEntries(
-    FINANCE_CATEGORIES.map((id, index) => [
-      id,
-      number(categoryAggregates[index].data().amount),
-    ]),
+  let today = 0;
+  let allTime = 0;
+  let completedRideCount = 0;
+  let byCategory = Object.fromEntries(
+    FINANCE_CATEGORIES.map((id) => [id, 0]),
   );
+  try {
+    const [allTimeAggregate, todayAggregate, ...categoryAggregates] =
+      await Promise.all([
+        receipts.aggregate({
+          amount: AggregateField.sum("platformFee"),
+          count: AggregateField.count(),
+        }).get(),
+        receipts.where("completedAt", ">=", startOfJubaDay).aggregate({
+          amount: AggregateField.sum("platformFee"),
+        }).get(),
+        ...FINANCE_CATEGORIES.map((id) =>
+          receipts.where("rideOptionId", "==", id).aggregate({
+            amount: AggregateField.sum("platformFee"),
+          }).get(),
+        ),
+      ]);
+    today = number(todayAggregate.data().amount);
+    allTime = number(allTimeAggregate.data().amount);
+    completedRideCount = number(allTimeAggregate.data().count);
+    byCategory = Object.fromEntries(
+      FINANCE_CATEGORIES.map((id, index) => [
+        id,
+        number(categoryAggregates[index].data().amount),
+      ]),
+    );
+  } catch (error) {
+    logger.warn("Commission aggregates failed; using receipt scan fallback.", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    const fallbackSnapshot = await receipts
+      .select("platformFee", "rideOptionId", "completedAt")
+      .get();
+    completedRideCount = fallbackSnapshot.size;
+    for (const document of fallbackSnapshot.docs) {
+      const data = document.data();
+      const fee = number(data.platformFee);
+      const category = text(data.rideOptionId).toLowerCase();
+      const completedAt = millis(data.completedAt);
+      allTime += fee;
+      if (completedAt >= startOfJubaDay.toMillis()) today += fee;
+      if (Object.hasOwn(byCategory, category)) byCategory[category] += fee;
+    }
+  }
   return {
     currencyCode: "SSP",
-    today: number(todayAggregate.data().amount),
-    allTime: number(allTimeAggregate.data().amount),
-    completedRideCount: number(allTimeAggregate.data().count),
+    today,
+    allTime,
+    completedRideCount,
     byCategory,
     daily: [...byDay.entries()].slice(0, 30).map(([date, amount]) => ({ date, amount })),
     generatedAtMillis: Date.now(),
