@@ -26,7 +26,8 @@ const api = {
   recharges: call("adminListRecharges"),
   activity: call("adminListAdminActivity"),
   businessSettings: call("adminGetBusinessSettings"),
-  setCommission: call("adminSetCommissionRate"),
+  setBusinessSettings: call("adminSetBusinessSettings"),
+  commissionReport: call("adminGetCommissionReport"),
   creditWallet: call("adminCreditDriverWallet"),
   walletStatus: call("adminSetDriverWalletStatus"),
   reviewStatus: call("adminSetDriverReviewStatus"),
@@ -50,10 +51,12 @@ const el = {
   licenceFrontLink: $("#licence-front-link"), licenceFrontImage: $("#licence-front-image"), licenceFrontStatus: $("#licence-front-status"), licenceFrontPlaceholder: $("#licence-front-placeholder"),
   licenceBackLink: $("#licence-back-link"), licenceBackImage: $("#licence-back-image"), licenceBackStatus: $("#licence-back-status"), licenceBackPlaceholder: $("#licence-back-placeholder"),
   identityPhotoLink: $("#identity-photo-link"), identityPhotoImage: $("#identity-photo-image"), identityPhotoStatus: $("#identity-photo-status"), identityPhotoPlaceholder: $("#identity-photo-placeholder"), identityPhotoMeta: $("#identity-photo-meta"),
-  refreshRecharges: $("#refresh-recharges"), rechargeForm: $("#recharge-form"), rechargeDriver: $("#recharge-driver"), rechargeAmount: $("#recharge-amount"), rechargeReference: $("#recharge-reference"), rechargeNote: $("#recharge-note"), rechargePagePreview: $("#recharge-page-preview"), rechargesBody: $("#recharges-body"),
+  refreshRecharges: $("#refresh-recharges"), rechargeForm: $("#recharge-form"), rechargeSearch: $("#recharge-search"), rechargeResults: $("#recharge-results"), rechargeSelection: $("#recharge-selection"), rechargeDriver: $("#recharge-driver"), rechargeAmount: $("#recharge-amount"), rechargeReference: $("#recharge-reference"), rechargeNote: $("#recharge-note"), rechargePagePreview: $("#recharge-page-preview"), rechargesBody: $("#recharges-body"),
   refreshRides: $("#refresh-rides"), rideSearch: $("#ride-search"), rideFilter: $("#ride-filter"), rideCount: $("#ride-count"), ridesBody: $("#rides-body"),
   refreshReceipts: $("#refresh-receipts"), receiptSearch: $("#receipt-search"), receiptCount: $("#receipt-count"), receiptsBody: $("#receipts-body"),
-  refreshCommission: $("#refresh-commission"), commissionForm: $("#commission-form"), commissionPercent: $("#commission-percent"), commissionPreview: $("#commission-preview"),
+  refreshCommission: $("#refresh-commission"), commissionForm: $("#commission-form"), financeCategories: $("#finance-categories"), exchangeUsd: $("#exchange-usd"), exchangeEtb: $("#exchange-etb"), commissionPreview: $("#commission-preview"),
+  refreshCommissionCollected: $("#refresh-commission-collected"), commissionStats: $("#commission-stats"), commissionByCategory: $("#commission-by-category"),
+  receiptDialog: $("#receipt-dialog"), receiptContent: $("#receipt-content"), receiptClose: $("#receipt-close"), receiptDownload: $("#receipt-download"),
   refreshActivity: $("#refresh-activity"), activityBody: $("#activity-body"), toast: $("#toast"), dialog: $("#confirm-dialog"),
   confirmTitle: $("#confirm-title"), confirmMessage: $("#confirm-message"), confirmCancel: $("#confirm-cancel"), confirmAccept: $("#confirm-accept"),
 };
@@ -67,6 +70,8 @@ const driverReviews = new Map();
 let documentRenderId = 0;
 let toastTimer = null;
 let confirmResolver = null;
+let latestRechargeReceipt = null;
+const financeCategoryIds = ["standard", "boda", "rickshaw", "comfort", "premium"];
 
 const money = (value) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number.isFinite(Number(value)) ? Number(value) : 0);
 const compact = (value) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value) || 0);
@@ -103,7 +108,8 @@ function navigate(view) {
   if (view === "rides" && rides.length === 0) loadRides();
   if (view === "receipts" && receipts.length === 0) loadReceipts();
   if (view === "recharges") loadRecharges();
-  if (view === "commission") loadCommission();
+  if (view === "finance") loadCommission();
+  if (view === "commission-collected") loadCommissionCollected();
   if (view === "activity") loadActivity();
 }
 
@@ -327,15 +333,26 @@ async function loadLedger(driverId) {
 }
 
 function renderRechargeDrivers() {
-  const selected = el.rechargeDriver.value;
-  const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = "Select a driver";
-  el.rechargeDriver.replaceChildren(placeholder);
-  drivers.forEach((driver) => {
-    const option = document.createElement("option"); option.value = driver.driverId;
-    option.textContent = `${`${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "Unnamed driver"} · ${driver.phoneNumber || driver.driverId.slice(0, 10)} · ${money(driver.wallet?.balance)} SSP`;
-    el.rechargeDriver.append(option);
+  const query = el.rechargeSearch.value.trim().toLowerCase();
+  el.rechargeResults.replaceChildren();
+  if (!query) return updateRechargePagePreview();
+  drivers.filter((driver) => searchableDriver(driver).includes(query)).slice(0, 8).forEach((driver) => {
+    const button = document.createElement("button"); button.type = "button"; button.className = "recharge-result";
+    const name = `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "Unnamed driver";
+    button.innerHTML = `<strong></strong><span></span>`;
+    button.querySelector("strong").textContent = name;
+    button.querySelector("span").textContent = `${driver.phoneNumber || "No phone"} · ${driver.plateNumber || "No plate"}`;
+    button.addEventListener("click", () => {
+      el.rechargeDriver.value = driver.driverId;
+      el.rechargeSearch.value = name;
+      el.rechargeResults.replaceChildren();
+      el.rechargeSelection.hidden = false;
+      el.rechargeSelection.textContent = `${name} · ${driver.phoneNumber || "No phone"} · ${driver.plateNumber || "No plate"}`;
+      el.rechargeReference.value = `ALP-${(driver.plateNumber || "DRIVER").replace(/[^a-z0-9]/gi, "").toUpperCase()}-AUTO`;
+      updateRechargePagePreview();
+    });
+    el.rechargeResults.append(button);
   });
-  if (drivers.some((driver) => driver.driverId === selected)) el.rechargeDriver.value = selected;
   updateRechargePagePreview();
 }
 
@@ -343,15 +360,33 @@ function updateRechargePagePreview() {
   const driver = drivers.find((item) => item.driverId === el.rechargeDriver.value);
   const amount = Number(el.rechargeAmount.value);
   el.rechargePagePreview.textContent = driver && Number.isFinite(amount) && amount > 0
-    ? `Current ${money(driver.wallet?.balance)} SSP → new balance ${money((driver.wallet?.balance || 0) + amount)} SSP`
-    : "Choose a driver and amount to preview the new balance.";
+    ? `${driver.plateNumber || "No plate"} · recharge ${money(amount)} SSP · new wallet ${money((driver.wallet?.balance || 0) + amount)} SSP`
+    : "Choose a driver and amount to preview the recharge.";
+}
+
+function pdfEscape(value) { return String(value ?? "").replace(/[^\x20-\x7E]/g, " ").replace(/[()\\]/g, "\\$&"); }
+function downloadRechargePdf(receipt) {
+  if (!receipt) return;
+  const lines = ["ALPHA RIDE - WALLET RECHARGE RECEIPT", `Receipt: ${receipt.receiptNumber}`, `Date: ${dateTime(receipt.createdAtMillis)}`, `Driver: ${receipt.driverName || receipt.driverId}`, `Phone: ${receipt.phoneNumber || "-"}`, `Plate: ${receipt.plateNumber || "-"}`, `Amount: ${money(receipt.amount)} SSP`, `Balance before: ${money(receipt.balanceBefore)} SSP`, `Balance after: ${money(receipt.balanceAfter)} SSP`, `Administrator: ${receipt.administratorEmail || "Authorized admin"}`, `Note: ${receipt.note || "-"}`];
+  const commands = ["BT", "/F1 15 Tf", "50 790 Td", `(${pdfEscape(lines[0])}) Tj`, "/F1 11 Tf"];
+  lines.slice(1).forEach((line) => commands.push("0 -28 Td", `(${pdfEscape(line)}) Tj`)); commands.push("ET");
+  const stream = commands.join("\n");
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>", `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  let pdf = "%PDF-1.4\n"; const offsets = [0]; objects.forEach((object, index) => { offsets.push(pdf.length); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; }); const xref = pdf.length; pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`; offsets.slice(1).forEach((offset) => { pdf += `${String(offset).padStart(10, "0")} 00000 n \n`; }); pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" })); link.download = `${receipt.receiptNumber || "alpha-recharge"}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function showRechargeReceipt(receipt) {
+  latestRechargeReceipt = receipt; el.receiptContent.replaceChildren();
+  [["Receipt", receipt.receiptNumber], ["Driver", receipt.driverName], ["Phone", receipt.phoneNumber], ["Plate", receipt.plateNumber], ["Amount", `${money(receipt.amount)} SSP`], ["New balance", `${money(receipt.balanceAfter)} SSP`]].forEach(([label, value]) => { const row = document.createElement("p"); row.innerHTML = `<strong></strong><span></span>`; row.querySelector("strong").textContent = label; row.querySelector("span").textContent = value || "—"; el.receiptContent.append(row); });
+  el.receiptDialog.hidden = false;
 }
 
 async function loadRecharges() {
   setBusy(el.refreshRecharges, true, "Refreshing…"); el.rechargesBody.replaceChildren();
   try {
     const result = await api.recharges({ limit: 150 }); recharges = Array.isArray(result.data?.recharges) ? result.data.recharges : [];
-    recharges.forEach((item) => el.rechargesBody.append(cellRow([dateTime(item.createdAtMillis), item.driverName || item.driverId?.slice(0, 12) || "—", `+${money(item.amount)} SSP`, `${money(item.balanceAfter)} SSP`, item.reference || "—", item.administratorEmail || "Authorized admin"], { 2: "credit" })));
+    recharges.forEach((item) => { const row = cellRow([dateTime(item.createdAtMillis), `${item.driverName || item.driverId?.slice(0, 12) || "—"}\n${item.phoneNumber || ""}`, `+${money(item.amount)} SSP`, item.plateNumber || "—", item.reference || "—", ""] , { 2: "credit" }); const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "Download PDF"; button.addEventListener("click", () => downloadRechargePdf(item)); row.lastElementChild.append(button); el.rechargesBody.append(row); });
     if (!recharges.length) { const row = cellRow(["No recharges recorded yet."]); row.firstElementChild.colSpan = 6; el.rechargesBody.append(row); }
   } catch (error) { const row = cellRow([readableError(error)]); row.firstElementChild.colSpan = 6; el.rechargesBody.append(row); }
   finally { setBusy(el.refreshRecharges, false); }
@@ -373,16 +408,29 @@ async function loadReceipts() {
 }
 
 function updateCommissionPreview() {
-  const percent = Number(el.commissionPercent.value);
-  const fee = Number.isFinite(percent) ? Math.round(100000 * percent / 100) : 0;
-  el.commissionPreview.textContent = `Example: Alpha receives ${money(fee)} SSP and the driver keeps ${money(100000 - fee)} SSP from a 100,000 SSP completed ride.`;
+  el.commissionPreview.textContent = "Saved settings apply to new quotes and rides. Existing rides keep the fare and commission captured when they were requested.";
+}
+
+function financeCategoryCard(id, values = {}) {
+  const card = document.createElement("section"); card.className = "finance-category"; card.dataset.category = id;
+  card.innerHTML = `<div class="card-title"><div><h2></h2><p class="muted">Independent fare and Alpha commission</p></div><span class="secure-chip">New rides</span></div><div class="finance-inputs"><label>Flag-down / base (SSP)<input data-field="baseFare" type="number" min="0" step="1" required /></label><label>Minimum fare (SSP)<input data-field="minimumFare" type="number" min="0" step="1" required /></label><label>Per kilometre (SSP)<input data-field="perKilometer" type="number" min="1" step="1" required /></label><label>Customer waiting / minute (SSP)<input data-field="waitingPerMinute" type="number" min="1" step="1" required /></label><label>Commission (%)<input data-field="commissionPercent" type="number" min="0" max="50" step="0.01" required /></label></div>`;
+  card.querySelector("h2").textContent = vehicleClassLabel(id);
+  card.querySelectorAll("input").forEach((input) => { input.value = values[input.dataset.field] ?? 0; });
+  return card;
 }
 
 async function loadCommission() {
   setBusy(el.refreshCommission, true, "Refreshing…");
-  try { const result = await api.businessSettings(); el.commissionPercent.value = result.data?.commissionPercent ?? 10; updateCommissionPreview(); }
+  try { const result = await api.businessSettings(); const settings = result.data || {}; el.financeCategories.replaceChildren(...financeCategoryIds.map((id) => financeCategoryCard(id, settings.categories?.[id]))); el.exchangeUsd.value = settings.exchangeRates?.usdToSsp ?? 0; el.exchangeEtb.value = settings.exchangeRates?.etbToSsp ?? 0; updateCommissionPreview(); }
   catch (error) { showToast(readableError(error), "error"); }
   finally { setBusy(el.refreshCommission, false); }
+}
+
+async function loadCommissionCollected() {
+  setBusy(el.refreshCommissionCollected, true, "Refreshing…");
+  try { const { data } = await api.commissionReport(); el.commissionStats.replaceChildren(metricCard("Today", `${money(data.today)} SSP`, "Juba business day", "green"), metricCard("Recorded total", `${money(data.allTime)} SSP`, `${money(data.completedRideCount)} completed rides`, "blue")); el.commissionByCategory.replaceChildren(); financeCategoryIds.forEach((id) => { const row = document.createElement("div"); row.className = "breakdown-row"; const label = document.createElement("span"); label.textContent = vehicleClassLabel(id); const value = document.createElement("strong"); value.textContent = `${money(data.byCategory?.[id])} SSP`; row.append(label, value); el.commissionByCategory.append(row); }); }
+  catch (error) { showToast(readableError(error), "error"); }
+  finally { setBusy(el.refreshCommissionCollected, false); }
 }
 
 function rideStatusLabel(status) { return ({ driver_arriving: "Driver arriving", in_progress: "In progress" })[status] || (status ? status[0].toUpperCase() + status.slice(1) : "Unknown"); }
@@ -390,10 +438,10 @@ function renderRides() {
   const query = el.rideSearch.value.trim().toLowerCase(); const filter = el.rideFilter.value;
   const filtered = rides.filter((ride) => {
     const statusMatch = filter === "all" || (filter === "active" && activeStatuses.has(ride.status)) || ride.status === filter;
-    return statusMatch && (!query || [ride.rideId, ride.driverId, ride.passengerId, ride.status, ride.rideOptionId].join(" ").toLowerCase().includes(query));
+    return statusMatch && (!query || [ride.rideId, ride.driverId, ride.passengerId, ride.status, ride.rideOptionId, ride.driverName, ride.driverPhone, ride.passengerName, ride.passengerPhone, ride.pickupAddress, ride.destinationAddress].join(" ").toLowerCase().includes(query));
   });
   el.rideCount.textContent = `${filtered.length} of ${rides.length} recent rides`; el.ridesBody.replaceChildren();
-  filtered.forEach((ride) => el.ridesBody.append(cellRow([dateTime(ride.updatedAtMillis), ride.rideId.slice(0, 10), rideStatusLabel(ride.status), vehicleClassLabel(ride.rideOptionId), ride.driverName || (ride.driverId ? ride.driverId.slice(0, 10) : "Unassigned"), `${money(ride.finalFare || ride.estimatedFare)} SSP`, `${money(ride.platformFee)} SSP`], { 2: `status-cell status-${ride.status}` })));
+  filtered.forEach((ride) => { const row = cellRow([dateTime(ride.updatedAtMillis), ride.rideId.slice(0, 10), rideStatusLabel(ride.status), vehicleClassLabel(ride.rideOptionId), ride.driverName || (ride.driverId ? ride.driverId.slice(0, 10) : "Unassigned"), `${money(ride.finalFare || ride.estimatedFare)} SSP`, ""], { 2: `status-cell status-${ride.status}` }); const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "View"; const detail = document.createElement("tr"); detail.className = "ride-detail-row"; detail.hidden = true; const cell = document.createElement("td"); cell.colSpan = 7; cell.innerHTML = `<div class="ride-detail-grid"><article><strong>Route</strong><span></span></article><article><strong>Passenger</strong><span></span></article><article><strong>Driver</strong><span></span></article><article><strong>Ride finance</strong><span></span></article></div>`; const spans = cell.querySelectorAll("span"); spans[0].textContent = `${ride.pickupAddress || "Pickup unavailable"} → ${ride.destinationAddress || "Destination unavailable"}`; spans[1].textContent = `${ride.passengerName || "Unknown passenger"} · ${ride.passengerPhone || ride.passengerId || "No phone"}`; spans[2].textContent = `${ride.driverName || "Unassigned"} · ${ride.driverPhone || "No phone"} · ${ride.driverPlateNumber || "No plate"}`; spans[3].textContent = `Fare ${money(ride.finalFare || ride.estimatedFare)} SSP · Alpha fee ${money(ride.platformFee)} SSP · ${ride.paymentMethod || "cash"}`; detail.append(cell); button.addEventListener("click", () => { detail.hidden = !detail.hidden; button.textContent = detail.hidden ? "View" : "Hide"; }); row.lastElementChild.append(button); el.ridesBody.append(row, detail); });
   if (!filtered.length) { const row = cellRow(["No rides match these filters."]); row.firstElementChild.colSpan = 7; el.ridesBody.append(row); }
 }
 
@@ -404,7 +452,7 @@ async function loadRides() {
   finally { setBusy(el.refreshRides, false); }
 }
 
-function activityLabel(action) { return ({ driver_review_status: "Driver review", driver_vehicle_class: "Vehicle classes", wallet_top_up: "Wallet recharge", wallet_status: "Wallet access", commission_rate: "Commission rate" })[action] || action.replaceAll("_", " "); }
+function activityLabel(action) { return ({ driver_review_status: "Driver review", driver_vehicle_class: "Vehicle classes", wallet_top_up: "Wallet recharge", wallet_status: "Wallet access", commission_rate: "Commission rate", business_settings: "Finance controls" })[action] || action.replaceAll("_", " "); }
 async function loadActivity() {
   setBusy(el.refreshActivity, true, "Refreshing…"); el.activityBody.replaceChildren();
   try {
@@ -423,21 +471,22 @@ el.confirmCancel.addEventListener("click", () => closeDialog(false)); el.confirm
 document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !el.dialog.hidden) closeDialog(false); });
 el.refreshOverview.addEventListener("click", loadOverview); el.refreshDrivers.addEventListener("click", () => loadDrivers()); el.driverSearch.addEventListener("input", renderDriverList); el.driverFilter.addEventListener("change", renderDriverList);
 el.refreshRides.addEventListener("click", loadRides); el.rideSearch.addEventListener("input", renderRides); el.rideFilter.addEventListener("change", renderRides); el.refreshActivity.addEventListener("click", loadActivity);
-el.refreshRecharges.addEventListener("click", loadRecharges); el.refreshReceipts.addEventListener("click", loadReceipts); el.receiptSearch.addEventListener("input", renderReceipts); el.refreshCommission.addEventListener("click", loadCommission);
+el.refreshRecharges.addEventListener("click", loadRecharges); el.refreshReceipts.addEventListener("click", loadReceipts); el.receiptSearch.addEventListener("input", renderReceipts); el.refreshCommission.addEventListener("click", loadCommission); el.refreshCommissionCollected.addEventListener("click", loadCommissionCollected);
 el.reviewStatus.addEventListener("change", updateReviewButtonState);
-$$('[data-recharge-amount]').forEach((button) => button.addEventListener("click", () => { el.rechargeAmount.value = button.dataset.rechargeAmount; updateRechargePagePreview(); })); el.rechargeAmount.addEventListener("input", updateRechargePagePreview); el.rechargeDriver.addEventListener("change", updateRechargePagePreview); el.commissionPercent.addEventListener("input", updateCommissionPreview);
+$$('[data-recharge-amount]').forEach((button) => button.addEventListener("click", () => { el.rechargeAmount.value = button.dataset.rechargeAmount; updateRechargePagePreview(); })); el.rechargeAmount.addEventListener("input", updateRechargePagePreview); el.rechargeSearch.addEventListener("input", () => { el.rechargeDriver.value = ""; el.rechargeSelection.hidden = true; el.rechargeReference.value = ""; renderRechargeDrivers(); });
+el.receiptClose.addEventListener("click", () => { el.receiptDialog.hidden = true; }); el.receiptDownload.addEventListener("click", () => downloadRechargePdf(latestRechargeReceipt));
 
 el.rechargeForm.addEventListener("submit", async (event) => {
-  event.preventDefault(); const driver = drivers.find((item) => item.driverId === el.rechargeDriver.value); if (!driver) return showToast("Select a driver first.", "error"); const amount = Number(el.rechargeAmount.value); const reference = el.rechargeReference.value.trim();
-  const name = `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "this driver"; const approved = await confirmAction({ title: "Confirm wallet recharge", message: `Add ${money(amount)} SSP to ${name}? Reference: ${reference}. This creates a permanent audit record.`, confirmLabel: `Add ${money(amount)} SSP` }); if (!approved) return;
+  event.preventDefault(); const driver = drivers.find((item) => item.driverId === el.rechargeDriver.value); if (!driver) return showToast("Search for and select a driver first.", "error"); const amount = Number(el.rechargeAmount.value);
+  const name = `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "this driver"; const approved = await confirmAction({ title: "Confirm wallet recharge", message: `Add ${money(amount)} SSP to ${name} (${driver.plateNumber || "no plate"})? The receipt number is generated automatically.`, confirmLabel: `Add ${money(amount)} SSP` }); if (!approved) return;
   const button = el.rechargeForm.querySelector("button[type=submit]"); setBusy(button, true, "Recording…");
-  try { await api.creditWallet({ driverId: driver.driverId, amount, reference, note: el.rechargeNote.value.trim() }); el.rechargeForm.reset(); showToast("Wallet recharge recorded successfully."); await Promise.all([loadDrivers(), loadRecharges(), loadOverview()]); }
+  try { const result = await api.creditWallet({ driverId: driver.driverId, amount, note: el.rechargeNote.value.trim() }); const receipt = result.data?.receipt; el.rechargeForm.reset(); el.rechargeSelection.hidden = true; el.rechargeResults.replaceChildren(); if (receipt) showRechargeReceipt(receipt); showToast("Wallet recharge recorded successfully."); await Promise.all([loadDrivers(), loadRecharges(), loadOverview()]); }
   catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); updateRechargePagePreview(); }
 });
 
 el.saveVehicleClass.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver?.requiresVehicleClass) return; const vehicleClasses = $$("#vehicle-classes input:checked").map((input) => input.value); if (!vehicleClasses.length) return showToast("Select at least one Alpha ride class.", "error"); const labels = vehicleClasses.map(vehicleClassLabel).join(", "); const approved = await confirmAction({ title: "Change ride classes?", message: `Assign ${el.name.textContent} to ${labels} after physical inspection?`, confirmLabel: "Save classes" }); if (!approved) return; setBusy(el.saveVehicleClass, true); try { await api.vehicleClass({ driverId: driver.driverId, vehicleClasses }); showToast("Driver ride classes updated."); await Promise.all([loadDrivers(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveVehicleClass, false); } });
 
-el.commissionForm.addEventListener("submit", async (event) => { event.preventDefault(); const commissionPercent = Number(el.commissionPercent.value); const approved = await confirmAction({ title: "Update commission rate?", message: `New rides will use a ${commissionPercent}% Alpha commission. Existing rides keep the rate they were created with.`, confirmLabel: "Save rate" }); if (!approved) return; const button = el.commissionForm.querySelector("button[type=submit]"); setBusy(button, true, "Saving…"); try { const result = await api.setCommission({ commissionPercent }); el.commissionPercent.value = result.data.commissionPercent; updateCommissionPreview(); showToast("Commission rate updated for new rides."); await Promise.all([loadActivity(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); } });
+el.commissionForm.addEventListener("submit", async (event) => { event.preventDefault(); const categories = {}; $$(".finance-category").forEach((card) => { const values = {}; card.querySelectorAll("input").forEach((input) => { values[input.dataset.field] = Number(input.value); }); categories[card.dataset.category] = values; }); const approved = await confirmAction({ title: "Update finance controls?", message: "New quotes and rides will use these category fares and commission percentages. Existing rides will not change.", confirmLabel: "Save controls" }); if (!approved) return; const button = el.commissionForm.querySelector("button[type=submit]"); setBusy(button, true, "Saving…"); try { await api.setBusinessSettings({ categories, exchangeRates: { usdToSsp: Number(el.exchangeUsd.value || 0), etbToSsp: Number(el.exchangeEtb.value || 0) } }); showToast("Finance controls updated for new rides."); await Promise.all([loadCommission(), loadActivity(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); } });
 el.saveReview.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.reviewStatus.value; const review = driverReviews.get(driver.driverId); if (status === "approved" && review?.readyForApproval !== true) return showToast("Complete every identity and document check before approval.", "error"); const note = el.reviewNote.value.trim(); const approved = await confirmAction({ title: `${rideStatusLabel(status)} this driver?`, message: status === "approved" ? `Approve ${el.name.textContent} after checking the identity photo, personal details, vehicle and both licence images?` : `Change ${el.name.textContent}'s review status to ${status}${note ? ` with note: ${note}` : "."}`, confirmLabel: "Save status" }); if (!approved) return; setBusy(el.saveReview, true); try { await api.reviewStatus({ driverId: driver.driverId, reviewStatus: status, note }); driverReviews.delete(driver.driverId); showToast("Driver review status updated."); await Promise.all([loadDrivers(), loadOverview(), loadDriverReview(driver.driverId)]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveReview, false); updateReviewButtonState(); } });
 el.saveWalletStatus.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.walletStatusSelect.value; const approved = await confirmAction({ title: status === "suspended" ? "Suspend wallet access?" : "Restore wallet access?", message: status === "suspended" ? `${el.name.textContent} will be unable to go online or accept rides.` : `${el.name.textContent} may work again if the wallet has enough credit.`, confirmLabel: status === "suspended" ? "Suspend access" : "Restore access" }); if (!approved) return; setBusy(el.saveWalletStatus, true); try { await api.walletStatus({ driverId: driver.driverId, status, note: "Updated from Alpha Admin" }); showToast("Wallet access updated."); await Promise.all([loadDrivers(), loadLedger(driver.driverId), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveWalletStatus, false); } });
 
