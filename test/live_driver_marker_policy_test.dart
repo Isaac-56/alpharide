@@ -3,6 +3,13 @@ import 'package:passengerapp/home/services/live_driver_marker_controller.dart';
 
 void main() {
   group('LiveDriverMarkerPolicy', () {
+    test('renders new driver locations without a long visual delay', () {
+      expect(
+        LiveDriverMarkerController.movementDuration,
+        lessThanOrEqualTo(const Duration(milliseconds: 400)),
+      );
+    });
+
     test('selects the correct overhead marker for every launch vehicle', () {
       expect(
         LiveDriverMarkerPolicy.markerAssetForVehicle('standard'),

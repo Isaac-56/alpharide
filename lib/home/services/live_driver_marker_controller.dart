@@ -60,7 +60,10 @@ class LiveDriverMarkerPolicy {
 }
 
 class LiveDriverMarkerController extends ChangeNotifier {
-  static const Duration movementDuration = Duration(milliseconds: 1600);
+  // Driver presence already arrives every couple of seconds. A short visual
+  // interpolation keeps the marker smooth without making a newly-online
+  // vehicle appear to lag behind its actual location.
+  static const Duration movementDuration = Duration(milliseconds: 350);
   static const Duration frameDuration = Duration(milliseconds: 33);
 
   final DriverLocationService _locationService;
@@ -153,16 +156,19 @@ class LiveDriverMarkerController extends ChangeNotifier {
   }
 
   Future<void> _loadMarkerIcons() async {
-    for (final MapEntry<String, String> entry
-        in LiveDriverMarkerPolicy.markerAssets.entries) {
-      try {
-        _markerIcons[entry.key] = await _loadMarkerIcon(entry.value);
-      } catch (error) {
-        debugPrint(
-          'Unable to load the ${entry.key} top-view driver marker: $error',
-        );
-      }
-    }
+    await Future.wait(
+      LiveDriverMarkerPolicy.markerAssets.entries.map(
+        (MapEntry<String, String> entry) async {
+          try {
+            _markerIcons[entry.key] = await _loadMarkerIcon(entry.value);
+          } catch (error) {
+            debugPrint(
+              'Unable to load the ${entry.key} top-view driver marker: $error',
+            );
+          }
+        },
+      ),
+    );
 
     final BitmapDescriptor standardIcon = _markerIcons['standard'] ??
         BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);

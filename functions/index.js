@@ -2,6 +2,7 @@
 
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
+const { getMessaging } = require("firebase-admin/messaging");
 const {
   FieldValue,
   Timestamp,
@@ -59,11 +60,16 @@ const {
   validatePlaceSearchQuery,
 } = require("./call_center_logic");
 const { createTtlCache } = require("./runtime_cache");
+const {
+  buildRideOfferMessage,
+  validatePushToken,
+} = require("./notification_logic");
 
 initializeApp();
 
 const db = getFirestore();
 const realtimeDb = getDatabase();
+const messaging = getMessaging();
 const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
 
 const REGION = "africa-south1";
@@ -71,6 +77,10 @@ const ROUTE_PREVIEW_LIMIT_COLLECTION = "route_preview_limits";
 const placeSearchCache = createTtlCache({ ttlMs: 5 * 60 * 1000, maxEntries: 250 });
 const placeDetailsCache = createTtlCache({ ttlMs: 30 * 60 * 1000, maxEntries: 500 });
 const routePreviewCache = createTtlCache({ ttlMs: 3 * 60 * 1000, maxEntries: 150 });
+const accountingConfigCache = createTtlCache({
+  ttlMs: 60 * 1000,
+  maxEntries: 1,
+});
 const ACTIVE_RIDE_STATUSES = new Set([
   "requested",
   "offered",
@@ -79,6 +89,7 @@ const ACTIVE_RIDE_STATUSES = new Set([
   "arrived",
   "in_progress",
 ]);
+const DRIVER_PUSH_TOKENS_COLLECTION = "driver_push_tokens";
 
 function routePreviewCacheKey(pickup, destination) {
   return [
@@ -87,6 +98,16 @@ function routePreviewCacheKey(pickup, destination) {
     destination.latitude,
     destination.longitude,
   ].map((coordinate) => Number(coordinate).toFixed(5)).join(":");
+}
+
+async function accountingConfig() {
+  const cached = accountingConfigCache.get("accounting");
+  if (cached) return cached;
+  const snapshot = await db.collection("platform_config").doc("accounting").get();
+  return accountingConfigCache.set(
+    "accounting",
+    snapshot.exists ? snapshot.data() : {},
+  );
 }
 
 function requireAuthenticatedUser(request) {
@@ -265,6 +286,110 @@ async function markOffers(rideId, driverIds, status) {
   await batch.commit();
 }
 
+async function sendRideOfferPushNotifications({
+  candidates,
+  rideId,
+  rideOptionId,
+  pickup,
+  estimatedFare,
+}) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return;
+
+  const references = candidates.map((candidate) =>
+    db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(candidate.driverId));
+  const snapshots = await db.getAll(...references);
+  const messages = [];
+  const messageDrivers = [];
+
+  for (let index = 0; index < snapshots.length; index += 1) {
+    const snapshot = snapshots[index];
+    const token = snapshot.exists && typeof snapshot.get("token") === "string"
+      ? snapshot.get("token").trim()
+      : "";
+    if (!token) continue;
+
+    messages.push(buildRideOfferMessage({
+      token,
+      rideId,
+      rideOptionId,
+      pickupAddress: pickup.address,
+      estimatedFare,
+      currencyCode: CURRENCY_CODE,
+    }));
+    messageDrivers.push(candidates[index].driverId);
+  }
+
+  if (messages.length === 0) return;
+  const response = await messaging.sendEach(messages);
+  const invalidDriverIds = [];
+  response.responses.forEach((result, index) => {
+    if (result.success) return;
+    const code = result.error?.code ?? "";
+    logger.warn("Unable to deliver a driver ride notification", {
+      driverId: messageDrivers[index],
+      rideId,
+      code,
+    });
+    if (
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-registration-token"
+    ) {
+      invalidDriverIds.push(messageDrivers[index]);
+    }
+  });
+  await Promise.all(
+    invalidDriverIds.map((driverId) =>
+      db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId).delete()),
+  );
+}
+
+exports.registerDriverPushToken = onCall(
+  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedUser(request);
+      const token = validatePushToken(request.data?.token);
+      const profile = await db.collection("drivers").doc(driverId).get();
+      if (!profile.exists || profile.get("reviewStatus") !== "approved") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Driver approval is required before enabling ride notifications.",
+        );
+      }
+      await db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId).set({
+        driverId,
+        token,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { registered: true };
+    } catch (error) {
+      throw callableError(error, "Unable to enable ride notifications.");
+    }
+  },
+);
+
+exports.unregisterDriverPushToken = onCall(
+  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedUser(request);
+      const token = validatePushToken(request.data?.token);
+      const reference = db
+        .collection(DRIVER_PUSH_TOKENS_COLLECTION)
+        .doc(driverId);
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(reference);
+        if (snapshot.exists && snapshot.get("token") === token) {
+          transaction.delete(reference);
+        }
+      });
+      return { registered: false };
+    } catch (error) {
+      throw callableError(error, "Unable to disable ride notifications.");
+    }
+  },
+);
+
 async function dispatchRide({
   rideId,
   passengerId,
@@ -393,6 +518,17 @@ async function dispatchRide({
     updatedAt: FieldValue.serverTimestamp(),
   });
   await batch.commit();
+  await sendRideOfferPushNotifications({
+    candidates: verifiedCandidates,
+    rideId,
+    rideOptionId,
+    pickup,
+    estimatedFare,
+  }).catch((error) => {
+    // The Firestore offer is authoritative; a temporary push failure must not
+    // cancel a valid ride request. The live listener still shows it in-app.
+    logger.error("Driver ride push delivery failed", { rideId, error });
+  });
   return "offered";
 }
 
@@ -965,21 +1101,29 @@ exports.calculateRoute = onCall(
     secrets: [googleRoutesApiKey],
     timeoutSeconds: 30,
     memory: "256MiB",
+    minInstances: 1,
   },
   async (request) => {
     try {
       const userId = requireAuthenticatedUser(request);
       const input = validateRoutePreviewInput(request.data);
-      await enforceRoutePreviewLimit(userId);
-      const [route, settingsSnapshot] = await Promise.all([
-        computeTrustedRoute(
+      const cacheKey = routePreviewCacheKey(input.origin, input.destination);
+      const cachedRoute = routePreviewCache.get(cacheKey);
+      const routeRequest = cachedRoute
+        ? Promise.resolve(cachedRoute)
+        : computeTrustedRoute(
           input.origin,
           input.destination,
           { includePolyline: true },
-        ),
-        db.collection("platform_config").doc("accounting").get(),
+        ).then((route) => routePreviewCache.set(cacheKey, route));
+      // Start the rate-limit transaction, route lookup and pricing read
+      // together. The old sequential limiter added a full Firestore round trip
+      // before Google Routes even began.
+      const [, route, settings] = await Promise.all([
+        enforceRoutePreviewLimit(userId),
+        routeRequest,
+        accountingConfig(),
       ]);
-      const settings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
       const fareEstimates = Object.fromEntries(
         ["standard", "boda", "rickshaw", "comfort", "premium"].map((id) => {
           const policy = farePolicyFor(settings, id);
