@@ -444,6 +444,7 @@ exports.updateRideStatus = onCall(
       let resolvedWaitingCharge = 0;
       let resolvedWaitingSeconds = 0;
       let resolvedWalletBalance = null;
+      let resolvedWalletAfter = null;
       let resolvedReceiptNumber = null;
 
       await db.runTransaction(async (transaction) => {
@@ -614,16 +615,16 @@ exports.updateRideStatus = onCall(
           const walletBefore = walletSnapshot?.exists
             ? walletSnapshot.data()
             : {};
-          const walletAfter = applyWalletDebit({
+          resolvedWalletAfter = applyWalletDebit({
             wallet: walletBefore,
             amount: resolvedAccounting.platformFee,
           });
-          resolvedWalletBalance = walletAfter.balance;
+          resolvedWalletBalance = resolvedWalletAfter.balance;
           Object.assign(rideUpdate, resolvedAccounting, {
             finalFare: resolvedFinalFare,
             receiptNumber: resolvedReceiptNumber,
             walletBalanceBefore: walletBefore.balance ?? 0,
-            walletBalanceAfter: walletAfter.balance,
+            walletBalanceAfter: resolvedWalletAfter.balance,
             isWaiting: false,
             waitingStartedAt: null,
             waitingSeconds: resolvedWaitingSeconds,
@@ -645,6 +646,12 @@ exports.updateRideStatus = onCall(
         transaction.update(rideRef, rideUpdate);
 
         if (transition.completed) {
+          if (!resolvedWalletAfter) {
+            throw new HttpsError(
+              "internal",
+              "The driver wallet could not be settled for this ride.",
+            );
+          }
           transaction.set(
             rideSummaryRef,
             {
@@ -675,7 +682,7 @@ exports.updateRideStatus = onCall(
           transaction.set(
             walletRef,
             {
-              ...walletAfter,
+              ...resolvedWalletAfter,
               driverId,
               lifetimeCredits: walletSnapshot?.exists
                 ? walletSnapshot.get("lifetimeCredits") ?? 0
