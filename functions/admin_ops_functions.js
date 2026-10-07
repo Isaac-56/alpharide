@@ -5,6 +5,7 @@ const {
   getFirestore,
   Timestamp,
 } = require("firebase-admin/firestore");
+const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const {
@@ -12,6 +13,11 @@ const {
   normalizeCommissionBps,
 } = require("./accounting_logic");
 const { FARES, farePolicyFor } = require("./ride_logic");
+const { validateRideId } = require("./dispatch_logic");
+const {
+  normalizeAdminCancellationReason,
+  projectLiveRideFare,
+} = require("./admin_ride_logic");
 
 const REGION = "africa-south1";
 const ACTIVE_RIDE_STATUSES = [
@@ -23,6 +29,7 @@ const ACTIVE_RIDE_STATUSES = [
   "in_progress",
 ];
 const db = getFirestore();
+const realtimeDb = getDatabase();
 const FINANCE_CATEGORIES = ["standard", "boda", "rickshaw", "comfort", "premium"];
 
 function requireAdmin(request) {
@@ -78,13 +85,31 @@ function profileName(profile = {}) {
   return `${text(profile.firstName)} ${text(profile.lastName)}`.trim();
 }
 
-function ridePayload(document) {
+function ridePayload(document, nowMillis = Date.now()) {
   const data = document.data();
   const summary = data.driverSummary && typeof data.driverSummary === "object"
     ? data.driverSummary
     : {};
   const pickup = data.pickup && typeof data.pickup === "object" ? data.pickup : {};
   const destination = data.destination && typeof data.destination === "object" ? data.destination : {};
+  const waitingStartedAtMillis = millis(data.waitingStartedAt);
+  const projection = projectLiveRideFare({
+    status: text(data.status),
+    rideOptionId: text(data.rideOptionId),
+    estimatedFare: data.estimatedFare,
+    finalFare: data.finalFare,
+    fareAtCancellation: data.fareAtCancellation,
+    trackedDistanceMeters: data.trackedDistanceMeters,
+    farePolicy: data.farePolicy,
+    waitingCharge: data.waitingCharge,
+    waitingSeconds: data.waitingSeconds,
+    billableWaitingSeconds: data.billableWaitingSeconds,
+    isWaiting: data.isWaiting,
+    waitingStartedAtMillis,
+    waitingGraceSeconds: data.waitingGraceSeconds,
+    waitingRatePerMinute: data.waitingRatePerMinute,
+    nowMillis,
+  });
   return {
     rideId: document.id,
     passengerId: text(data.passengerId),
@@ -107,6 +132,15 @@ function ridePayload(document) {
     paymentMethod: text(data.paymentMethod),
     estimatedFare: number(data.estimatedFare),
     finalFare: number(data.finalFare),
+    fareAtCancellation: number(data.fareAtCancellation),
+    currentFare: projection.currentFare,
+    isLiveMeteredFare: projection.isLiveMeteredFare,
+    trackedDistanceMeters: projection.trackedDistanceMeters,
+    waitingCharge: projection.waitingCharge,
+    waitingSeconds: projection.waitingSeconds,
+    billableWaitingSeconds: projection.billableWaitingSeconds,
+    isWaiting: data.isWaiting === true,
+    lastTrackedAtMillis: millis(data.lastTrackedAt),
     platformFee: number(data.platformFee),
     receiptNumber: text(data.receiptNumber),
     currencyCode: text(data.currencyCode) || "SSP",
@@ -216,12 +250,25 @@ exports.adminGetOperationsOverview = callable(async () => {
 
 exports.adminListRides = callable(async (request) => {
   const limit = limitFrom(request.data?.limit, 100, 200);
-  const snapshot = await db
-    .collection("rides")
-    .orderBy("updatedAt", "desc")
-    .limit(limit)
-    .get();
-  const rides = snapshot.docs.map(ridePayload);
+  const [recentSnapshot, activeSnapshot] = await Promise.all([
+    db
+      .collection("rides")
+      .orderBy("updatedAt", "desc")
+      .limit(limit)
+      .get(),
+    db
+      .collection("rides")
+      .where("status", "in", ACTIVE_RIDE_STATUSES)
+      .limit(200)
+      .get(),
+  ]);
+  const documentsById = new Map(
+    [...activeSnapshot.docs, ...recentSnapshot.docs]
+      .map((document) => [document.id, document]),
+  );
+  const rides = [...documentsById.values()]
+    .map(ridePayload)
+    .sort((a, b) => number(b.updatedAtMillis) - number(a.updatedAtMillis));
   const passengerIds = [...new Set(rides.map((ride) => ride.passengerId).filter(Boolean))];
   const driverIds = [...new Set(rides.map((ride) => ride.driverId).filter(Boolean))];
   const [passengers, drivers] = await Promise.all([
@@ -252,6 +299,136 @@ exports.adminListRides = callable(async (request) => {
     }),
   };
 }, "The recent ride list could not be loaded.");
+
+exports.adminCancelInProgressRide = callable(async (request) => {
+  const rideId = validateRideId(request.data?.rideId);
+  const cancellationReason = normalizeAdminCancellationReason(
+    request.data?.reason,
+  );
+  const rideRef = db.collection("rides").doc(rideId);
+  const auditRef = db.collection("admin_audit_log").doc();
+  let driverId = "";
+  let passengerId = "";
+  let currentFare = 0;
+
+  await db.runTransaction(async (transaction) => {
+    const rideSnapshot = await transaction.get(rideRef);
+    if (!rideSnapshot.exists) {
+      throw new HttpsError("not-found", "This ride no longer exists.");
+    }
+    if (rideSnapshot.get("status") !== "in_progress") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Only a ride currently in progress can be cancelled by head office.",
+      );
+    }
+
+    const data = rideSnapshot.data();
+    driverId = text(data.driverId);
+    passengerId = text(data.passengerId);
+    const activeDriverRef = driverId
+      ? db.collection("active_driver_rides").doc(driverId)
+      : null;
+    const activePassengerRef = passengerId
+      ? db.collection("active_passenger_rides").doc(passengerId)
+      : null;
+    const activeDriverSnapshot = activeDriverRef
+      ? await transaction.get(activeDriverRef)
+      : null;
+    const activePassengerSnapshot = activePassengerRef
+      ? await transaction.get(activePassengerRef)
+      : null;
+    const now = Timestamp.now();
+    const projection = projectLiveRideFare({
+      status: data.status,
+      rideOptionId: data.rideOptionId,
+      estimatedFare: data.estimatedFare,
+      finalFare: data.finalFare,
+      fareAtCancellation: data.fareAtCancellation,
+      trackedDistanceMeters: data.trackedDistanceMeters,
+      farePolicy: data.farePolicy,
+      waitingCharge: data.waitingCharge,
+      waitingSeconds: data.waitingSeconds,
+      billableWaitingSeconds: data.billableWaitingSeconds,
+      isWaiting: data.isWaiting,
+      waitingStartedAtMillis: millis(data.waitingStartedAt),
+      waitingGraceSeconds: data.waitingGraceSeconds,
+      waitingRatePerMinute: data.waitingRatePerMinute,
+      nowMillis: now.toMillis(),
+    });
+    currentFare = projection.currentFare;
+
+    transaction.update(rideRef, {
+      status: "cancelled",
+      offerExpiresAt: null,
+      isWaiting: false,
+      waitingStartedAt: null,
+      waitingSeconds: projection.waitingSeconds,
+      billableWaitingSeconds: projection.billableWaitingSeconds,
+      waitingCharge: projection.waitingCharge,
+      fareAtCancellation: currentFare,
+      cancelledBy: "admin",
+      cancellationReason,
+      cancelledAt: now,
+      updatedAt: now,
+    });
+    if (
+      activeDriverRef &&
+      activeDriverSnapshot?.exists &&
+      activeDriverSnapshot.get("rideId") === rideId
+    ) {
+      transaction.delete(activeDriverRef);
+    }
+    if (
+      activePassengerRef &&
+      activePassengerSnapshot?.exists &&
+      activePassengerSnapshot.get("rideId") === rideId
+    ) {
+      transaction.delete(activePassengerRef);
+    }
+    transaction.set(auditRef, {
+      action: "active_ride_cancelled",
+      rideId,
+      driverId,
+      passengerId,
+      reason: cancellationReason,
+      fareAtCancellation: currentFare,
+      administratorId: request.auth.uid,
+      administratorEmail: text(request.auth.token?.email),
+      createdAt: now,
+    });
+  });
+
+  if (driverId) {
+    await realtimeDb.ref(`driver_locations/${driverId}`).transaction(
+      (current) => {
+        if (
+          !current ||
+          typeof current !== "object" ||
+          current.activeRideId !== rideId
+        ) {
+          return;
+        }
+        const next = { ...current, updatedAt: Date.now() };
+        delete next.activeRideId;
+        return next;
+      },
+    ).catch((error) => {
+      logger.warn("Could not release admin-cancelled driver presence", {
+        rideId,
+        driverId,
+        error,
+      });
+    });
+  }
+
+  return {
+    rideId,
+    status: "cancelled",
+    fareAtCancellation: currentFare,
+    currencyCode: "SSP",
+  };
+}, "The in-progress ride could not be cancelled.");
 
 exports.adminListReceipts = callable(async (request) => {
   const limit = limitFrom(request.data?.limit, 100, 200);
@@ -316,6 +493,9 @@ exports.adminListAdminActivity = callable(async (request) => {
     if (action === "wallet_status") summary = `${text(data.previousStatus) || "active"} → ${text(data.status)}`;
     if (action === "commission_rate") summary = `${number(data.previousCommissionBps) / 100}% → ${number(data.commissionBps) / 100}%`;
     if (action === "business_settings") summary = "Category fares, commission and exchange rates updated";
+    if (action === "active_ride_cancelled") {
+      summary = `${text(data.reason)} · ${number(data.fareAtCancellation).toLocaleString("en-US")} SSP at cancellation`;
+    }
     return {
       activityId: document.id,
       action,

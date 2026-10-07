@@ -22,6 +22,7 @@ const api = {
   drivers: call("adminListDrivers"),
   driverReview: call("adminGetDriverReview"),
   rides: call("adminListRides"),
+  cancelInProgressRide: call("adminCancelInProgressRide"),
   receipts: call("adminListReceipts"),
   recharges: call("adminListRecharges"),
   activity: call("adminListAdminActivity"),
@@ -57,6 +58,7 @@ const el = {
   refreshCommission: $("#refresh-commission"), commissionForm: $("#commission-form"), financeCategories: $("#finance-categories"), exchangeUsd: $("#exchange-usd"), exchangeEtb: $("#exchange-etb"), commissionPreview: $("#commission-preview"),
   refreshCommissionCollected: $("#refresh-commission-collected"), commissionStats: $("#commission-stats"), commissionByCategory: $("#commission-by-category"),
   receiptDialog: $("#receipt-dialog"), receiptContent: $("#receipt-content"), receiptClose: $("#receipt-close"), receiptDownload: $("#receipt-download"),
+  rideCancelDialog: $("#ride-cancel-dialog"), rideCancelForm: $("#ride-cancel-form"), rideCancelSummary: $("#ride-cancel-summary"), rideCancelReason: $("#ride-cancel-reason"), rideCancelNote: $("#ride-cancel-note"), rideCancelBack: $("#ride-cancel-back"), rideCancelConfirm: $("#ride-cancel-confirm"),
   refreshActivity: $("#refresh-activity"), activityBody: $("#activity-body"), toast: $("#toast"), dialog: $("#confirm-dialog"),
   confirmTitle: $("#confirm-title"), confirmMessage: $("#confirm-message"), confirmCancel: $("#confirm-cancel"), confirmAccept: $("#confirm-accept"),
 };
@@ -70,6 +72,7 @@ const driverReviews = new Map();
 let documentRenderId = 0;
 let toastTimer = null;
 let confirmResolver = null;
+let rideCancelResolver = null;
 let latestRechargeReceipt = null;
 const financeCategoryIds = ["standard", "boda", "rickshaw", "comfort", "premium"];
 
@@ -99,6 +102,23 @@ function confirmAction({ title, message, confirmLabel = "Confirm" }) {
 
 function closeDialog(result) {
   el.dialog.hidden = true; const resolve = confirmResolver; confirmResolver = null; resolve?.(result);
+}
+
+function requestRideCancellation(ride) {
+  if (rideCancelResolver) rideCancelResolver(null);
+  el.rideCancelSummary.textContent = `Live payable fare: ${money(ride.currentFare)} SSP. Confirm the situation by phone before cancelling ride ${ride.rideId.slice(0, 10)}.`;
+  el.rideCancelReason.value = "Phone unavailable";
+  el.rideCancelNote.value = "";
+  el.rideCancelDialog.hidden = false;
+  requestAnimationFrame(() => el.rideCancelReason.focus());
+  return new Promise((resolve) => { rideCancelResolver = resolve; });
+}
+
+function closeRideCancellation(result) {
+  el.rideCancelDialog.hidden = true;
+  const resolve = rideCancelResolver;
+  rideCancelResolver = null;
+  resolve?.(result);
 }
 
 function navigate(view) {
@@ -447,6 +467,36 @@ async function loadCommissionCollected() {
 }
 
 function rideStatusLabel(status) { return ({ driver_arriving: "Driver arriving", in_progress: "In progress" })[status] || (status ? status[0].toUpperCase() + status.slice(1) : "Unknown"); }
+function rideFare(ride) { return Number(ride.currentFare ?? ride.finalFare ?? ride.estimatedFare ?? 0); }
+function rideDistance(ride) { return `${(Number(ride.trackedDistanceMeters || 0) / 1000).toFixed(2)} km tracked`; }
+function rideWaiting(ride) { return `${Math.ceil(Number(ride.waitingSeconds || 0) / 60)} min waiting · ${money(ride.waitingCharge)} SSP`; }
+function appendCallLink(container, label, phone) {
+  if (!phone) return;
+  const link = document.createElement("a");
+  link.className = "call-link";
+  link.href = `tel:${String(phone).replace(/[^+\d]/g, "")}`;
+  link.textContent = `Call ${label}`;
+  container.append(document.createTextNode(" · "), link);
+}
+
+async function cancelInProgressRide(ride, button) {
+  const decision = await requestRideCancellation(ride);
+  if (!decision) return;
+  setBusy(button, true, "Cancelling…");
+  try {
+    const result = await api.cancelInProgressRide({
+      rideId: ride.rideId,
+      reason: decision,
+    });
+    showToast(`Ride cancelled by head office. Fare at cancellation: ${money(result.data?.fareAtCancellation)} SSP.`);
+    await Promise.all([loadRides(), loadOverview(), loadActivity()]);
+  } catch (error) {
+    showToast(readableError(error), "error");
+  } finally {
+    setBusy(button, false);
+  }
+}
+
 function renderRides() {
   const query = el.rideSearch.value.trim().toLowerCase(); const filter = el.rideFilter.value;
   const filtered = rides.filter((ride) => {
@@ -454,18 +504,65 @@ function renderRides() {
     return statusMatch && (!query || [ride.rideId, ride.driverId, ride.passengerId, ride.status, ride.rideOptionId, ride.driverName, ride.driverPhone, ride.passengerName, ride.passengerPhone, ride.pickupAddress, ride.destinationAddress].join(" ").toLowerCase().includes(query));
   });
   el.rideCount.textContent = `${filtered.length} of ${rides.length} recent rides`; el.ridesBody.replaceChildren();
-  filtered.forEach((ride) => { const row = cellRow([dateTime(ride.updatedAtMillis), ride.rideId.slice(0, 10), rideStatusLabel(ride.status), vehicleClassLabel(ride.rideOptionId), ride.driverName || (ride.driverId ? ride.driverId.slice(0, 10) : "Unassigned"), `${money(ride.finalFare || ride.estimatedFare)} SSP`, ""], { 2: `status-cell status-${ride.status}` }); const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "View"; const detail = document.createElement("tr"); detail.className = "ride-detail-row"; detail.hidden = true; const cell = document.createElement("td"); cell.colSpan = 7; cell.innerHTML = `<div class="ride-detail-grid"><article><strong>Route</strong><span></span></article><article><strong>Passenger</strong><span></span></article><article><strong>Driver</strong><span></span></article><article><strong>Ride finance</strong><span></span></article></div>`; const spans = cell.querySelectorAll("span"); spans[0].textContent = `${ride.pickupAddress || "Pickup unavailable"} → ${ride.destinationAddress || "Destination unavailable"}`; spans[1].textContent = `${ride.passengerName || "Unknown passenger"} · ${ride.passengerPhone || ride.passengerId || "No phone"}`; spans[2].textContent = `${ride.driverName || "Unassigned"} · ${ride.driverPhone || "No phone"} · ${ride.driverPlateNumber || "No plate"}`; spans[3].textContent = `Fare ${money(ride.finalFare || ride.estimatedFare)} SSP · Alpha fee ${money(ride.platformFee)} SSP · ${ride.paymentMethod || "cash"}`; detail.append(cell); button.addEventListener("click", () => { detail.hidden = !detail.hidden; button.textContent = detail.hidden ? "View" : "Hide"; }); row.lastElementChild.append(button); el.ridesBody.append(row, detail); });
+  filtered.forEach((ride) => {
+    const liveFare = rideFare(ride);
+    const fareLabel = ride.status === "in_progress" ? `${money(liveFare)} SSP live` : `${money(liveFare)} SSP`;
+    const row = cellRow([dateTime(ride.updatedAtMillis), ride.rideId.slice(0, 10), rideStatusLabel(ride.status), vehicleClassLabel(ride.rideOptionId), ride.driverName || (ride.driverId ? ride.driverId.slice(0, 10) : "Unassigned"), fareLabel, ""], { 2: `status-cell status-${ride.status}` });
+    const viewButton = document.createElement("button");
+    viewButton.type = "button";
+    viewButton.className = "text-button";
+    viewButton.textContent = "View";
+    const detail = document.createElement("tr");
+    detail.className = "ride-detail-row";
+    detail.hidden = true;
+    const cell = document.createElement("td");
+    cell.colSpan = 7;
+    cell.innerHTML = `<div class="ride-detail-grid"><article><strong>Route</strong><span></span></article><article><strong>Passenger</strong><span></span></article><article><strong>Driver</strong><span></span></article><article class="live-fare-card"><strong>Live ride finance</strong><span></span></article></div><div class="ride-operations"></div>`;
+    const spans = cell.querySelectorAll(".ride-detail-grid span");
+    spans[0].textContent = `${ride.pickupAddress || "Pickup unavailable"} → ${ride.destinationAddress || "Destination unavailable"}`;
+    spans[1].textContent = `${ride.passengerName || "Unknown passenger"} · ${ride.passengerPhone || ride.passengerId || "No phone"}`;
+    appendCallLink(spans[1], "passenger", ride.passengerPhone);
+    spans[2].textContent = `${ride.driverName || "Unassigned"} · ${ride.driverPhone || "No phone"} · ${ride.driverPlateNumber || "No plate"}`;
+    appendCallLink(spans[2], "driver", ride.driverPhone);
+    spans[3].textContent = ride.status === "in_progress"
+      ? `Payable now ${money(liveFare)} SSP · ${rideDistance(ride)} · ${rideWaiting(ride)} · meter updated ${dateTime(ride.lastTrackedAtMillis)}`
+      : `Fare ${money(liveFare)} SSP · Alpha fee ${money(ride.platformFee)} SSP · ${ride.paymentMethod || "cash"}`;
+    const operations = cell.querySelector(".ride-operations");
+    if (ride.status === "in_progress") {
+      const warning = document.createElement("p");
+      warning.textContent = "Confirm the fare and cancellation reason with both parties before using the emergency control.";
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "danger-button compact-button";
+      cancelButton.textContent = "Cancel in-progress ride";
+      cancelButton.addEventListener("click", () => cancelInProgressRide(ride, cancelButton));
+      operations.append(warning, cancelButton);
+    }
+    detail.append(cell);
+    viewButton.addEventListener("click", () => {
+      detail.hidden = !detail.hidden;
+      viewButton.textContent = detail.hidden ? "View" : "Hide";
+    });
+    row.lastElementChild.append(viewButton);
+    el.ridesBody.append(row, detail);
+  });
   if (!filtered.length) { const row = cellRow(["No rides match these filters."]); row.firstElementChild.colSpan = 7; el.ridesBody.append(row); }
 }
 
-async function loadRides() {
-  setBusy(el.refreshRides, true, "Refreshing…");
+let ridesRefreshing = false;
+async function loadRides({ silent = false } = {}) {
+  if (ridesRefreshing) {
+    if (!silent) setTimeout(() => loadRides(), 250);
+    return;
+  }
+  ridesRefreshing = true;
+  if (!silent) setBusy(el.refreshRides, true, "Refreshing…");
   try { const result = await api.rides({ limit: 150 }); rides = Array.isArray(result.data?.rides) ? result.data.rides : []; renderRides(); }
-  catch (error) { showToast(readableError(error), "error"); }
-  finally { setBusy(el.refreshRides, false); }
+  catch (error) { if (!silent) showToast(readableError(error), "error"); }
+  finally { ridesRefreshing = false; if (!silent) setBusy(el.refreshRides, false); }
 }
 
-function activityLabel(action) { return ({ driver_review_status: "Driver review", driver_vehicle_class: "Vehicle classes", wallet_top_up: "Wallet recharge", wallet_status: "Wallet access", commission_rate: "Commission rate", business_settings: "Finance controls" })[action] || action.replaceAll("_", " "); }
+function activityLabel(action) { return ({ driver_review_status: "Driver review", driver_vehicle_class: "Vehicle classes", wallet_top_up: "Wallet recharge", wallet_status: "Wallet access", commission_rate: "Commission rate", business_settings: "Finance controls", active_ride_cancelled: "Active ride cancelled" })[action] || action.replaceAll("_", " "); }
 async function loadActivity() {
   setBusy(el.refreshActivity, true, "Refreshing…"); el.activityBody.replaceChildren();
   try {
@@ -481,7 +578,18 @@ el.loginForm.addEventListener("submit", async (event) => { event.preventDefault(
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => navigate(button.dataset.view)));
 $$('.jump').forEach((button) => button.addEventListener("click", () => navigate(button.dataset.target)));
 el.confirmCancel.addEventListener("click", () => closeDialog(false)); el.confirmAccept.addEventListener("click", () => closeDialog(true)); el.dialog.addEventListener("click", (event) => { if (event.target === el.dialog) closeDialog(false); });
-document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !el.dialog.hidden) closeDialog(false); });
+el.rideCancelBack.addEventListener("click", () => closeRideCancellation(null));
+el.rideCancelDialog.addEventListener("click", (event) => { if (event.target === el.rideCancelDialog) closeRideCancellation(null); });
+el.rideCancelForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const note = el.rideCancelNote.value.replace(/\s+/g, " ").trim();
+  closeRideCancellation(note ? `${el.rideCancelReason.value}: ${note}` : el.rideCancelReason.value);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!el.rideCancelDialog.hidden) closeRideCancellation(null);
+  else if (!el.dialog.hidden) closeDialog(false);
+});
 el.refreshOverview.addEventListener("click", loadOverview); el.refreshDrivers.addEventListener("click", () => loadDrivers()); el.driverSearch.addEventListener("input", renderDriverList); el.driverFilter.addEventListener("change", renderDriverList);
 el.refreshRides.addEventListener("click", loadRides); el.rideSearch.addEventListener("input", renderRides); el.rideFilter.addEventListener("change", renderRides); el.refreshActivity.addEventListener("click", loadActivity);
 el.refreshRecharges.addEventListener("click", loadRecharges); el.refreshReceipts.addEventListener("click", loadReceipts); el.receiptSearch.addEventListener("input", renderReceipts); el.refreshCommission.addEventListener("click", loadCommission); el.refreshCommissionCollected.addEventListener("click", loadCommissionCollected);
@@ -502,6 +610,16 @@ el.saveVehicleClass.addEventListener("click", async () => { const driver = selec
 el.commissionForm.addEventListener("submit", async (event) => { event.preventDefault(); const categories = {}; $$(".finance-category").forEach((card) => { const values = {}; card.querySelectorAll("input").forEach((input) => { values[input.dataset.field] = Number(input.value); }); categories[card.dataset.category] = values; }); const approved = await confirmAction({ title: "Update finance controls?", message: "New quotes and rides will use these category fares and commission percentages. Existing rides will not change.", confirmLabel: "Save controls" }); if (!approved) return; const button = el.commissionForm.querySelector("button[type=submit]"); setBusy(button, true, "Saving…"); try { await api.setBusinessSettings({ categories, exchangeRates: { usdToSsp: Number(el.exchangeUsd.value || 0), etbToSsp: Number(el.exchangeEtb.value || 0) } }); showToast("Finance controls updated for new rides."); await Promise.all([loadCommission(), loadActivity(), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(button, false); } });
 el.saveReview.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.reviewStatus.value; const review = driverReviews.get(driver.driverId); if (status === "approved" && review?.readyForApproval !== true) return showToast("Complete every identity and document check before approval.", "error"); const note = el.reviewNote.value.trim(); const approved = await confirmAction({ title: `${rideStatusLabel(status)} this driver?`, message: status === "approved" ? `Approve ${el.name.textContent} after checking the identity photo, personal details, vehicle and both licence images?` : `Change ${el.name.textContent}'s review status to ${status}${note ? ` with note: ${note}` : "."}`, confirmLabel: "Save status" }); if (!approved) return; setBusy(el.saveReview, true); try { await api.reviewStatus({ driverId: driver.driverId, reviewStatus: status, note }); driverReviews.delete(driver.driverId); showToast("Driver review status updated."); await Promise.all([loadDrivers(), loadOverview(), loadDriverReview(driver.driverId)]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveReview, false); updateReviewButtonState(); } });
 el.saveWalletStatus.addEventListener("click", async () => { const driver = selectedDriver(); if (!driver) return; const status = el.walletStatusSelect.value; const approved = await confirmAction({ title: status === "suspended" ? "Suspend wallet access?" : "Restore wallet access?", message: status === "suspended" ? `${el.name.textContent} will be unable to go online or accept rides.` : `${el.name.textContent} may work again if the wallet has enough credit.`, confirmLabel: status === "suspended" ? "Suspend access" : "Restore access" }); if (!approved) return; setBusy(el.saveWalletStatus, true); try { await api.walletStatus({ driverId: driver.driverId, status, note: "Updated from Alpha Admin" }); showToast("Wallet access updated."); await Promise.all([loadDrivers(), loadLedger(driver.driverId), loadOverview()]); } catch (error) { showToast(readableError(error), "error"); } finally { setBusy(el.saveWalletStatus, false); } });
+
+setInterval(() => {
+  if (
+    !document.hidden &&
+    !el.adminView.hidden &&
+    document.querySelector('[data-page="rides"].active')
+  ) {
+    loadRides({ silent: true });
+  }
+}, 15000);
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) { el.loginView.hidden = false; el.adminView.hidden = true; el.password.value = ""; return; }
