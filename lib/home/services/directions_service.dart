@@ -149,8 +149,13 @@ class RideFareQuote {
 
 class DirectionsService {
   static const String region = 'africa-south1';
+  static const Duration _cacheLifetime = Duration(minutes: 5);
+  static const int _maximumCachedRoutes = 20;
 
   final FirebaseFunctions _functions;
+  final Map<String, _CachedRoute> _cache = <String, _CachedRoute>{};
+  final Map<String, Future<DrivingRoute>> _inFlight =
+      <String, Future<DrivingRoute>>{};
 
   DirectionsService({FirebaseFunctions? functions})
       : _functions =
@@ -168,6 +173,44 @@ class DirectionsService {
       );
     }
 
+    final String cacheKey = _routeKey(origin, destination);
+    final _CachedRoute? cached = _cache[cacheKey];
+    if (cached != null &&
+        DateTime.now().difference(cached.storedAt) <= _cacheLifetime) {
+      // Refresh insertion order so frequently reused routes remain cached.
+      _cache
+        ..remove(cacheKey)
+        ..[cacheKey] = cached;
+      return cached.route;
+    }
+    _cache.remove(cacheKey);
+
+    final Future<DrivingRoute>? existing = _inFlight[cacheKey];
+    if (existing != null) return existing;
+
+    final Future<DrivingRoute> request = _requestRoute(
+      origin: origin,
+      destination: destination,
+    );
+    _inFlight[cacheKey] = request;
+    try {
+      final DrivingRoute route = await request;
+      while (_cache.length >= _maximumCachedRoutes) {
+        _cache.remove(_cache.keys.first);
+      }
+      _cache[cacheKey] = _CachedRoute(route, DateTime.now());
+      return route;
+    } finally {
+      if (identical(_inFlight[cacheKey], request)) {
+        _inFlight.remove(cacheKey);
+      }
+    }
+  }
+
+  Future<DrivingRoute> _requestRoute({
+    required LatLng origin,
+    required LatLng destination,
+  }) async {
     try {
       final HttpsCallable callable =
           _functions.httpsCallable('calculateRoute');
@@ -195,6 +238,12 @@ class DirectionsService {
     }
   }
 
+  static String _routeKey(LatLng origin, LatLng destination) {
+    String coordinate(double value) => value.toStringAsFixed(5);
+    return '${coordinate(origin.latitude)}:${coordinate(origin.longitude)}:'
+        '${coordinate(destination.latitude)}:${coordinate(destination.longitude)}';
+  }
+
   static String _functionsMessage(FirebaseFunctionsException error) {
     return switch (error.code) {
       'unauthenticated' =>
@@ -211,6 +260,13 @@ class DirectionsService {
           'The road route could not be calculated. Please try again.',
     };
   }
+}
+
+class _CachedRoute {
+  const _CachedRoute(this.route, this.storedAt);
+
+  final DrivingRoute route;
+  final DateTime storedAt;
 }
 
 class _DecodedValue {
