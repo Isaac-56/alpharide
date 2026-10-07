@@ -15,17 +15,22 @@ const {
   calculateCompletedRideAccounting,
 } = require("./accounting_logic");
 const { applyWalletDebit } = require("./wallet_logic");
-const { validateRideId } = require("./dispatch_logic");
+const {
+  haversineDistanceMeters,
+  validateRideId,
+} = require("./dispatch_logic");
 const {
   STALE_ACTIVE_RIDE_STATUSES,
   isStaleActiveRide,
   normalizeDriverRideStatus,
+  normalizeRideProgressPoint,
   resolveDriverRideLock,
   resolveCompletedRideFare,
+  resolveTrackedRideProgress,
   resolveWaitingInterval,
   validateDriverRideTransition,
 } = require("./lifecycle_logic");
-const { waitingPolicyFor } = require("./ride_logic");
+const { farePolicyFor, waitingPolicyFor } = require("./ride_logic");
 const { buildReceiptNumber } = require("./receipt_logic");
 const { effectiveVehicleClassForProfile } = require("./vehicle_logic");
 
@@ -334,6 +339,77 @@ function requireAuthenticatedDriver(request) {
   return uid;
 }
 
+function progressFromSnapshot(rideSnapshot, point, now) {
+  const lastTrackedAt = rideSnapshot.get("lastTrackedAt");
+  return resolveTrackedRideProgress({
+    previousPoint: rideSnapshot.get("lastTrackedLocation"),
+    previousAtMillis: lastTrackedAt instanceof Timestamp
+      ? lastTrackedAt.toMillis()
+      : null,
+    nextPoint: point,
+    nowMillis: now.toMillis(),
+    trackedDistanceMeters: rideSnapshot.get("trackedDistanceMeters") ?? 0,
+  });
+}
+
+exports.recordRideProgress = onCall(
+  {
+    region: REGION,
+    timeoutSeconds: 10,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedDriver(request);
+      const rideId = validateRideId(request.data?.rideId);
+      const point = normalizeRideProgressPoint(request.data?.point);
+      const rideRef = db.collection("rides").doc(rideId);
+      let trackedDistanceMeters = 0;
+
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(rideRef);
+        if (!snapshot.exists) {
+          throw new HttpsError("not-found", "This ride no longer exists.");
+        }
+        if (snapshot.get("driverId") !== driverId) {
+          throw new HttpsError(
+            "permission-denied",
+            "Only the assigned driver can update trip distance.",
+          );
+        }
+        if (snapshot.get("status") !== "in_progress") {
+          throw new HttpsError(
+            "failed-precondition",
+            "Trip distance is recorded only after the trip starts.",
+          );
+        }
+
+        const now = Timestamp.now();
+        const progress = progressFromSnapshot(snapshot, point, now);
+        trackedDistanceMeters = progress.trackedDistanceMeters;
+        transaction.update(rideRef, {
+          lastTrackedLocation: progress.point,
+          lastTrackedAt: now,
+          trackedDistanceMeters,
+          updatedAt: now,
+        });
+      });
+
+      return { rideId, trackedDistanceMeters };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      if (error instanceof TypeError) {
+        throw new HttpsError("invalid-argument", error.message);
+      }
+      if (error instanceof RangeError) {
+        throw new HttpsError("failed-precondition", error.message);
+      }
+      logger.error("Unable to record active ride progress", error);
+      throw new HttpsError("internal", "Trip distance could not be recorded.");
+    }
+  },
+);
+
 exports.updateRideStatus = onCall(
   {
     region: REGION,
@@ -345,6 +421,10 @@ exports.updateRideStatus = onCall(
       const driverId = requireAuthenticatedDriver(request);
       const rideId = validateRideId(request.data?.rideId);
       const requestedStatus = normalizeDriverRideStatus(request.data?.status);
+      const completionPoint = requestedStatus === "completed" &&
+          request.data?.completionPoint != null
+        ? normalizeRideProgressPoint(request.data.completionPoint)
+        : null;
       const rideRef = db.collection("rides").doc(rideId);
       const activeDriverRef = db
         .collection("active_driver_rides")
@@ -449,7 +529,40 @@ exports.updateRideStatus = onCall(
           updatedAt: now,
         };
 
+        if (transition.status === "in_progress") {
+          const pickup = rideSnapshot.get("pickup");
+          Object.assign(rideUpdate, {
+            trackedDistanceMeters: 0,
+            lastTrackedLocation: {
+              latitude: pickup?.latitude,
+              longitude: pickup?.longitude,
+              accuracy: 0,
+            },
+            lastTrackedAt: now,
+          });
+        }
+
         if (transition.completed) {
+          const progress = completionPoint == null
+            ? null
+            : progressFromSnapshot(rideSnapshot, completionPoint, now);
+          const actualDistanceMeters = progress?.trackedDistanceMeters ??
+            rideSnapshot.get("trackedDistanceMeters") ?? 0;
+          const plannedDestination = rideSnapshot.get("destination");
+          const actualDestinationPoint = progress?.point ??
+            rideSnapshot.get("lastTrackedLocation") ?? plannedDestination;
+          const distanceToPlannedDestination = haversineDistanceMeters(
+            actualDestinationPoint,
+            plannedDestination,
+          );
+          const endedEarly = completionPoint != null &&
+            distanceToPlannedDestination > 150;
+          const actualDestination = {
+            ...actualDestinationPoint,
+            address: endedEarly
+              ? "Early drop-off location"
+              : plannedDestination?.address ?? "Trip destination",
+          };
           const waitingStartedAt = rideSnapshot.get("waitingStartedAt");
           let billableWaitingSeconds =
             rideSnapshot.get("billableWaitingSeconds") ?? 0;
@@ -480,6 +593,12 @@ exports.updateRideStatus = onCall(
             estimatedFare: rideSnapshot.get("estimatedFare"),
             finalFare: rideSnapshot.get("finalFare"),
             waitingCharge: resolvedWaitingCharge,
+            rideOptionId: rideSnapshot.get("rideOptionId"),
+            actualDistanceMeters,
+            farePolicy: rideSnapshot.get("farePolicy") ?? farePolicyFor(
+              {},
+              rideSnapshot.get("rideOptionId"),
+            ),
           });
           resolvedAccounting = calculateCompletedRideAccounting({
             grossFare: resolvedFinalFare,
@@ -510,6 +629,16 @@ exports.updateRideStatus = onCall(
             waitingSeconds: resolvedWaitingSeconds,
             billableWaitingSeconds,
             waitingCharge: resolvedWaitingCharge,
+            actualDistanceMeters,
+            actualDestination,
+            plannedDestination,
+            destination: actualDestination,
+            endedEarly,
+            completionReason: endedEarly
+              ? "passenger_requested_early_dropoff"
+              : "destination_reached",
+            lastTrackedLocation: actualDestination,
+            lastTrackedAt: now,
           });
         }
 
@@ -588,9 +717,12 @@ exports.updateRideStatus = onCall(
             driverId,
             rideOptionId: rideSnapshot.get("rideOptionId"),
             pickup: rideSnapshot.get("pickup"),
-            destination: rideSnapshot.get("destination"),
+            destination: rideUpdate.actualDestination,
+            plannedDestination: rideSnapshot.get("destination"),
             paymentMethod: rideSnapshot.get("paymentMethod"),
-            routeDistanceMeters: rideSnapshot.get("routeDistanceMeters") ?? 0,
+            routeDistanceMeters: rideUpdate.actualDistanceMeters,
+            endedEarly: rideUpdate.endedEarly,
+            completionReason: rideUpdate.completionReason,
             estimatedFare: rideSnapshot.get("estimatedFare"),
             finalFare: resolvedFinalFare,
             waitingCharge: resolvedWaitingCharge,

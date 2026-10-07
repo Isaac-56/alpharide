@@ -9,6 +9,7 @@ const {
   resolveCompletedRideFare,
   resolveDriverRideLock,
   resolveWaitingInterval,
+  resolveTrackedRideProgress,
   validateDriverRideTransition,
 } = require("../lifecycle_logic");
 
@@ -187,6 +188,46 @@ test("completed launch rides persist the trusted server-quoted fare", () => {
     resolveCompletedRideFare({ estimatedFare: 12500, finalFare: 13000 }),
     13000,
   );
+});
+
+test("early completion uses tracked distance and the frozen fare policy", () => {
+  assert.equal(
+    resolveCompletedRideFare({
+      estimatedFare: 100000,
+      finalFare: null,
+      waitingCharge: 200,
+      rideOptionId: "standard",
+      actualDistanceMeters: 2500,
+      farePolicy: {
+        minimumFare: 10000,
+        baseFare: 10000,
+        perKilometer: 9000,
+        waitingPerMinute: 100,
+      },
+    }),
+    32700,
+  );
+});
+
+test("trip odometer accepts movement but rejects drift and GPS jumps", () => {
+  const first = { latitude: 4.85, longitude: 31.58, accuracy: 8 };
+  const moved = resolveTrackedRideProgress({
+    previousPoint: first,
+    previousAtMillis: 0,
+    nextPoint: { latitude: 4.8501, longitude: 31.58, accuracy: 8 },
+    nowMillis: 10000,
+    trackedDistanceMeters: 100,
+  });
+  assert.ok(moved.trackedDistanceMeters > 105);
+
+  const jump = resolveTrackedRideProgress({
+    previousPoint: moved.point,
+    previousAtMillis: 10000,
+    nextPoint: { latitude: 5.85, longitude: 31.58, accuracy: 8 },
+    nowMillis: 20000,
+    trackedDistanceMeters: moved.trackedDistanceMeters,
+  });
+  assert.equal(jump.trackedDistanceMeters, moved.trackedDistanceMeters);
 });
 
 test("explicit customer waiting is billable from the first minute", () => {
