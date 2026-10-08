@@ -24,6 +24,12 @@ test("South Sudan registration bodies normalize without choosing a car tier", ()
     "rickshaw",
   );
   assert.equal(normalizeVehicleBodyType("Scooter"), "scooter");
+  assert.equal(normalizeVehicleBodyType("Car"), "car");
+  assert.equal(normalizeVehicleBodyType("Boda (motorcycle)"), "boda");
+  assert.equal(
+    normalizeVehicleBodyType("Tuk-tuk (three-wheeler)"),
+    "rickshaw",
+  );
   assert.equal(normalizeVehicleClass("Sedan"), "");
 });
 

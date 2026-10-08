@@ -18,6 +18,7 @@ const {
   normalizeAdminCancellationReason,
   projectLiveRideFare,
 } = require("./admin_ride_logic");
+const { requiresAdminVehicleClass } = require("./vehicle_logic");
 
 const REGION = "africa-south1";
 const ACTIVE_RIDE_STATUSES = [
@@ -206,9 +207,9 @@ exports.adminGetOperationsOverview = callable(async () => {
     const registration = profile.registration && typeof profile.registration === "object"
       ? profile.registration
       : {};
-    const vehicleType = text(registration.vehicleType).toLowerCase();
-    const fixedVehicle = ["boda", "boda boda", "scooter", "bajaj", "tuk-tuk", "rickshaw"].includes(vehicleType);
-    if (!fixedVehicle && !text(registration.vehicleClass) && !text(profile.vehicleClass)) {
+    if (requiresAdminVehicleClass(profile) &&
+      !text(registration.vehicleClass) &&
+      !text(profile.vehicleClass)) {
       driverStats.unclassified += 1;
     }
   }

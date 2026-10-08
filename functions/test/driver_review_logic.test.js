@@ -25,7 +25,7 @@ function completeProfile(driverId = "driver-1") {
       licenceFirstName: "Ada",
       licenceLastName: "Driver",
       licenceNumber: "DL-12345",
-      licenceIssueDate: "2026-01-10",
+      licenceExpiryDate: "2030-01-10",
     },
     documents: {
       driverLicence: {
@@ -61,6 +61,23 @@ test("complete Firebase-verified driver registration is approval ready", () => {
   assert.equal(result.identity.phoneVerified, true);
   assert.deepEqual(result.missingRequirements, []);
   assert.equal(result.registration.vehicleType, "Boda boda (motorcycle)");
+  assert.equal(result.registration.licenceExpiryDate, "2030-01-10");
+});
+
+test("legacy licence date remains readable during expiry-date migration", () => {
+  const profile = completeProfile();
+  profile.registration.licenceIssueDate = "2029-04-12";
+  delete profile.registration.licenceExpiryDate;
+
+  const result = driverReviewPayload({
+    driverId: "driver-1",
+    profile,
+    authenticatedPhoneNumber: "+211912345678",
+    photoCheck: completePhotoCheck(),
+  });
+
+  assert.equal(result.readyForApproval, true);
+  assert.equal(result.registration.licenceExpiryDate, "2029-04-12");
 });
 
 test("approval stays blocked until licence images and OTP identity are valid", () => {
