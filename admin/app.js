@@ -336,7 +336,7 @@ function renderDriverDetail(driver) {
   el.walletCredits.textContent = `${money(wallet.lifetimeCredits)} SSP`; el.walletDebits.textContent = `${money(wallet.lifetimeDebits)} SSP`;
   const classes = driver.vehicleClasses?.length ? driver.vehicleClasses : (driver.vehicleClass ? [driver.vehicleClass] : []);
   el.vehicleType.textContent = driver.vehicleType || "Not recorded"; el.plateNumber.textContent = `${driver.plateNumber || "No plate"} · ${classes.length ? classes.map(vehicleClassLabel).join(", ") : "Class unassigned"}`;
-  $$("#vehicle-classes input").forEach((input) => { input.checked = classes.includes(input.value); input.disabled = !driver.requiresVehicleClass; });
+  $$("#vehicle-classes input").forEach((input) => { input.checked = classes.includes(input.value); input.disabled = !driver.requiresVehicleClass || input.hasAttribute("data-fixed-category"); });
   el.saveVehicleClass.disabled = !driver.requiresVehicleClass;
   el.vehicleClassHint.textContent = driver.requiresVehicleClass ? (classes.length ? "A car may qualify for more than one service class after inspection." : "Choose at least one class before approving this vehicle.") : `Automatically classified as ${classes.map(vehicleClassLabel).join(", ") || "its fixed local category"}.`;
   el.reviewStatus.value = driver.reviewStatus || "pending"; el.walletStatusSelect.value = wallet.status || "active";
