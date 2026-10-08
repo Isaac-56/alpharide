@@ -30,15 +30,23 @@ class AlphaPageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget constrainedChild = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: AlphaSpacing.contentMaxWidth,
+        ),
+        child: SizedBox(width: double.infinity, child: child),
+      ),
+    );
     final Widget content = scrollable
         ? SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: padding,
-            child: child,
+            child: constrainedChild,
           )
         : Padding(
             padding: padding,
-            child: child,
+            child: constrainedChild,
           );
 
     return Scaffold(
@@ -47,14 +55,21 @@ class AlphaPageScaffold extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              child: AlphaFlowHeader(
-                title: title,
-                subtitle: subtitle,
-                compact: true,
-                leading: AlphaBackButton(onPressed: onBack),
-                trailing: action,
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AlphaSpacing.contentMaxWidth + 32,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: AlphaFlowHeader(
+                    title: title,
+                    subtitle: subtitle,
+                    compact: true,
+                    leading: AlphaBackButton(onPressed: onBack),
+                    trailing: action,
+                  ),
+                ),
               ),
             ),
             Divider(height: 1, color: AlphaColors.border(context)),
