@@ -35,6 +35,9 @@ function driverReviewPayload({
   const photoStoragePath = text(safePhotoCheck.storagePath);
   const photoPrefix = `drivers/${driverId}/documents/photo_checks/`;
   const photoStatus = text(safePhotoCheck.status) || "not_submitted";
+  const licenceExpiryDate = text(
+    registration.licenceExpiryDate ?? registration.licenceIssueDate,
+  );
   const photoSubmitted = safePhotoCheck.automatedScreeningPassed === true &&
     photoStoragePath.startsWith(photoPrefix) &&
     ["pending", "approved"].includes(photoStatus);
@@ -76,8 +79,8 @@ function driverReviewPayload({
         "licenceFirstName",
         "licenceLastName",
         "licenceNumber",
-        "licenceIssueDate",
-      ].every((field) => text(registration[field]).length > 0),
+      ].every((field) => text(registration[field]).length > 0) &&
+        licenceExpiryDate.length > 0,
     },
     {
       key: "documents",
@@ -120,7 +123,7 @@ function driverReviewPayload({
       licenceFirstName: text(registration.licenceFirstName),
       licenceLastName: text(registration.licenceLastName),
       licenceNumber: text(registration.licenceNumber),
-      licenceIssueDate: text(registration.licenceIssueDate),
+      licenceExpiryDate,
     },
     documents: {
       driverLicence: {

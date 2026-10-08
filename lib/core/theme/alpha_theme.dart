@@ -29,6 +29,7 @@ abstract final class AlphaColors {
 }
 
 abstract final class AlphaSpacing {
+  static const double contentMaxWidth = 760;
   static const double page = 16;
   static const double controlHeight = 48;
   static const double actionHeight = 56;
@@ -153,7 +154,16 @@ abstract final class AlphaTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: softSurface,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
         hintStyle: TextStyle(color: muted),
+        labelStyle: TextStyle(color: muted),
+        floatingLabelStyle: TextStyle(
+          color: ink,
+          fontWeight: FontWeight.w700,
+        ),
         prefixIconColor: muted,
         suffixIconColor: muted,
         border: OutlineInputBorder(
