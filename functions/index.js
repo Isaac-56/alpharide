@@ -3,6 +3,7 @@
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
 const {
   FieldValue,
   Timestamp,
@@ -18,6 +19,7 @@ const {
   DISPATCH_ALGORITHM_VERSION,
   OFFER_WINDOW_MS,
   PRESENCE_CANDIDATE_SCAN_LIMIT,
+  approvedDriverPhotoStoragePath,
   buildDriverPublicSummary,
   presenceAllowsAcceptance,
   presenceIsWithinPickupRadius,
@@ -70,6 +72,7 @@ initializeApp();
 const db = getFirestore();
 const realtimeDb = getDatabase();
 const messaging = getMessaging();
+const storage = getStorage();
 const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
 
 const REGION = "africa-south1";
@@ -1427,6 +1430,52 @@ exports.cancelRide = onCall(
       return { rideId, status: "cancelled" };
     } catch (error) {
       throw callableError(error, "Unable to cancel the ride.");
+    }
+  },
+);
+
+exports.getAssignedDriverPhoto = onCall(
+  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
+  async (request) => {
+    try {
+      const passengerId = requireAuthenticatedUser(request);
+      const rideId = validateRideId(request.data?.rideId);
+      const rideSnapshot = await db.collection("rides").doc(rideId).get();
+      if (!rideSnapshot.exists) {
+        throw new HttpsError("not-found", "This ride no longer exists.");
+      }
+
+      const ride = rideSnapshot.data();
+      if (ride.passengerId !== passengerId) {
+        throw new HttpsError(
+          "permission-denied",
+          "Only the assigned passenger can view this driver profile.",
+        );
+      }
+
+      const driverId =
+        typeof ride.driverId === "string" ? ride.driverId.trim() : "";
+      if (!driverId) return { photoUrl: "", expiresAtMillis: null };
+
+      const photoSnapshot = await db
+        .collection("driver_photo_checks")
+        .doc(driverId)
+        .get();
+      const storagePath = approvedDriverPhotoStoragePath({
+        ride,
+        passengerId,
+        photoCheck: photoSnapshot.exists ? photoSnapshot.data() : null,
+      });
+      if (!storagePath) return { photoUrl: "", expiresAtMillis: null };
+
+      const expiresAtMillis = Date.now() + 10 * 60 * 1000;
+      const [photoUrl] = await storage.bucket().file(storagePath).getSignedUrl({
+        action: "read",
+        expires: expiresAtMillis,
+      });
+      return { photoUrl, expiresAtMillis };
+    } catch (error) {
+      throw callableError(error, "Unable to load the assigned driver photo.");
     }
   },
 );
