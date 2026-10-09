@@ -61,6 +61,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   bool _terminalHandled = false;
   String _rideStatus = 'requested';
   String? _routeError;
+  String? _driverPhotoUrl;
+  String? _photoDriverId;
+  bool _isDriverPhotoLoading = false;
+  int _driverPhotoRequestId = 0;
 
   bool get _canPassengerCancel =>
       !_isCancelling &&
@@ -107,6 +111,43 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     );
   }
 
+  Future<void> _loadAssignedDriverPhoto(String? driverId) async {
+    final int requestId = ++_driverPhotoRequestId;
+    if (driverId == null || driverId.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _photoDriverId = null;
+        _driverPhotoUrl = null;
+        _isDriverPhotoLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _photoDriverId = driverId;
+      _driverPhotoUrl = null;
+      _isDriverPhotoLoading = true;
+    });
+
+    String? photoUrl;
+    try {
+      photoUrl =
+          await _rideService.getAssignedDriverPhotoUrl(widget.rideId);
+    } on Object catch (error) {
+      debugPrint('Unable to load assigned driver photo: $error');
+    }
+
+    if (!mounted ||
+        requestId != _driverPhotoRequestId ||
+        _photoDriverId != driverId) {
+      return;
+    }
+    setState(() {
+      _driverPhotoUrl = photoUrl;
+      _isDriverPhotoLoading = false;
+    });
+  }
+
   void _handleRideState(RideLiveState? state) {
     if (!mounted || state == null) return;
 
@@ -126,6 +167,9 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     }
 
     _liveDrivers.showOnlyDriver(state.driverId);
+    if (driverChanged) {
+      unawaited(_loadAssignedDriverPhoto(state.driverId));
+    }
 
     if (_isSearching) {
       if (!_progressController.isAnimating) {
@@ -634,6 +678,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   @override
   void dispose() {
+    _driverPhotoRequestId++;
     _rideSubscription?.cancel();
     _liveDrivers
       ..removeListener(_refreshDriverMarkers)
@@ -819,7 +864,11 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
             ],
             if (!_isSearching && driver != null) ...<Widget>[
               const SizedBox(height: 16),
-              _AssignedDriverCard(driver: driver),
+              _AssignedDriverCard(
+                driver: driver,
+                photoUrl: _driverPhotoUrl,
+                isPhotoLoading: _isDriverPhotoLoading,
+              ),
             ],
             const SizedBox(height: 16),
             if (_canPassengerCancel)
@@ -867,9 +916,27 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 }
 
 class _AssignedDriverCard extends StatelessWidget {
-  const _AssignedDriverCard({required this.driver});
+  const _AssignedDriverCard({
+    required this.driver,
+    required this.photoUrl,
+    required this.isPhotoLoading,
+  });
 
   final RideDriverSummary driver;
+  final String? photoUrl;
+  final bool isPhotoLoading;
+
+  String get _initials {
+    final List<String> names = driver.displayName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((String part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (names.isEmpty) return 'A';
+    if (names.length == 1) return names.first.substring(0, 1).toUpperCase();
+    return '${names.first.substring(0, 1)}${names.last.substring(0, 1)}'
+        .toUpperCase();
+  }
 
   Future<void> _callDriver(BuildContext context) async {
     final Uri phoneUri = Uri(scheme: 'tel', path: driver.phoneNumber);
@@ -889,6 +956,92 @@ class _AssignedDriverCard extends StatelessWidget {
       );
   }
 
+  Widget _avatar(BuildContext context) {
+    final Color textColor = AlphaColors.text(context);
+    final String? resolvedPhotoUrl =
+        photoUrl == null || photoUrl!.trim().isEmpty ? null : photoUrl!.trim();
+
+    Widget fallback() => ColoredBox(
+          color: primaryColor.withValues(alpha: 0.18),
+          child: Center(
+            child: Text(
+              _initials,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 21,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        );
+
+    return Semantics(
+      image: true,
+      label: 'Photo of driver ${driver.displayName}',
+      child: SizedBox(
+        width: 68,
+        height: 68,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Positioned.fill(
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: primaryColor.withValues(alpha: 0.18),
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.48),
+                    width: 2,
+                  ),
+                ),
+                child: isPhotoLoading
+                    ? const Center(
+                        child: SizedBox.square(
+                          dimension: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: primaryColor,
+                          ),
+                        ),
+                      )
+                    : resolvedPhotoUrl == null
+                        ? fallback()
+                        : Image.network(
+                            resolvedPhotoUrl,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, __, ___) => fallback(),
+                          ),
+              ),
+            ),
+            Positioned(
+              right: -1,
+              bottom: 1,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: primaryColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AlphaColors.surface(context),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.verified_rounded,
+                  color: Colors.black,
+                  size: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color textColor = AlphaColors.text(context);
@@ -901,128 +1054,174 @@ class _AssignedDriverCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: borderColor),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark
+                  ? 0.18
+                  : 0.06,
+            ),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         children: <Widget>[
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              const CircleAvatar(
-                radius: 24,
-                backgroundColor: primaryColor,
-                child: Icon(Icons.person_rounded, color: Colors.black),
-              ),
-              const SizedBox(width: 12),
+              _avatar(context),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      driver.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            driver.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: const Text(
+                            'VERIFIED',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 5),
                     Text(
                       driver.vehicleLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: mutedColor, fontSize: 13),
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                    if (driver.plateNumber.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AlphaColors.background(context),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Text(
+                          driver.plateNumber,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.45,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              if (driver.plateNumber.isNotEmpty) ...<Widget>[
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AlphaColors.background(context),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Text(
-                    driver.plateNumber,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
           if (driver.phoneNumber.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 14),
-            Semantics(
-              button: true,
-              excludeSemantics: true,
-              label:
-                  'Call driver ${driver.displayName} at ${driver.phoneNumber}',
-              child: Material(
-                color: primaryColor.withValues(alpha: 0.14),
+            const SizedBox(height: 15),
+            Container(
+              padding: const EdgeInsets.fromLTRB(13, 9, 8, 9),
+              decoration: BoxDecoration(
+                color: AlphaColors.background(context),
                 borderRadius: BorderRadius.circular(15),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  key: const Key('callAssignedDriver'),
-                  onTap: () => _callDriver(context),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 11,
-                    ),
-                    child: Row(
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.phone_in_talk_rounded,
+                    color: mutedColor,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        const CircleAvatar(
-                          radius: 18,
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.black,
-                          child: Icon(Icons.call_rounded, size: 19),
-                        ),
-                        const SizedBox(width: 11),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Call driver',
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 1),
-                              Text(
-                                driver.phoneNumber,
-                                style: TextStyle(
-                                  color: mutedColor,
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                        Text(
+                          'Driver contact',
+                          style: TextStyle(
+                            color: mutedColor,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          color: textColor,
-                          size: 15,
+                        const SizedBox(height: 1),
+                        Text(
+                          driver.phoneNumber,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  Semantics(
+                    button: true,
+                    excludeSemantics: true,
+                    label:
+                        'Call driver ${driver.displayName} at ${driver.phoneNumber}',
+                    child: Material(
+                      color: primaryColor,
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        key: const Key('callAssignedDriver'),
+                        onTap: () => _callDriver(context),
+                        child: const SizedBox.square(
+                          dimension: 44,
+                          child: Icon(
+                            Icons.call_rounded,
+                            color: Colors.black,
+                            size: 21,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
