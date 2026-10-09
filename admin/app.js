@@ -29,6 +29,7 @@ const api = {
   businessSettings: call("adminGetBusinessSettings"),
   setBusinessSettings: call("adminSetBusinessSettings"),
   commissionReport: call("adminGetCommissionReport"),
+  commissionDetails: call("adminGetCommissionDetails"),
   creditWallet: call("adminCreditDriverWallet"),
   walletStatus: call("adminSetDriverWalletStatus"),
   reviewStatus: call("adminSetDriverReviewStatus"),
@@ -66,6 +67,11 @@ const el = {
 let drivers = [];
 let rides = [];
 let receipts = [];
+let commissionTrips = [];
+let commissionCursor = null;
+let commissionTotals = { totalCommission: 0, totalRides: 0 };
+let commissionRequestId = 0;
+let commissionFilters = {};
 let recharges = [];
 let selectedDriverId = null;
 const driverReviews = new Map();
@@ -408,7 +414,7 @@ function downloadRechargePdf(receipt) {
 function downloadRideReceiptPdf(receipt) {
   if (!receipt) return;
   const receiptNumber = receipt.receiptNumber || `RIDE-${safeDocumentToken(receipt.rideId || receipt.receiptId, "RECEIPT")}`;
-  const lines = ["ALPHA RIDE - TRIP RECEIPT", `Receipt: ${receiptNumber}`, `Completed: ${dateTime(receipt.completedAtMillis)}`, `Ride: ${receipt.rideId || "-"}`, `Service: ${vehicleClassLabel(receipt.rideOptionId)}`, `Route: ${receipt.pickupAddress || "Pickup"} to ${receipt.destinationAddress || "Destination"}`, `Fare: ${money(receipt.finalFare)} ${receipt.currencyCode || "SSP"}`, `Waiting: ${money(receipt.waitingCharge)} SSP`, `Alpha fee: ${money(receipt.platformFee)} SSP`, `Driver net: ${money(receipt.driverNetFare)} SSP`, `Payment: ${receipt.paymentMethod || "cash"}`];
+  const lines = ["ALPHA RIDE - TRIP RECEIPT", `Receipt: ${receiptNumber}`, `Completed: ${dateTime(receipt.completedAtMillis)}`, `Ride: ${receipt.rideId || "-"}`, `Service: ${vehicleClassLabel(receipt.rideOptionId)}`, `Driver: ${receipt.driverName || receipt.driverId || "-"}`, `Car: ${receipt.plateNumber || "-"} ${receipt.vehicle || ""}`, `Route: ${receipt.pickupAddress || "Pickup"} to ${receipt.destinationAddress || "Destination"}`, `Fare: ${money(receipt.finalFare)} ${receipt.currencyCode || "SSP"}`, `Waiting: ${money(receipt.waitingCharge)} SSP`, `Alpha fee: ${money(receipt.platformFee)} SSP`, `Driver net: ${money(receipt.driverNetFare)} SSP`, `Payment: ${receipt.paymentMethod || "cash"}`];
   downloadPdfDocument(lines, `AlphaRide-Trip-${safeDocumentToken(receiptNumber, receipt.rideId || "Receipt")}.pdf`);
 }
 
@@ -465,9 +471,66 @@ async function loadCommission() {
 
 async function loadCommissionCollected() {
   setBusy(el.refreshCommissionCollected, true, "Refreshing…");
-  try { const { data } = await api.commissionReport(); el.commissionStats.replaceChildren(metricCard("Today", `${money(data.today)} SSP`, "Juba business day", "green"), metricCard("Recorded total", `${money(data.allTime)} SSP`, `${money(data.completedRideCount)} completed rides`, "blue")); el.commissionByCategory.replaceChildren(); financeCategoryIds.forEach((id) => { const row = document.createElement("div"); row.className = "breakdown-row"; const label = document.createElement("span"); label.textContent = vehicleClassLabel(id); const value = document.createElement("strong"); value.textContent = `${money(data.byCategory?.[id])} SSP`; row.append(label, value); el.commissionByCategory.append(row); }); }
-  catch (error) { showToast(readableError(error), "error"); }
+  try {
+    const { data } = await api.commissionReport();
+    el.commissionStats.replaceChildren(metricCard("Today", `${money(data.today)} SSP`, "Juba business day", "green"), metricCard("Recorded total", `${money(data.allTime)} SSP`, `${money(data.completedRideCount)} completed rides`, "blue"));
+    el.commissionByCategory.replaceChildren();
+    financeCategoryIds.forEach((id) => {
+      const row = document.createElement("button"); row.type = "button"; row.className = "breakdown-row";
+      row.dataset.category = id;
+      row.setAttribute("aria-pressed", String($("#commission-service").value === id));
+      const label = document.createElement("span"); label.textContent = `${vehicleClassLabel(id)} · View trips`;
+      const value = document.createElement("strong"); value.textContent = `${money(data.byCategory?.[id])} SSP`;
+      row.append(label, value);
+      row.addEventListener("click", () => { $("#commission-service").value = id; loadCommissionDetails(); });
+      el.commissionByCategory.append(row);
+    });
+    await loadCommissionDetails();
+  } catch (error) { showToast(readableError(error), "error"); }
   finally { setBusy(el.refreshCommissionCollected, false); }
+}
+
+function renderCommissionDetails() {
+  const needle = $("#commission-search").value.trim().toLowerCase();
+  const matching = commissionTrips.filter((trip) => [trip.driverName, trip.driverId, trip.plateNumber, trip.vehicle, trip.receiptNumber, trip.rideId, trip.pickupAddress, trip.destinationAddress].join(" ").toLowerCase().includes(needle));
+  const body = $("#commission-details-body"); body.replaceChildren();
+  matching.forEach((trip) => {
+    const row = cellRow([
+      `${dateTime(trip.completedAtMillis)}\n${trip.receiptNumber || trip.rideId}`,
+      vehicleClassLabel(trip.rideOptionId),
+      `${trip.driverName || trip.driverId}\n${trip.plateNumber || "Plate unavailable"} · ${trip.vehicle || "Vehicle unavailable"}${trip.vehicleDetailsSource === "current profile" ? "\nCurrent profile (older receipt)" : ""}`,
+      `${trip.pickupAddress || "Pickup"} → ${trip.destinationAddress || "Drop-off"}\n${(trip.routeDistanceMeters / 1000).toFixed(2)} km`,
+      `${money(trip.finalFare)} ${trip.currencyCode}`, `${money(trip.platformFee)} ${trip.currencyCode}`, `${money(trip.driverNetFare)} ${trip.currencyCode}`,
+      `${trip.paymentMethod || "cash"}\nWaiting: ${money(trip.waitingCharge)} ${trip.currencyCode}`, "",
+    ]);
+    const download = document.createElement("button"); download.type = "button"; download.className = "secondary"; download.textContent = "Download";
+    download.addEventListener("click", () => downloadRideReceiptPdf(trip)); row.lastElementChild.append(download); body.append(row);
+  });
+  if (!matching.length) body.append(cellRow(["No completed trips match these filters.", "", "", "", "", "", "", "", ""]));
+  $("#commission-detail-summary").textContent = `${money(commissionTotals.totalCommission)} SSP commission · ${money(commissionTotals.totalRides)} completed trips in selected filters · showing ${matching.length} of ${commissionTrips.length} loaded trips. Category totals above are all-time.`;
+  $("#commission-load-more").hidden = !commissionCursor;
+}
+
+async function loadCommissionDetails(more = false) {
+  const requestId = ++commissionRequestId;
+  const button = $("#commission-load-more");
+  setBusy(button, true, "Loading…");
+  if (!more) {
+    commissionFilters = { startDate: $("#commission-start").value, endDate: $("#commission-end").value, category: $("#commission-service").value };
+    commissionTrips = []; commissionCursor = null;
+    $("#commission-details-body").replaceChildren();
+    $("#commission-detail-summary").textContent = "Loading completed trips…";
+  }
+  $$("#commission-by-category button").forEach((row) => row.setAttribute("aria-pressed", String(row.dataset.category === commissionFilters.category)));
+  try {
+    const { data } = await api.commissionDetails({ ...commissionFilters, cursor: more ? commissionCursor : null });
+    if (requestId !== commissionRequestId) return;
+    commissionTrips = more ? [...commissionTrips, ...data.receipts] : data.receipts;
+    commissionTotals = data; commissionCursor = data.nextCursor;
+    renderCommissionDetails();
+  } catch (error) {
+    if (requestId === commissionRequestId) { $("#commission-detail-summary").textContent = "Could not load trips. Retry with Apply filters."; showToast(readableError(error), "error"); }
+  } finally { if (requestId === commissionRequestId) setBusy(button, false); }
 }
 
 function rideStatusLabel(status) { return ({ driver_arriving: "Driver arriving", in_progress: "In progress" })[status] || (status ? status[0].toUpperCase() + status.slice(1) : "Unknown"); }
@@ -634,3 +697,10 @@ onAuthStateChanged(auth, async (user) => {
     await Promise.all([loadOverview(), loadDrivers({ preserveSelection: false })]);
   } catch (error) { el.loginError.textContent = readableError(error); await signOut(auth); }
 });
+
+$("#commission-filter-form").addEventListener("submit", (event) => { event.preventDefault(); loadCommissionDetails(); });
+$("#commission-search").addEventListener("input", renderCommissionDetails);
+$("#commission-load-more").addEventListener("click", () => loadCommissionDetails(true));
+const commissionToday = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
+$("#commission-start").value = `${commissionToday.slice(0, 7)}-01`;
+$("#commission-end").value = commissionToday;

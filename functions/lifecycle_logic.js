@@ -191,10 +191,11 @@ function resolveCompletedRideFare({
     throw new RangeError("completed ride has an invalid waiting charge");
   }
 
-  if (Number.isInteger(actualDistanceMeters) && actualDistanceMeters > 0) {
+  if (Number.isInteger(actualDistanceMeters) && actualDistanceMeters >= 0) {
     return calculateFare({
       rideOptionId,
       distanceMeters: actualDistanceMeters,
+      allowZeroDistance: true,
       farePolicy,
     }) + waitingCharge;
   }

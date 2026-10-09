@@ -164,14 +164,15 @@ function validateCreateRideInput(raw) {
   });
 }
 
-function calculateFare({ rideOptionId, distanceMeters, farePolicy }) {
+function calculateFare({ rideOptionId, distanceMeters, farePolicy, allowZeroDistance = false }) {
   const normalizedRide = normalizeRideOption(rideOptionId);
   const pricing = normalizeFarePolicy(farePolicy, FARES[normalizedRide]);
 
   if (
     typeof distanceMeters !== "number" ||
     !Number.isFinite(distanceMeters) ||
-    distanceMeters <= 0 ||
+    distanceMeters < 0 ||
+    (distanceMeters === 0 && !allowZeroDistance) ||
     distanceMeters > 500000
   ) {
     throw new RangeError("route distance is outside the supported range");

@@ -1321,8 +1321,9 @@ exports.cancelRide = onCall(
       let assignedDriverId = null;
 
       await db.runTransaction(async (transaction) => {
-        const rideSnapshot = await transaction.get(rideRef);
-        const activeSnapshot = await transaction.get(activeRideRef);
+        const [rideSnapshot, activeSnapshot] = await Promise.all([
+          transaction.get(rideRef), transaction.get(activeRideRef),
+        ]);
         if (!rideSnapshot.exists) {
           throw new HttpsError("not-found", "The ride no longer exists.");
         }
@@ -1495,6 +1496,13 @@ exports.acceptRideOffer = onCall(
       const walletRef = db.collection("driver_wallets").doc(driverId);
 
       const preOffer = await offerRef.get();
+      if (preOffer.exists && preOffer.get("status") === "accepted") {
+        const acceptedRide = await rideRef.get();
+        if (acceptedRide.get("driverId") === driverId &&
+            ["accepted", "driver_arriving", "arrived", "in_progress"].includes(acceptedRide.get("status"))) {
+          return { rideId, status: acceptedRide.get("status"), driverId };
+        }
+      }
       if (!preOffer.exists || preOffer.get("status") !== "pending") {
         throw new HttpsError(
           "failed-precondition",
@@ -1524,11 +1532,12 @@ exports.acceptRideOffer = onCall(
 
       let competingDriverIds = [];
       await db.runTransaction(async (transaction) => {
-        const offerSnapshot = await transaction.get(offerRef);
-        const rideSnapshot = await transaction.get(rideRef);
-        const profileSnapshot = await transaction.get(profileRef);
-        const activeDriverSnapshot = await transaction.get(activeDriverRef);
-        const walletSnapshot = await transaction.get(walletRef);
+        const [offerSnapshot, rideSnapshot, profileSnapshot, activeDriverSnapshot, walletSnapshot] =
+          await Promise.all([offerRef, rideRef, profileRef, activeDriverRef, walletRef]
+            .map((reference) => transaction.get(reference)));
+        const passengerId = safeText(rideSnapshot.get("passengerId"));
+        const passengerProfile = passengerId
+          ? await transaction.get(db.collection("users").doc(passengerId)) : null;
 
         if (!offerSnapshot.exists || !rideSnapshot.exists) {
           throw new HttpsError(
@@ -1623,6 +1632,8 @@ exports.acceptRideOffer = onCall(
           status: "accepted",
           driverId,
           driverSummary,
+          customerName: safeText(passengerProfile?.get("name")) || safeText(rideSnapshot.get("customerName")),
+          customerPhotoUrl: safeText(passengerProfile?.get("photoUrl")),
           offerExpiresAt: null,
           acceptedAt: now,
           updatedAt: now,
@@ -1639,8 +1650,11 @@ exports.acceptRideOffer = onCall(
         });
       });
 
-      await markDriverPresenceBusy(driverId, rideId);
-      await markOffers(
+      await Promise.all([
+        markDriverPresenceBusy(driverId, rideId).catch((error) => {
+          logger.warn("Accepted ride presence synchronization failed", { rideId, driverId, error });
+        }),
+        markOffers(
         rideId,
         competingDriverIds.filter((candidateId) => candidateId !== driverId),
         "expired",
@@ -1650,7 +1664,8 @@ exports.acceptRideOffer = onCall(
           driverId,
           error: cleanupError,
         });
-      });
+        }),
+      ]);
 
       return { rideId, status: "accepted", driverId };
     } catch (error) {

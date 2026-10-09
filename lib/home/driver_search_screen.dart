@@ -65,6 +65,8 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   String? _photoDriverId;
   bool _isDriverPhotoLoading = false;
   int _driverPhotoRequestId = 0;
+  Timer? _driverPhotoRetry;
+  int _photoAttempts = 0;
 
   bool get _canPassengerCancel =>
       !_isCancelling &&
@@ -112,6 +114,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   Future<void> _loadAssignedDriverPhoto(String? driverId) async {
+    _driverPhotoRetry?.cancel();
     final int requestId = ++_driverPhotoRequestId;
     if (driverId == null || driverId.trim().isEmpty) {
       if (!mounted) return;
@@ -131,8 +134,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     String? photoUrl;
     try {
-      photoUrl =
-          await _rideService.getAssignedDriverPhotoUrl(widget.rideId);
+      photoUrl = await _rideService.getAssignedDriverPhotoUrl(widget.rideId);
     } on Object catch (error) {
       debugPrint('Unable to load assigned driver photo: $error');
     }
@@ -146,6 +148,21 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       _driverPhotoUrl = photoUrl;
       _isDriverPhotoLoading = false;
     });
+    if ((photoUrl == null || photoUrl.isEmpty) && _photoAttempts++ < 3) {
+      _driverPhotoRetry = Timer(Duration(seconds: 2 * _photoAttempts), () {
+        if (mounted && !_terminalHandled) {
+          unawaited(_loadAssignedDriverPhoto(driverId));
+        }
+      });
+    } else if (photoUrl != null && photoUrl.isNotEmpty) {
+      _photoAttempts = 0;
+      // The server grants a ten-minute URL. Refresh while this trip is active.
+      _driverPhotoRetry = Timer(const Duration(minutes: 8), () {
+        if (mounted && !_terminalHandled) {
+          unawaited(_loadAssignedDriverPhoto(driverId));
+        }
+      });
+    }
   }
 
   void _handleRideState(RideLiveState? state) {
@@ -168,6 +185,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     _liveDrivers.showOnlyDriver(state.driverId);
     if (driverChanged) {
+      _photoAttempts = 0;
       unawaited(_loadAssignedDriverPhoto(state.driverId));
     }
 
@@ -678,6 +696,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   @override
   void dispose() {
+    _driverPhotoRetry?.cancel();
     _driverPhotoRequestId++;
     _rideSubscription?.cancel();
     _liveDrivers
