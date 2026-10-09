@@ -733,7 +733,8 @@ exports.adminGetCommissionDetails = callable(async (request) => {
   if (start) query = query.where("completedAt", ">=", start);
   if (end) query = query.where("completedAt", "<", end);
   if (category) query = query.where("rideOptionId", "==", category);
-  let page = query.orderBy("completedAt", "desc").orderBy("__name__", "desc");
+  const ordered = query.orderBy("completedAt", "desc");
+  let page = ordered.orderBy("__name__", "desc");
   if (input.cursor) {
     const cursorId = validateRideId(input.cursor);
     const cursor = await db.collection("ride_receipts").doc(cursorId).get();
@@ -742,7 +743,7 @@ exports.adminGetCommissionDetails = callable(async (request) => {
   }
   const [snapshot, aggregate] = await Promise.all([
     page.limit(101).get(),
-    query.aggregate({ amount: AggregateField.sum("platformFee"), count: AggregateField.count() }).get(),
+    ordered.aggregate({ amount: AggregateField.sum("platformFee"), count: AggregateField.count() }).get(),
   ]);
   const documents = snapshot.docs.slice(0, 100);
   const missingIds = [...new Set(documents.filter((doc) => !doc.get("driverSummary")).map((doc) => text(doc.get("driverId"))).filter(Boolean))];

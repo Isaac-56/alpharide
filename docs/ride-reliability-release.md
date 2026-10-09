@@ -16,7 +16,7 @@ firebase deploy --project alpha-ride-29708 --only firestore:indexes
 firebase deploy --project alpha-ride-29708 --only functions,hosting
 ```
 
-Wait for the ride_receipts service/date index to finish building before using service filters. adminGetCommissionDetails is admin-claim protected, uses Juba dates (UTC+2), exact filtered aggregate totals and 100-trip pagination. Search applies to loaded trips; Load more expands those results. New receipts freeze the car/driver summary; older receipts explicitly label the fallback as current profile information.
+Retain existing project indexes during deployment; decline removal of indexes maintained outside this file. Wait for the ride_receipts service/date and aggregation indexes to finish building before using service filters. adminGetCommissionDetails is admin-claim protected, uses Juba dates (UTC+2), exact filtered aggregate totals and 100-trip pagination. Search applies to loaded trips; Load more expands those results. New receipts freeze the car/driver summary; older receipts explicitly label the fallback as current profile information.
 
 releaseFinishedDriverPresence retries terminal ride cleanup if the callable's RTDB update fails. It only clears a matching ride ID and preserves the driver's online/offline choice.
 
