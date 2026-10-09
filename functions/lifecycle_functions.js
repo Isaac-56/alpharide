@@ -8,7 +8,7 @@ const {
 const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 const {
@@ -561,12 +561,13 @@ exports.updateRideStatus = onCall(
             actualDestinationPoint,
             plannedDestination,
           );
-          const endedEarly = completionPoint != null &&
-            distanceToPlannedDestination > 150;
+          const destinationChanged = completionPoint != null && distanceToPlannedDestination > 150;
+          const endedEarly = destinationChanged &&
+            actualDistanceMeters < (rideSnapshot.get("routeDistanceMeters") ?? 0);
           const actualDestination = {
             ...actualDestinationPoint,
-            address: endedEarly
-              ? "Early drop-off location"
+            address: destinationChanged
+              ? "Customer-selected drop-off location"
               : plannedDestination?.address ?? "Trip destination",
           };
           const waitingStartedAt = rideSnapshot.get("waitingStartedAt");
@@ -643,7 +644,7 @@ exports.updateRideStatus = onCall(
             endedEarly,
             completionReason: endedEarly
               ? "passenger_requested_early_dropoff"
-              : "destination_reached",
+              : destinationChanged ? "passenger_changed_dropoff" : "destination_reached",
             lastTrackedLocation: actualDestination,
             lastTrackedAt: now,
           });
@@ -988,13 +989,11 @@ exports.setRideWaiting = onCall(
 
 // Retry terminal cleanup independently of the caller's network connection.
 // Matching the ride ID prevents a delayed event from clearing a newer trip.
-exports.releaseFinishedDriverPresence = onDocumentUpdated(
-  { document: "rides/{rideId}", region: REGION, retry: true },
+exports.releaseFinishedDriverPresence = onDocumentDeleted(
+  { document: "active_driver_rides/{driverId}", region: REGION, retry: true },
   async (event) => {
-    const before = event.data?.before.data();
-    const after = event.data?.after.data();
-    if (!after || before?.status === after.status ||
-        !["completed", "cancelled"].includes(after.status) || !after.driverId) return;
-    await syncDriverPresenceRide(after.driverId, event.params.rideId, true);
+    const rideId = event.data?.get("rideId");
+    if (typeof rideId !== "string" || !rideId) return;
+    await syncDriverPresenceRide(event.params.driverId, rideId, true);
   },
 );
