@@ -272,3 +272,10 @@ test("completed rides reject missing or invalid trusted fares", () => {
     /missing a valid trusted fare/,
   );
 });
+
+test("zero movement and longer detours use actual distance instead of the quote", () => {
+  const farePolicy = { minimumFare: 10000, baseFare: 10000, perKilometer: 9000, waitingPerMinute: 100 };
+  assert.equal(resolveCompletedRideFare({ estimatedFare: 100000, rideOptionId: "standard", actualDistanceMeters: 0, farePolicy }), 10000);
+  assert.equal(resolveCompletedRideFare({ estimatedFare: 20000, rideOptionId: "standard", actualDistanceMeters: 10000, waitingCharge: 200, farePolicy }), 100200);
+  assert.equal(resolveCompletedRideFare({ estimatedFare: 20000, finalFare: 25000, rideOptionId: "standard", actualDistanceMeters: 10000, farePolicy }), 25000);
+});

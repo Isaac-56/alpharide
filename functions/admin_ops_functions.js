@@ -31,7 +31,7 @@ const ACTIVE_RIDE_STATUSES = [
 ];
 const db = getFirestore();
 const realtimeDb = getDatabase();
-const FINANCE_CATEGORIES = ["standard", "boda", "rickshaw", "comfort", "premium"];
+const { FINANCE_CATEGORIES, commissionFilters } = require("./commission_logic");
 
 function requireAdmin(request) {
   if (!request.auth?.uid) {
@@ -721,3 +721,54 @@ exports.adminGetCommissionReport = callable(async () => {
     generatedAtMillis: Date.now(),
   };
 }, "The commission report could not be loaded.");
+
+
+// Filter and page the immutable completed-ride ledger, never active estimates.
+exports.adminGetCommissionDetails = callable(async (request) => {
+  const input = request.data ?? {};
+  const { category, startMillis, endMillis } = commissionFilters(input);
+  const start = startMillis == null ? null : Timestamp.fromMillis(startMillis);
+  const end = endMillis == null ? null : Timestamp.fromMillis(endMillis);
+  let query = db.collection("ride_receipts");
+  if (start) query = query.where("completedAt", ">=", start);
+  if (end) query = query.where("completedAt", "<", end);
+  if (category) query = query.where("rideOptionId", "==", category);
+  const ordered = query.orderBy("completedAt", "desc");
+  let page = ordered.orderBy("__name__", "desc");
+  if (input.cursor) {
+    const cursorId = validateRideId(input.cursor);
+    const cursor = await db.collection("ride_receipts").doc(cursorId).get();
+    if (!cursor.exists) throw new TypeError("This page has expired. Refresh the report.");
+    page = page.startAfter(cursor);
+  }
+  const [snapshot, aggregate] = await Promise.all([
+    page.limit(101).get(),
+    ordered.aggregate({ amount: AggregateField.sum("platformFee"), count: AggregateField.count() }).get(),
+  ]);
+  const documents = snapshot.docs.slice(0, 100);
+  const missingIds = [...new Set(documents.filter((doc) => !doc.get("driverSummary")).map((doc) => text(doc.get("driverId"))).filter(Boolean))];
+  const profiles = missingIds.length ? await db.getAll(...missingIds.map((id) => db.collection("drivers").doc(id))) : [];
+  const currentProfiles = new Map(profiles.map((doc) => [doc.id, doc.data() ?? {}]));
+  return {
+    totalCommission: number(aggregate.data().amount),
+    totalRides: number(aggregate.data().count),
+    currencyCode: "SSP",
+    nextCursor: snapshot.size > 100 ? documents.at(-1).id : null,
+    receipts: documents.map((doc) => {
+      const data = doc.data();
+      const profile = currentProfiles.get(text(data.driverId)) ?? {};
+      const summary = data.driverSummary ?? { ...profile.registration, displayName: profileName(profile) };
+      return {
+        receiptId: doc.id, receiptNumber: text(data.receiptNumber), rideId: text(data.rideId) || doc.id,
+        driverId: text(data.driverId), driverName: text(summary.displayName) || [text(summary.firstName), text(summary.lastName)].filter(Boolean).join(" "),
+        plateNumber: text(summary.plateNumber), vehicle: [text(summary.make), text(summary.model), text(summary.color)].filter(Boolean).join(" · "),
+        vehicleDetailsSource: data.driverSummary ? "trip" : "current profile",
+        passengerId: text(data.passengerId), rideOptionId: text(data.rideOptionId),
+        pickupAddress: text(data.pickup?.address), destinationAddress: text(data.destination?.address),
+        finalFare: number(data.finalFare), platformFee: number(data.platformFee), driverNetFare: number(data.driverNetFare),
+        paymentMethod: text(data.paymentMethod), routeDistanceMeters: number(data.routeDistanceMeters),
+        waitingCharge: number(data.waitingCharge), completedAtMillis: millis(data.completedAt), currencyCode: text(data.currencyCode) || "SSP",
+      };
+    }),
+  };
+}, "The commission details could not be loaded.");

@@ -8,6 +8,7 @@ const {
 const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 const {
@@ -42,7 +43,7 @@ const realtimeDb = getDatabase();
 const STALE_RIDE_CANCELLATION_REASON =
   "Automatically closed after 24 hours without trip activity.";
 
-async function syncDriverPresenceRide(driverId, rideId, completed) {
+async function syncDriverPresenceRide(driverId, rideId, completed, completionPoint = null) {
   const reference = realtimeDb.ref(`driver_locations/${driverId}`);
   if (!completed) {
     await reference.update({ activeRideId: rideId, updatedAt: Date.now() });
@@ -52,7 +53,11 @@ async function syncDriverPresenceRide(driverId, rideId, completed) {
   await reference.transaction((current) => {
     if (!current || typeof current !== "object") return;
     if (current.activeRideId !== rideId) return;
-    const next = { ...current, updatedAt: Date.now() };
+    const next = { ...current, updatedAt: Date.now(), lastUpdated: Date.now() };
+    if (completionPoint) {
+      next.latitude = completionPoint.latitude;
+      next.longitude = completionPoint.longitude;
+    }
     delete next.activeRideId;
     return next;
   });
@@ -556,12 +561,13 @@ exports.updateRideStatus = onCall(
             actualDestinationPoint,
             plannedDestination,
           );
-          const endedEarly = completionPoint != null &&
-            distanceToPlannedDestination > 150;
+          const destinationChanged = completionPoint != null && distanceToPlannedDestination > 150;
+          const endedEarly = destinationChanged &&
+            actualDistanceMeters < (rideSnapshot.get("routeDistanceMeters") ?? 0);
           const actualDestination = {
             ...actualDestinationPoint,
-            address: endedEarly
-              ? "Early drop-off location"
+            address: destinationChanged
+              ? "Customer-selected drop-off location"
               : plannedDestination?.address ?? "Trip destination",
           };
           const waitingStartedAt = rideSnapshot.get("waitingStartedAt");
@@ -595,7 +601,8 @@ exports.updateRideStatus = onCall(
             finalFare: rideSnapshot.get("finalFare"),
             waitingCharge: resolvedWaitingCharge,
             rideOptionId: rideSnapshot.get("rideOptionId"),
-            actualDistanceMeters,
+            actualDistanceMeters: completionPoint || rideSnapshot.get("lastTrackedLocation")
+              ? actualDistanceMeters : undefined,
             farePolicy: rideSnapshot.get("farePolicy") ?? farePolicyFor(
               {},
               rideSnapshot.get("rideOptionId"),
@@ -637,7 +644,7 @@ exports.updateRideStatus = onCall(
             endedEarly,
             completionReason: endedEarly
               ? "passenger_requested_early_dropoff"
-              : "destination_reached",
+              : destinationChanged ? "passenger_changed_dropoff" : "destination_reached",
             lastTrackedLocation: actualDestination,
             lastTrackedAt: now,
           });
@@ -723,6 +730,7 @@ exports.updateRideStatus = onCall(
             passengerId,
             driverId,
             rideOptionId: rideSnapshot.get("rideOptionId"),
+            driverSummary: rideSnapshot.get("driverSummary") ?? null,
             pickup: rideSnapshot.get("pickup"),
             destination: rideUpdate.actualDestination,
             plannedDestination: rideSnapshot.get("destination"),
@@ -781,6 +789,7 @@ exports.updateRideStatus = onCall(
         driverId,
         rideId,
         resolvedStatus === "completed",
+        completionPoint,
       ).catch((presenceError) => {
         logger.warn("Could not synchronize active driver presence", {
           rideId,
@@ -974,5 +983,17 @@ exports.setRideWaiting = onCall(
         "Customer waiting time could not be updated right now.",
       );
     }
+  },
+);
+
+
+// Retry terminal cleanup independently of the caller's network connection.
+// Matching the ride ID prevents a delayed event from clearing a newer trip.
+exports.releaseFinishedDriverPresence = onDocumentDeleted(
+  { document: "active_driver_rides/{driverId}", region: REGION, retry: true },
+  async (event) => {
+    const rideId = event.data?.get("rideId");
+    if (typeof rideId !== "string" || !rideId) return;
+    await syncDriverPresenceRide(event.params.driverId, rideId, true);
   },
 );
