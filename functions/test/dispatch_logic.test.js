@@ -7,6 +7,7 @@ const {
   ACCEPTANCE_PICKUP_RADIUS_METERS,
   DISPATCH_RADIUS_METERS,
   PRESENCE_FRESH_MS,
+  approvedDriverPhotoStoragePath,
   buildDriverPublicSummary,
   haversineDistanceMeters,
   normalizeVehicleType,
@@ -385,6 +386,78 @@ test("public driver summary falls back safely when profile data is absent", () =
 test("public driver summary rejects malformed phone numbers", () => {
   assert.equal(
     buildDriverPublicSummary({ phoneNumber: "not-a-phone" }).phoneNumber,
+    "",
+  );
+});
+
+test("assigned passengers can access only an approved driver photo", () => {
+  const ride = {
+    passengerId: "passenger-7",
+    driverId: "driver-7",
+    status: "driver_arriving",
+  };
+  const storagePath =
+    "drivers/driver-7/documents/photo_checks/approved-photo.jpg";
+
+  assert.equal(
+    approvedDriverPhotoStoragePath({
+      ride,
+      passengerId: "passenger-7",
+      photoCheck: {
+        driverId: "driver-7",
+        status: "approved",
+        storagePath,
+      },
+    }),
+    storagePath,
+  );
+  assert.equal(
+    approvedDriverPhotoStoragePath({
+      ride,
+      passengerId: "another-passenger",
+      photoCheck: { status: "approved", storagePath },
+    }),
+    "",
+  );
+  assert.equal(
+    approvedDriverPhotoStoragePath({
+      ride,
+      passengerId: "passenger-7",
+      photoCheck: { status: "pending", storagePath },
+    }),
+    "",
+  );
+});
+
+test("driver photo access rejects unrelated storage paths and inactive rides", () => {
+  assert.equal(
+    approvedDriverPhotoStoragePath({
+      ride: {
+        passengerId: "passenger-7",
+        driverId: "driver-7",
+        status: "completed",
+      },
+      passengerId: "passenger-7",
+      photoCheck: {
+        status: "approved",
+        storagePath: "drivers/driver-7/documents/photo_checks/photo.jpg",
+      },
+    }),
+    "",
+  );
+  assert.equal(
+    approvedDriverPhotoStoragePath({
+      ride: {
+        passengerId: "passenger-7",
+        driverId: "driver-7",
+        status: "accepted",
+      },
+      passengerId: "passenger-7",
+      photoCheck: {
+        status: "approved",
+        storagePath: "drivers/another-driver/private/photo.jpg",
+      },
+    }),
     "",
   );
 });

@@ -74,6 +74,23 @@ class RideService {
     }
   }
 
+  Future<String?> getAssignedDriverPhotoUrl(String rideId) async {
+    try {
+      final HttpsCallable callable =
+          _functions.httpsCallable('getAssignedDriverPhoto');
+      final HttpsCallableResult<dynamic> result = await callable.call<dynamic>(
+        <String, dynamic>{'rideId': rideId},
+      );
+      final Object? raw = result.data;
+      if (raw is! Map) return null;
+      final Object? rawPhotoUrl = raw['photoUrl'];
+      if (rawPhotoUrl is! String || rawPhotoUrl.trim().isEmpty) return null;
+      return rawPhotoUrl.trim();
+    } on FirebaseFunctionsException catch (error) {
+      throw _fromFunctionsException(error);
+    }
+  }
+
   Stream<RideLiveState?> watchRide(String rideId) {
     return _firestore
         .collection('rides')

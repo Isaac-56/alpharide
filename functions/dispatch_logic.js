@@ -74,6 +74,44 @@ function buildDriverPublicSummary(profile) {
   });
 }
 
+function approvedDriverPhotoStoragePath({ ride, passengerId, photoCheck }) {
+  if (!ride || typeof ride !== "object" || Array.isArray(ride)) return "";
+  if (!photoCheck || typeof photoCheck !== "object" || Array.isArray(photoCheck)) {
+    return "";
+  }
+
+  const normalizedPassengerId = _publicText(passengerId, 160);
+  const ridePassengerId = _publicText(ride.passengerId, 160);
+  const driverId = _publicText(ride.driverId, 160);
+  const rideStatus = _publicText(ride.status, 40).toLowerCase();
+  const activeStatuses = new Set([
+    "accepted",
+    "driver_arriving",
+    "arrived",
+    "in_progress",
+  ]);
+
+  if (
+    !normalizedPassengerId ||
+    normalizedPassengerId !== ridePassengerId ||
+    !driverId ||
+    !activeStatuses.has(rideStatus) ||
+    _publicText(photoCheck.status, 40).toLowerCase() !== "approved"
+  ) {
+    return "";
+  }
+
+  const photoDriverId = _publicText(photoCheck.driverId, 160);
+  if (photoDriverId && photoDriverId !== driverId) return "";
+
+  const storagePath = _publicText(photoCheck.storagePath, 500);
+  const requiredPrefix = `drivers/${driverId}/documents/photo_checks/`;
+  if (!storagePath.startsWith(requiredPrefix)) return "";
+  if (!/\.(?:jpe?g|png|webp)$/i.test(storagePath)) return "";
+
+  return storagePath;
+}
+
 function haversineDistanceMeters(first, second) {
   const earthRadiusMeters = 6371000;
   const toRadians = (degrees) => (degrees * Math.PI) / 180;
@@ -309,6 +347,7 @@ module.exports = {
   OFFER_WINDOW_MS,
   PRESENCE_CANDIDATE_SCAN_LIMIT,
   PRESENCE_FRESH_MS,
+  approvedDriverPhotoStoragePath,
   buildDriverPublicSummary,
   haversineDistanceMeters,
   normalizeVehicleType,
