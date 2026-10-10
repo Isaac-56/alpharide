@@ -1317,8 +1317,7 @@ exports.cancelRide = onCall(
       const activeRideRef = db
         .collection("active_passenger_rides")
         .doc(passengerId);
-      let offeredDriverIds = [];
-      let assignedDriverId = null;
+      const cancellationStartedAt = Date.now();
 
       await db.runTransaction(async (transaction) => {
         const [rideSnapshot, activeSnapshot] = await Promise.all([
@@ -1334,11 +1333,11 @@ exports.cancelRide = onCall(
           );
         }
 
-        offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+        const offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
           ? rideSnapshot.get("offeredDriverIds")
           : [];
         const rawDriverId = rideSnapshot.get("driverId");
-        assignedDriverId =
+        const assignedDriverId =
           typeof rawDriverId === "string" && rawDriverId.trim()
             ? rawDriverId.trim()
             : null;
@@ -1349,39 +1348,37 @@ exports.cancelRide = onCall(
           ? await transaction.get(activeDriverRef)
           : null;
         const status = rideSnapshot.get("status");
-        if (status === "cancelled") {
-          if (
-            activeSnapshot.exists &&
-            activeSnapshot.get("rideId") === rideId
-          ) {
-            transaction.delete(activeRideRef);
-          }
-          if (
-            activeDriverRef &&
-            activeDriverSnapshot?.exists &&
-            activeDriverSnapshot.get("rideId") === rideId
-          ) {
-            transaction.delete(activeDriverRef);
-          }
-          return;
-        }
-        if (!isCancellableBeforePickup(status)) {
+        if (status !== "cancelled" && !isCancellableBeforePickup(status)) {
           throw new HttpsError(
             "failed-precondition",
             "This ride can no longer be cancelled from the passenger app.",
           );
         }
 
-        transaction.update(rideRef, {
-          status: "cancelled",
-          offerExpiresAt: null,
-          isWaiting: false,
-          waitingStartedAt: null,
-          cancelledBy: "passenger",
-          cancellationReason,
-          cancelledAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+        // Close offers with the ride itself: no second batch or race with
+        // acceptance, and the callable can return as soon as this commits.
+        const driverIds = new Set(offeredDriverIds);
+        if (assignedDriverId) driverIds.add(assignedDriverId);
+        for (const driverId of driverIds) {
+          if (typeof driverId !== "string" || !driverId) continue;
+          transaction.set(offerReference(driverId, rideId), {
+            status: "cancelled",
+            respondedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+
+        if (status !== "cancelled") {
+          transaction.update(rideRef, {
+            status: "cancelled",
+            offerExpiresAt: null,
+            isWaiting: false,
+            waitingStartedAt: null,
+            cancelledBy: "passenger",
+            cancellationReason,
+            cancelledAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
         if (
           activeSnapshot.exists &&
           activeSnapshot.get("rideId") === rideId
@@ -1397,37 +1394,12 @@ exports.cancelRide = onCall(
         }
       });
 
-      if (
-        assignedDriverId &&
-        !offeredDriverIds.includes(assignedDriverId)
-      ) {
-        offeredDriverIds.push(assignedDriverId);
-      }
-
-      const cleanupTasks = [
-        markOffers(rideId, offeredDriverIds, "cancelled").catch(
-          (cleanupError) => {
-            logger.warn("Could not close cancelled ride offers", {
-              rideId,
-              error: cleanupError,
-            });
-          },
-        ),
-      ];
-      if (assignedDriverId) {
-        cleanupTasks.push(
-          clearDriverPresenceBusy(assignedDriverId, rideId).catch(
-            (cleanupError) => {
-              logger.warn("Could not clear cancelled driver presence", {
-                rideId,
-                driverId: assignedDriverId,
-                error: cleanupError,
-              });
-            },
-          ),
-        );
-      }
-      await Promise.all(cleanupTasks);
+      // Deleting the driver lock invokes releaseFinishedDriverPresence,
+      // which retries and only clears presence still assigned to this ride.
+      logger.info("Passenger ride cancellation committed", {
+        rideId,
+        elapsedMs: Date.now() - cancellationStartedAt,
+      });
       return { rideId, status: "cancelled" };
     } catch (error) {
       throw callableError(error, "Unable to cancel the ride.");
