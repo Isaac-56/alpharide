@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, getIdTokenResult, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
-import { getBlob, getStorage, ref as storageRef } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBQfe36JwUXD4-Xq9_ky2IQD3mLwOORUhk",
@@ -14,13 +13,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const storage = getStorage(app);
 const functions = getFunctions(app, "africa-south1");
 const call = (name) => httpsCallable(functions, name);
 const api = {
   overview: call("adminGetOperationsOverview"),
   drivers: call("adminListDrivers"),
   driverReview: call("adminGetDriverReview"),
+  driverDocument: httpsCallable(functions, "adminGetDriverDocument", { timeout: 25000 }),
   rides: call("adminListRides"),
   cancelInProgressRide: call("adminCancelInProgressRide"),
   receipts: call("adminListReceipts"),
@@ -230,23 +229,39 @@ function detailRows(container, values) {
 }
 
 function resetDocumentPreview(link, image, status, placeholder, message) {
+  image.onload = null; image.onerror = null;
   if (link.dataset.objectUrl) URL.revokeObjectURL(link.dataset.objectUrl);
   delete link.dataset.objectUrl;
   link.hidden = true; link.removeAttribute("href"); image.removeAttribute("src");
   status.textContent = message; placeholder.textContent = message; placeholder.hidden = false;
 }
 
-async function renderDocumentPreview({ path, link, image, status, placeholder, renderId }) {
+async function renderDocumentPreview({ path, kind, driverId, link, image, status, placeholder, renderId }) {
   if (!path) {
     resetDocumentPreview(link, image, status, placeholder, "Not uploaded");
     return;
   }
   resetDocumentPreview(link, image, status, placeholder, "Loading secure image…");
   try {
-    const blob = await getBlob(storageRef(storage, path), 10 * 1024 * 1024);
+    const result = await api.driverDocument({ driverId, kind });
+    const { base64, contentType } = result.data || {};
+    if (typeof base64 !== "string" || !["image/jpeg", "image/png"].includes(contentType)) {
+      throw new Error("The document response is invalid. Try again.");
+    }
+    const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+    const blob = new Blob([bytes], { type: contentType });
     if (renderId !== documentRenderId) return;
     const url = URL.createObjectURL(blob); link.dataset.objectUrl = url;
-    link.href = url; image.src = url; link.hidden = false; placeholder.hidden = true; status.textContent = "Uploaded — open full size";
+    image.onload = () => {
+      if (renderId !== documentRenderId) return;
+      link.hidden = false; placeholder.hidden = true;
+      status.textContent = "Uploaded — open full size";
+    };
+    image.onerror = () => {
+      if (renderId !== documentRenderId) return;
+      resetDocumentPreview(link, image, status, placeholder, "The uploaded image could not be displayed. Ask the driver to upload it again.");
+    };
+    link.href = url; image.src = url;
   } catch (error) {
     if (renderId !== documentRenderId) return;
     resetDocumentPreview(link, image, status, placeholder, "Image unavailable");
@@ -305,9 +320,9 @@ function renderDriverReview(review) {
   ]);
   const licence = review.documents?.driverLicence || {};
   const identityPhoto = review.documents?.identityPhoto || {};
-  void renderDocumentPreview({ path: licence.frontStoragePath, link: el.licenceFrontLink, image: el.licenceFrontImage, status: el.licenceFrontStatus, placeholder: el.licenceFrontPlaceholder, renderId });
-  void renderDocumentPreview({ path: licence.backStoragePath, link: el.licenceBackLink, image: el.licenceBackImage, status: el.licenceBackStatus, placeholder: el.licenceBackPlaceholder, renderId });
-  void renderDocumentPreview({ path: identityPhoto.storagePath, link: el.identityPhotoLink, image: el.identityPhotoImage, status: el.identityPhotoStatus, placeholder: el.identityPhotoPlaceholder, renderId });
+  void renderDocumentPreview({ path: licence.frontStoragePath, kind: "front", driverId: selectedDriverId, link: el.licenceFrontLink, image: el.licenceFrontImage, status: el.licenceFrontStatus, placeholder: el.licenceFrontPlaceholder, renderId });
+  void renderDocumentPreview({ path: licence.backStoragePath, kind: "back", driverId: selectedDriverId, link: el.licenceBackLink, image: el.licenceBackImage, status: el.licenceBackStatus, placeholder: el.licenceBackPlaceholder, renderId });
+  void renderDocumentPreview({ path: identityPhoto.storagePath, kind: "identity", driverId: selectedDriverId, link: el.identityPhotoLink, image: el.identityPhotoImage, status: el.identityPhotoStatus, placeholder: el.identityPhotoPlaceholder, renderId });
   el.identityPhotoMeta.textContent = identityPhoto.storagePath
     ? `${identityPhoto.status === "approved" ? "Approved" : "Awaiting final admin review"} · submitted ${dateTime(identityPhoto.submittedAtMillis)}${identityPhoto.reviewerMessage ? ` · ${identityPhoto.reviewerMessage}` : ""}`
     : "The driver must submit a live identity photo before approval.";

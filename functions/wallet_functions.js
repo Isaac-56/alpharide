@@ -1,6 +1,8 @@
 "use strict";
 
 const { getAuth } = require("firebase-admin/auth");
+const { getStorage } = require("firebase-admin/storage");
+const { createAdminDocumentLoader } = require("./admin_document_logic");
 const {
   FieldValue,
   getFirestore,
@@ -711,3 +713,8 @@ exports.adminListWalletTransactions = callable(async (request) => {
 }, "The wallet history could not be loaded.");
 
 module.exports.walletPayload = walletPayload;
+
+exports.adminGetDriverDocument = callable(
+  createAdminDocumentLoader({ requireAdmin, db, storage: getStorage(), HttpsError }),
+  "The driver document could not be loaded. Try again.",
+);
