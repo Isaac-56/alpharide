@@ -1,3 +1,6 @@
+// SDK interfaces are implemented only by test doubles.
+// ignore_for_file: subtype_of_sealed_class
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,11 +20,19 @@ class _Snapshot extends Fake implements DocumentSnapshot<Map<String, dynamic>> {
   };
 }
 
+class _SessionValues {
+  String cachedSession = 'local-session';
+  String serverSession = 'local-session';
+}
+
 class _Document extends Fake
     implements DocumentReference<Map<String, dynamic>> {
   final List<Source?> reads = <Source?>[];
-  String cachedSession = 'local-session';
-  String serverSession = 'local-session';
+  final _SessionValues values = _SessionValues();
+  String get cachedSession => values.cachedSession;
+  set cachedSession(String value) => values.cachedSession = value;
+  String get serverSession => values.serverSession;
+  set serverSession(String value) => values.serverSession = value;
   @override
   Future<DocumentSnapshot<Map<String, dynamic>>> get([
     GetOptions? options,

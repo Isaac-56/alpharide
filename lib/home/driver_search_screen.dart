@@ -116,8 +116,9 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         !_isSearching ||
         _isCancelling ||
         _terminalHandled ||
-        _dispatchRetryInFlight)
+        _dispatchRetryInFlight) {
       return;
+    }
     _dispatchRetryInFlight = true;
     try {
       await _rideService.retryDriverMatching(widget.rideId);
