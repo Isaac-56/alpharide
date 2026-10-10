@@ -11,6 +11,8 @@ const { PLATFORM_COMMISSION_BPS } = require("./accounting_logic");
 const SEARCH_WINDOW_MS = 180000;
 const NO_CANDIDATE_RETRY_MS = 10000;
 const LEASE_MS = 45000;
+const UNANSWERED_RETRY_COOLDOWN_MS = 60000;
+const MAX_OFFERS_PER_DRIVER = 2;
 const searching = (status) => status === "requested" || status === "offered";
 const ids = (value) => Array.isArray(value)
   ? [...new Set(value.filter((id) => typeof id === "string" && id && !id.includes("/")))] : [];
@@ -58,7 +60,16 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
     const commissionBps = ride.platformCommissionBps ?? PLATFORM_COMMISSION_BPS;
     const attempted = ids(ride.attemptedDriverIds);
     const previousIds = ids(ride.offeredDriverIds);
-    const excluded = new Set([...attempted, ...previousIds, ...ids(ride.rejectedDriverIds)]);
+    const lastOffers = ride.driverLastOfferAtMs ?? {};
+    const offerCounts = ride.driverOfferCounts ?? {};
+    const excluded = new Set(ids(ride.rejectedDriverIds));
+    for (const driverId of new Set([...attempted, ...previousIds])) {
+      const lastOffer = Number(lastOffers[driverId]) || millis(ride.dispatchAttemptedAt) || nowMs;
+      const count = Number(offerCounts[driverId]) || 1;
+      if (count >= MAX_OFFERS_PER_DRIVER || nowMs - lastOffer < UNANSWERED_RETRY_COOLDOWN_MS) {
+        excluded.add(driverId);
+      }
+    }
     try {
       const presence = await realtimeDb.ref("driver_locations").get();
       const candidates = selectPresenceCandidates({
@@ -99,6 +110,7 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
       }
       let offered = [];
       const result = await db.runTransaction(async (tx) => {
+        offered = [];
         const current = await tx.get(rideRef);
         if (!current.exists || !searching(current.get("status")) || current.get("dispatchLeaseToken") !== token) {
           return current.exists ? current.get("status") : "missing";
@@ -133,11 +145,18 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
           });
         }
         const driverIds = offered.map((candidate) => candidate.driverId);
+        const nextLastOffers = { ...lastOffers };
+        const nextOfferCounts = { ...offerCounts };
+        for (const driverId of driverIds) {
+          nextLastOffers[driverId] = commitMs;
+          nextOfferCounts[driverId] = (Number(offerCounts[driverId]) || (attempted.includes(driverId) ? 1 : 0)) + 1;
+        }
         const nextStatus = driverIds.length ? "offered" : "requested";
         tx.update(rideRef, {
           status: nextStatus, offeredDriverIds: driverIds,
           attemptedDriverIds: [...new Set([...attempted, ...previousIds, ...driverIds])],
           offerExpiresAt: expiry, dispatchLeaseUntil: null, dispatchRound: round,
+          driverLastOfferAtMs: nextLastOffers, driverOfferCounts: nextOfferCounts,
           dispatchState: driverIds.length ? "offers_created" : "waiting_for_drivers",
           dispatchCandidateCount: driverIds.length, dispatchScannedCandidateCount: scanned,
           dispatchExclusionCounts: exclusionCounts,

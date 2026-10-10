@@ -154,3 +154,29 @@ test("one malformed wallet cannot block the rest of the nearby fleet", async () 
   await h.dispatch();
   assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver1"]);
 });
+
+test("an unanswered driver gets one retry after cooldown, not an endless notification loop", async () => {
+  const h = harness(1);
+  await h.dispatch();
+  h.advance(30001);
+  assert.equal(await h.dispatch(), "requested");
+  assert.equal(h.sent.length, 1);
+  h.advance(30001);
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.sent.length, 2);
+  h.advance(60001);
+  assert.equal(await h.dispatch(), "requested");
+  assert.equal(h.sent.length, 2);
+});
+
+test("a driver becoming busy during verification is skipped at publication", async () => {
+  const h = harness(1);
+  const getAll = h.db.getAll;
+  h.db.getAll = async (...refs) => {
+    const snapshots = await getAll(...refs);
+    h.docs.set("active_driver_rides/driver0", { rideId: "another-ride" });
+    return snapshots;
+  };
+  assert.equal(await h.dispatch(), "requested");
+  assert.equal(h.sent.length, 0);
+});
