@@ -16,4 +16,21 @@ function commissionFilters(input = {}) {
   if (startMillis != null && endMillis != null && startMillis >= endMillis) throw new RangeError("Start date must precede end date.");
   return { category, startMillis, endMillis };
 }
-module.exports = { FINANCE_CATEGORIES, commissionFilters, commissionDateMillis };
+// Use the same indexed receipt query for totals and rows. Sum aggregations add
+// a separate platformFee index requirement and can fail while rows are readable.
+async function commissionQueryTotals(query) {
+  let amount = 0;
+  let count = 0;
+  let next = query.select("platformFee", "completedAt").limit(500);
+  while (true) {
+    const page = await next.get();
+    for (const doc of page.docs) {
+      const fee = doc.get("platformFee");
+      if (typeof fee === "number" && Number.isFinite(fee)) amount += fee;
+      count++;
+    }
+    if (page.size < 500) return { amount, count };
+    next = query.select("platformFee", "completedAt").startAfter(page.docs.at(-1)).limit(500);
+  }
+}
+module.exports = { commissionQueryTotals, FINANCE_CATEGORIES, commissionFilters, commissionDateMillis };

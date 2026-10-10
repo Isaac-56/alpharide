@@ -31,7 +31,7 @@ const ACTIVE_RIDE_STATUSES = [
 ];
 const db = getFirestore();
 const realtimeDb = getDatabase();
-const { FINANCE_CATEGORIES, commissionFilters } = require("./commission_logic");
+const { FINANCE_CATEGORIES, commissionFilters, commissionQueryTotals } = require("./commission_logic");
 
 function requireAdmin(request) {
   if (!request.auth?.uid) {
@@ -743,15 +743,15 @@ exports.adminGetCommissionDetails = callable(async (request) => {
   }
   const [snapshot, aggregate] = await Promise.all([
     page.limit(101).get(),
-    ordered.aggregate({ amount: AggregateField.sum("platformFee"), count: AggregateField.count() }).get(),
+    commissionQueryTotals(ordered),
   ]);
   const documents = snapshot.docs.slice(0, 100);
   const missingIds = [...new Set(documents.filter((doc) => !doc.get("driverSummary")).map((doc) => text(doc.get("driverId"))).filter(Boolean))];
   const profiles = missingIds.length ? await db.getAll(...missingIds.map((id) => db.collection("drivers").doc(id))) : [];
   const currentProfiles = new Map(profiles.map((doc) => [doc.id, doc.data() ?? {}]));
   return {
-    totalCommission: number(aggregate.data().amount),
-    totalRides: number(aggregate.data().count),
+    totalCommission: number(aggregate.amount),
+    totalRides: number(aggregate.count),
     currencyCode: "SSP",
     nextCursor: snapshot.size > 100 ? documents.at(-1).id : null,
     receipts: documents.map((doc) => {
