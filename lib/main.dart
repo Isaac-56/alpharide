@@ -91,56 +91,28 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   late final Stream<User?> _authStateChanges;
-  late final Future<void> _minimumSplashDuration;
 
   @override
   void initState() {
     super.initState();
     _authStateChanges = FirebaseAuth.instance.authStateChanges();
-    _minimumSplashDuration = Future<void>.delayed(
-      const Duration(milliseconds: 900),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _minimumSplashDuration,
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<void> splashSnapshot,
-      ) {
-        return StreamBuilder<User?>(
-          stream: _authStateChanges,
-          builder: (
-            BuildContext context,
-            AsyncSnapshot<User?> authSnapshot,
-          ) {
-            final bool splashComplete =
-                splashSnapshot.connectionState == ConnectionState.done;
-            final bool authReady =
-                authSnapshot.connectionState != ConnectionState.waiting;
-
-            if (!splashComplete || !authReady) {
-              return const LoadingScreen();
-            }
-
-            if (authSnapshot.hasError) {
-              return const LoginScreen();
-            }
-
-            final User? user = authSnapshot.data;
-
-            if (user == null) {
-              return const LoginScreen();
-            }
-
-            return ActiveSessionGate(
-              key: ValueKey<String>(user.uid),
-              user: user,
-            );
-          },
-        );
+    return StreamBuilder<User?>(
+      stream: _authStateChanges,
+      initialData: FirebaseAuth.instance.currentUser,
+      builder: (BuildContext context, AsyncSnapshot<User?> authSnapshot) {
+        if (authSnapshot.hasError) return const LoginScreen();
+        final User? user = authSnapshot.data;
+        if (user == null) {
+          if (authSnapshot.connectionState == ConnectionState.waiting) {
+            return const LoadingScreen();
+          }
+          return const LoginScreen();
+        }
+        return ActiveSessionGate(key: ValueKey<String>(user.uid), user: user);
       },
     );
   }
