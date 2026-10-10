@@ -1,0 +1,129 @@
+# Alpha Admin portal
+
+Alpha Admin is the office-only operations console for driver approval, prepaid
+wallet management, ride monitoring, and administrator auditing. It is hosted
+separately from the passenger and driver apps.
+
+## Security model
+
+- Staff sign in with Firebase Authentication email/password accounts.
+- An account must also have the custom claim `admin: true`.
+- Wallet credit, suspension and driver review actions use callable Cloud
+  Functions. The browser cannot write directly to driver wallets.
+- Driver licence images are read from Firebase Storage with the signed-in
+  administrator token. The portal does not create permanent public links.
+- Driver approval is blocked unless the Firebase-authenticated phone number,
+  registration details, onboarding state, and both licence images pass the
+  server-side readiness checks.
+- Every recharge stores the administrator UID/email, receipt reference,
+  before/after balances and timestamp in the driver's wallet ledger.
+- Driver apps have read-only access to their own wallet and ledger.
+- Never share an administrator account with a driver or place service-account
+  credentials in this repository.
+
+## Create the first administrator
+
+1. Create a staff email/password user in Firebase Authentication.
+2. Authenticate the Firebase CLI/Application Default Credentials on the trusted
+   office computer.
+3. From `functions`, run:
+
+   ```powershell
+   npm run admin:grant -- admin@example.com grant
+   ```
+
+4. Sign out of Alpha Admin and sign in again so the refreshed ID token contains
+   the new claim.
+
+To remove access:
+
+```powershell
+npm run admin:grant -- admin@example.com revoke
+```
+
+## Deploy
+
+From the AlphaRide repository root:
+
+```powershell
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"
+firebase use alpha-ride-29708
+firebase deploy --only "firestore:rules,storage,functions,hosting"
+Remove-Item Env:FUNCTIONS_DISCOVERY_TIMEOUT -ErrorAction SilentlyContinue
+```
+
+Firebase prints the Hosting URL when deployment completes.
+
+## Driver vehicle classification
+
+- Drivers register the physical vehicle they use: Sedan, Hatchback, SUV/4x4,
+  Minivan/MPV, Pickup, Boda boda, Bajaj/Tuk-tuk, or Scooter.
+- Alpha administrators assign regular cars to Standard, Comfort, EV, Premium,
+  or Corporate after inspecting the vehicle and documents.
+- Boda and Scooter registrations use the Boda passenger service automatically.
+- Bajaj/Tuk-tuk registrations use the Rickshaw passenger service automatically.
+- A new regular car cannot be approved or go online until its Alpha ride class
+  is assigned. Legacy `Car` profiles remain Standard until reclassified.
+
+## Driver approval procedure
+
+1. Select a pending driver in the Drivers workspace.
+2. Confirm that Firebase OTP is marked **Verified** and the profile phone
+   number matches the registration.
+3. Compare the submitted identity and vehicle details with the physical
+   driver, vehicle, and plate.
+4. Open and inspect both the front and back licence images.
+5. Assign one or more Alpha ride classes when the vehicle requires manual
+   classification.
+6. Record an approval or rejection note and save the review status.
+
+The approval button remains disabled while any required check is missing. The
+callable backend repeats the same checks, so bypassing the browser cannot
+approve an incomplete driver.
+
+## Office recharge procedure
+
+1. Search for the driver by name, phone or plate.
+2. Confirm the driver identity and received payment.
+3. Enter the exact SSP amount and a unique receipt/reference.
+4. Confirm the recharge and verify the new balance and ledger row.
+5. Give the driver the matching receipt.
+
+Do not manually edit `driver_wallets` in the Firebase Console. Use Alpha Admin
+so every balance change remains attributable and auditable.
+
+## Wallet enforcement
+
+- Balance must be positive before Alpha Plus can go online.
+- The estimated 10% Alpha fee must be covered before a driver receives or
+  accepts a ride offer.
+- The actual 10% fee is deducted atomically when a ride completes.
+- A balance below 20,000 SSP is marked low and shown as a recharge warning.
+- Suspended or exhausted wallets cannot work until an administrator resolves
+  the account or records a recharge.
+
+## Operations workspace
+
+The portal is organized into four responsive work areas:
+
+- **Overview** shows driver approvals, wallet exposure, active rides, completed
+  rides, and items that need office attention.
+- **Drivers** supports search and operational filters, vehicle classification,
+  approval, wallet suspension/restoration, quick recharge amounts, recharge
+  previews, confirmations, and per-driver wallet history.
+- **Rides** shows the latest ride requests, lifecycle status, assigned driver,
+  service class, fare, and recorded Alpha fee.
+- **Activity** records vehicle class changes, driver review decisions, wallet
+  recharges, and wallet access changes with the administrator identity.
+
+All sensitive actions require an administrator claim and execute through Cloud
+Functions. The overview, ride list, and activity endpoints are read-only.
+
+## Office safety checklist
+
+- Match the driver name, phone number, and vehicle before changing anything.
+- Use a unique receipt/reference for every recharge.
+- Read the new-balance preview and confirmation dialog before submitting.
+- Suspend access only when the operational reason has been verified.
+- Do not use the portal to alter fare policy; pricing remains controlled by the
+  trusted ride backend while the commercial policy is under review.

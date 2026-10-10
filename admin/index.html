@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Secure Alpha operations portal." />
+    <title>Alpha Admin</title>
+    <link rel="preconnect" href="https://www.gstatic.com" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section id="login-view" class="auth-shell">
+        <div class="auth-card">
+          <div class="brand-mark" aria-hidden="true">A</div>
+          <p class="eyebrow">ALPHA OPERATIONS</p>
+          <h1>Run Alpha from one place.</h1>
+          <p class="muted">Secure access for approved Alpha administrators only.</p>
+          <form id="login-form" class="stack">
+            <label>Work email<input id="email" type="email" autocomplete="username" required /></label>
+            <label>Password<input id="password" type="password" autocomplete="current-password" required /></label>
+            <button class="primary" type="submit">Sign in securely</button>
+          </form>
+          <p id="login-error" class="error" role="alert"></p>
+        </div>
+      </section>
+
+      <section id="admin-view" class="app-shell" hidden>
+        <aside class="sidebar">
+          <div class="sidebar-brand"><div class="brand-mark small">A</div><div><strong>Alpha Admin</strong><span>Operations console</span></div></div>
+          <nav class="nav-list" aria-label="Admin sections">
+            <button class="nav-item active" data-view="overview" type="button"><span>⌂</span>Overview</button>
+            <button class="nav-item" data-view="drivers" type="button"><span>♙</span>Drivers <b id="pending-nav-count" hidden></b></button>
+            <button class="nav-item" data-view="recharges" type="button"><span>＋</span>Recharges</button>
+            <button class="nav-item" data-view="rides" type="button"><span>↗</span>Rides</button>
+            <button class="nav-item" data-view="receipts" type="button"><span>▤</span>Receipts</button>
+            <button class="nav-item" data-view="finance" type="button"><span>⌁</span>Finance controls</button>
+            <button class="nav-item" data-view="commission-collected" type="button"><span>∑</span>Commission collected</button>
+            <button class="nav-item" data-view="activity" type="button"><span>≡</span>Activity</button>
+          </nav>
+          <div class="sidebar-foot"><span id="admin-email"></span><button id="sign-out" class="text-button" type="button">Sign out</button></div>
+        </aside>
+
+        <div class="workspace">
+          <header class="mobile-header"><div class="sidebar-brand"><div class="brand-mark small">A</div><strong>Alpha Admin</strong></div><button id="mobile-sign-out" class="text-button" type="button">Sign out</button></header>
+
+          <section class="page active" data-page="overview">
+            <div class="page-heading"><div><p class="eyebrow">LIVE OPERATIONS</p><h1>Good <span id="daypart">day</span></h1><p class="muted">Here is what needs attention across Alpha.</p></div><button id="refresh-overview" class="secondary" type="button">Refresh</button></div>
+            <div id="overview-stats" class="metric-grid"></div>
+            <div class="overview-grid">
+              <section class="panel"><div class="panel-heading"><div><h2>Needs attention</h2><p class="muted">Prioritized office actions</p></div></div><div id="attention-list" class="attention-list"></div></section>
+              <section class="panel"><div class="panel-heading"><div><h2>Today’s rides</h2><p class="muted">Current service health</p></div><button class="text-button jump" data-target="rides" type="button">View rides</button></div><div id="ride-breakdown" class="breakdown-list"></div></section>
+            </div>
+          </section>
+
+          <section class="page" data-page="drivers">
+            <div class="page-heading"><div><p class="eyebrow">DRIVER OPERATIONS</p><h1>Drivers</h1><p class="muted">Approve accounts, classify vehicles, and manage prepaid credit.</p></div><button id="refresh-drivers" class="secondary" type="button">Refresh</button></div>
+            <div class="driver-workspace">
+              <aside class="panel directory-panel">
+                <div class="filter-row"><label class="search"><span class="sr-only">Search drivers</span><input id="driver-search" type="search" placeholder="Search name, phone or plate" /></label><select id="driver-filter" aria-label="Filter drivers"><option value="all">All drivers</option><option value="pending">Pending approval</option><option value="low">Low wallet</option><option value="blocked">Blocked</option><option value="unclassified">Needs class</option></select></div>
+                <p id="driver-count" class="muted list-count">Loading…</p><div id="driver-list" class="driver-list" aria-live="polite"></div>
+              </aside>
+              <section class="panel detail-panel">
+                <div id="empty-state" class="empty-state"><div class="empty-icon">♙</div><h2>Select a driver</h2><p class="muted">Choose an account to review, approve, or recharge.</p></div>
+                <div id="driver-detail" hidden>
+                  <div class="driver-identity"><div><p class="eyebrow">DRIVER ACCOUNT</p><h2 id="driver-name"></h2><p id="driver-meta" class="muted"></p></div><span id="review-badge" class="badge"></span></div>
+                  <div class="stat-grid"><article class="stat-card wallet-stat"><span>Wallet balance</span><strong id="wallet-balance">0 SSP</strong><small id="wallet-status"></small></article><article class="stat-card"><span>Vehicle</span><strong id="vehicle-type">—</strong><small id="plate-number">—</small></article><article class="stat-card"><span>Lifetime recharges</span><strong id="wallet-credits">0 SSP</strong><small>Office-confirmed</small></article><article class="stat-card"><span>Alpha fees</span><strong id="wallet-debits">0 SSP</strong><small>Ride deductions</small></article></div>
+                  <section class="driver-review-section" aria-labelledby="driver-review-title">
+                    <div class="panel-heading"><div><h3 id="driver-review-title">Registration and document review</h3><p class="muted">Verify every item before approving this driver.</p></div><span id="review-readiness" class="review-readiness">Loading…</span></div>
+                    <div id="review-checklist" class="review-checklist" aria-live="polite"></div>
+                    <div class="review-info-grid">
+                      <article class="review-info-card"><h4>Identity</h4><dl id="identity-details"></dl></article>
+                      <article class="review-info-card"><h4>Vehicle</h4><dl id="vehicle-details"></dl></article>
+                      <article class="review-info-card"><h4>Driver’s licence</h4><dl id="licence-details"></dl></article>
+                    </div>
+                    <div class="document-grid">
+                      <article class="document-card"><div><h4>Licence front</h4><span id="licence-front-status">Loading…</span></div><a id="licence-front-link" target="_blank" rel="noopener" hidden><img id="licence-front-image" alt="Front of the selected driver’s licence" /></a><div id="licence-front-placeholder" class="document-placeholder">Loading secure image…</div></article>
+                      <article class="document-card"><div><h4>Licence back</h4><span id="licence-back-status">Loading…</span></div><a id="licence-back-link" target="_blank" rel="noopener" hidden><img id="licence-back-image" alt="Back of the selected driver’s licence" /></a><div id="licence-back-placeholder" class="document-placeholder">Loading secure image…</div></article>
+                      <article class="document-card identity-photo-card"><div><h4>Driver identity photo</h4><span id="identity-photo-status">Loading…</span></div><a id="identity-photo-link" target="_blank" rel="noopener" hidden><img id="identity-photo-image" alt="Identity photo submitted by the selected driver" /></a><div id="identity-photo-placeholder" class="document-placeholder">Loading secure image…</div><small id="identity-photo-meta" class="document-meta"></small></article>
+                    </div>
+                    <p class="document-note">Documents are loaded through the active administrator session. Do not download or share them outside the review process.</p>
+                  </section>
+                  <div class="action-card account-controls"><h3>Account controls</h3><p class="muted">Review changes are saved to the audit trail.</p><fieldset id="vehicle-classes" class="checkbox-field"><legend>Vehicle category and Alpha ride classes</legend><div class="checkbox-grid"><label><input type="checkbox" value="standard" />Standard</label><label><input type="checkbox" value="comfort" />Comfort</label><label><input type="checkbox" value="premium" />Premium</label><label><input type="checkbox" value="ev" />Electric (EV)</label><label><input type="checkbox" value="corporate" />Corporate</label><label><input type="checkbox" value="boda" data-fixed-category />Boda</label><label><input type="checkbox" value="rickshaw" data-fixed-category />Tuk-tuk</label></div></fieldset><small id="vehicle-class-hint" class="muted"></small><button id="save-vehicle-class" class="secondary full" type="button">Save ride classes</button><label class="review-note-field">Review note<textarea id="review-note" maxlength="240" placeholder="Add an approval or rejection note"></textarea></label><div class="control-pair"><label>Review status<select id="review-status"><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label><button id="save-review" class="secondary full" type="button">Save review status</button></div><div class="control-pair"><label>Wallet access<select id="wallet-status-select"><option value="active">Active</option><option value="suspended">Suspended</option></select></label><button id="save-wallet-status" class="secondary full" type="button">Save wallet access</button></div></div>
+                  <section class="ledger-section"><div class="panel-heading"><div><h3>Wallet history</h3><p class="muted">Recharges, ride fees and access changes.</p></div></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th><th>Reference</th></tr></thead><tbody id="ledger-body"></tbody></table></div></section>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="page" data-page="recharges">
+            <div class="page-heading"><div><p class="eyebrow">PREPAID DRIVER CREDIT</p><h1>Recharges</h1><p class="muted">Record office payments and keep a permanent recharge trail.</p></div><button id="refresh-recharges" class="secondary" type="button">Refresh</button></div>
+            <div class="settings-grid">
+              <form id="recharge-form" class="panel form-panel"><div class="card-title"><div><h2>New recharge</h2><p class="muted">Only record money after office payment is confirmed.</p></div><span class="secure-chip">Audited</span></div><label>Find driver<input id="recharge-search" type="search" autocomplete="off" placeholder="Search name, phone or plate" /></label><div id="recharge-results" class="recharge-results" role="listbox"></div><input id="recharge-driver" type="hidden" required /><div id="recharge-selection" class="selected-driver" hidden></div><div class="quick-amounts"><button type="button" data-recharge-amount="20000">20K</button><button type="button" data-recharge-amount="50000">50K</button><button type="button" data-recharge-amount="100000">100K</button></div><label>Amount (SSP)<input id="recharge-amount" type="number" min="1" step="1" inputmode="numeric" required /></label><label>Receipt number<input id="recharge-reference" readonly placeholder="Generated automatically after selecting a driver" /></label><label>Note <span class="optional">optional</span><textarea id="recharge-note" maxlength="240" placeholder="Cashier or payment details"></textarea></label><div id="recharge-page-preview" class="recharge-preview">Choose a driver and amount to preview the recharge.</div><button class="primary" type="submit">Confirm recharge</button></form>
+              <section class="panel table-panel"><div class="panel-heading"><div><h2>Recent recharges</h2><p class="muted">Office-confirmed wallet credits.</p></div></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Driver</th><th>Amount</th><th>Plate</th><th>Receipt</th><th>PDF</th></tr></thead><tbody id="recharges-body"></tbody></table></div></section>
+            </div>
+          </section>
+
+          <section class="page" data-page="rides">
+            <div class="page-heading"><div><p class="eyebrow">TRIP MONITORING</p><h1>Rides</h1><p class="muted">Monitor recent requests and completed trips.</p></div><button id="refresh-rides" class="secondary" type="button">Refresh</button></div>
+            <section class="panel"><div class="filter-row rides-filter"><label class="search"><span class="sr-only">Search rides</span><input id="ride-search" type="search" placeholder="Search ride, route, driver or passenger" /></label><select id="ride-filter"><option value="all">All statuses</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="expired">Expired</option></select></div><p id="ride-count" class="muted list-count"></p><div class="table-wrap"><table><thead><tr><th>Updated</th><th>Ride</th><th>Status</th><th>Service</th><th>Driver</th><th>Fare</th><th>Details</th></tr></thead><tbody id="rides-body"></tbody></table></div></section>
+          </section>
+
+          <section class="page" data-page="receipts">
+            <div class="page-heading"><div><p class="eyebrow">COMPLETED TRIPS</p><h1>Receipts</h1><p class="muted">Search official receipt numbers and completed ride totals.</p></div><button id="refresh-receipts" class="secondary" type="button">Refresh</button></div>
+            <section class="panel table-panel"><label class="search receipt-search"><span class="sr-only">Search receipts</span><input id="receipt-search" type="search" placeholder="Search receipt, ride, driver or passenger" /></label><p id="receipt-count" class="muted list-count"></p><div class="table-wrap"><table><thead><tr><th>Completed</th><th>Receipt</th><th>Service</th><th>Route</th><th>Fare</th><th>Alpha fee</th><th>Driver net</th><th>PDF</th></tr></thead><tbody id="receipts-body"></tbody></table></div></section>
+          </section>
+
+          <section class="page" data-page="finance">
+            <div class="page-heading"><div><p class="eyebrow">BUSINESS SETTINGS</p><h1>Finance controls</h1><p class="muted">Manage future ride fares, category commission and reference exchange rates.</p></div><button id="refresh-commission" class="secondary" type="button">Refresh</button></div>
+            <form id="commission-form" class="panel finance-form"><div id="finance-categories" class="finance-categories"></div><section class="exchange-panel"><h2>Reference exchange rates</h2><div class="finance-inputs"><label>1 USD in SSP<input id="exchange-usd" type="number" min="0" step="0.01" /></label><label>1 ETB in SSP<input id="exchange-etb" type="number" min="0" step="0.01" /></label></div></section><div id="commission-preview" class="recharge-preview">Changes apply to new quotes and rides only.</div><button class="primary" type="submit">Save finance controls</button></form>
+          </section>
+
+          <section class="page" data-page="commission-collected"><div class="page-heading"><div><p class="eyebrow">LIVE FINANCE</p><h1>Commission collected</h1><p class="muted">Track Alpha fees from completed rides.</p></div><button id="refresh-commission-collected" class="secondary" type="button">Refresh</button></div><div id="commission-stats" class="metric-grid"></div><section class="panel"><h2>Collected by service</h2><div id="commission-by-category" class="breakdown-list"></div></section><section class="panel"><h2>Completed trips</h2><form id="commission-filter-form" class="commission-filters"><label>From (Juba)<input id="commission-start" type="date"></label><label>Through (Juba)<input id="commission-end" type="date"></label><label>Service<select id="commission-service"><option value="">All services</option><option value="standard">Standard</option><option value="boda">Boda</option><option value="rickshaw">Rickshaw</option><option value="comfort">Comfort</option><option value="premium">Premium</option></select></label><button type="submit" class="secondary">Apply filters</button></form><label>Search loaded trips by driver, plate, receipt or route<input id="commission-search" type="search" placeholder="Driver name, car plate, receipt…"></label><p id="commission-detail-summary" class="muted" aria-live="polite"></p><div class="table-scroll"><table><thead><tr><th>Completed / receipt</th><th>Service</th><th>Driver / car</th><th>Route / distance</th><th>Final fare</th><th>Alpha commission</th><th>Driver earnings</th><th>Payment / waiting</th><th>Receipt</th></tr></thead><tbody id="commission-details-body"></tbody></table></div><button id="commission-load-more" class="secondary" type="button" hidden>Load more trips</button></section></section>
+
+          <section class="page" data-page="activity">
+            <div class="page-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h1>Activity</h1><p class="muted">Trace sensitive actions made by office staff.</p></div><button id="refresh-activity" class="secondary" type="button">Refresh</button></div>
+            <section class="panel"><div class="table-wrap"><table><thead><tr><th>Date</th><th>Action</th><th>Driver</th><th>Details</th><th>Administrator</th></tr></thead><tbody id="activity-body"></tbody></table></div></section>
+            <aside class="policy-note"><strong>Protected operations</strong><p>Wallet amounts and approval status can only be changed through verified Cloud Functions. Pricing remains locked while the fare policy is under review.</p></aside>
+          </section>
+        </div>
+        <nav class="mobile-nav" aria-label="Mobile admin sections"><button class="active" data-view="overview">Overview</button><button data-view="drivers">Drivers</button><button data-view="recharges">Recharge</button><button data-view="rides">Rides</button><button data-view="receipts">Receipts</button><button data-view="finance">Finance</button><button data-view="commission-collected">Collected</button><button data-view="activity">Activity</button></nav>
+        <div id="receipt-dialog" class="dialog-backdrop" hidden><section class="confirm-dialog receipt-dialog" role="dialog" aria-modal="true"><div class="dialog-icon">▤</div><h2>Recharge complete</h2><div id="receipt-content"></div><div class="dialog-actions"><button id="receipt-close" class="secondary" type="button">Close</button><button id="receipt-download" class="primary" type="button">Download PDF</button></div></section></div>
+        <div id="ride-cancel-dialog" class="dialog-backdrop" hidden><form id="ride-cancel-form" class="confirm-dialog ride-cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="ride-cancel-title"><div class="dialog-icon danger-icon">!</div><h2 id="ride-cancel-title">Cancel in-progress ride?</h2><p id="ride-cancel-summary"></p><label>Head-office reason<select id="ride-cancel-reason" required><option value="Phone unavailable">Driver or passenger phone unavailable</option><option value="Safety incident">Safety incident</option><option value="Fare dispute">Fare dispute</option><option value="Vehicle or trip problem">Vehicle or trip problem</option><option value="Passenger and driver agreed">Passenger and driver agreed</option><option value="Other operational reason">Other operational reason</option></select></label><label>Internal note <span class="optional">optional</span><textarea id="ride-cancel-note" maxlength="180" placeholder="Add the details confirmed by phone"></textarea></label><p class="danger-note">This ends the ride without charging commission and releases both accounts. The action is permanently audited.</p><div class="dialog-actions"><button id="ride-cancel-back" class="secondary" type="button">Go back</button><button id="ride-cancel-confirm" class="danger-button" type="submit">Cancel ride</button></div></form></div>
+        <div id="confirm-dialog" class="dialog-backdrop" hidden><section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="dialog-icon">✓</div><h2 id="confirm-title">Confirm action</h2><p id="confirm-message"></p><div class="dialog-actions"><button id="confirm-cancel" class="secondary" type="button">Go back</button><button id="confirm-accept" class="primary" type="button">Confirm</button></div></section></div>
+        <div id="toast" class="toast" role="status" hidden></div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101d19">
+  <title>Alpha Dispatch</title>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="./styles.css?v=20261003-2">
+</head>
+<body>
+  <main id="login-view" class="login-shell">
+    <section class="login-card">
+      <div class="brand-mark" aria-hidden="true">A</div>
+      <p class="eyebrow">Alpha Ride operations</p>
+      <h1>Customer service dispatch</h1>
+      <p class="muted">Book a safe ride for customers who call the Alpha office.</p>
+      <form id="login-form" class="stack">
+        <label>Email<input id="email" type="email" autocomplete="username" required></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+        <p id="login-error" class="form-error" role="alert" hidden></p>
+        <button class="primary-button" type="submit">Sign in securely</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="dispatch-view" hidden>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Alpha Ride</p>
+        <h1>Dispatch desk</h1>
+      </div>
+      <div class="operator">
+        <span id="agent-email"></span>
+        <button id="logout" class="quiet-button" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="booking-panel panel">
+        <div class="section-heading">
+          <div><p class="step">New phone booking</p><h2>Caller and trip</h2></div>
+          <span class="secure-chip">Restricted desk</span>
+        </div>
+
+        <form id="booking-form">
+          <div class="field-grid">
+            <label>Customer name<input id="customer-name" maxlength="80" autocomplete="off" placeholder="Name the driver should ask for" required></label>
+            <label>Customer phone<input id="customer-phone" inputmode="tel" autocomplete="off" placeholder="092 123 4567" required><small>Use the number the driver will call.</small></label>
+          </div>
+
+          <div class="route-grid">
+            <div class="place-field">
+              <label for="pickup-search">Pickup location</label>
+              <div class="search-wrap"><span class="route-dot pickup"></span><input id="pickup-search" autocomplete="off" placeholder="Search pickup in South Sudan" required></div>
+              <div id="pickup-results" class="suggestions" role="listbox" hidden></div>
+              <p id="pickup-selected" class="selected-place" hidden></p>
+            </div>
+            <div class="place-field">
+              <label for="destination-search">Destination</label>
+              <div class="search-wrap"><span class="route-dot destination"></span><input id="destination-search" autocomplete="off" placeholder="Search destination" required></div>
+              <div id="destination-results" class="suggestions" role="listbox" hidden></div>
+              <p id="destination-selected" class="selected-place" hidden></p>
+            </div>
+          </div>
+
+          <section class="map-card" aria-labelledby="map-title">
+            <div class="map-heading">
+              <div><b id="map-title">Trip map</b><span id="map-status">Select pickup and destination from the search results.</span></div>
+              <div class="map-legend"><span><i class="pickup-pin"></i>Pickup</span><span><i class="destination-pin"></i>Destination</span></div>
+            </div>
+            <div id="dispatch-map" aria-label="Map showing the selected trip"></div>
+          </section>
+
+          <fieldset>
+            <legend>Ride category</legend>
+            <div class="ride-options">
+              <label class="ride-option"><input type="radio" name="ride-option" value="boda"><span><b>Boda</b><small>Motorbike</small></span></label>
+              <label class="ride-option"><input type="radio" name="ride-option" value="rickshaw"><span><b>Rickshaw</b><small>Three-wheeler</small></span></label>
+              <label class="ride-option"><input type="radio" name="ride-option" value="standard" checked><span><b>Standard</b><small>Regular car</small></span></label>
+            </div>
+          </fieldset>
+
+          <label>Driver note <span class="optional">optional</span><textarea id="customer-note" maxlength="180" rows="2" placeholder="Gate, landmark, accessibility, or calling instructions"></textarea></label>
+
+          <div id="quote-card" class="quote-card" aria-live="polite">
+            <div><span>Estimated fare</span><strong id="quote-fare">Select both locations</strong></div>
+            <div class="quote-details"><span id="quote-distance">—</span><span id="quote-duration">—</span><span>Cash</span></div>
+          </div>
+          <p id="booking-error" class="form-error" role="alert" hidden></p>
+          <button id="create-booking" class="primary-button large" type="submit" disabled>Send ride request</button>
+        </form>
+      </section>
+
+      <section class="bookings-panel panel">
+        <div class="section-heading">
+          <div><p class="step">Live queue</p><h2>Recent phone bookings</h2></div>
+          <button id="refresh-bookings" class="quiet-button" type="button">Refresh</button>
+        </div>
+        <p class="privacy-note">Customer phone numbers are shown only to authorized staff and the assigned driver.</p>
+        <div id="bookings-list" class="bookings-list" aria-live="polite"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./app.js?v=20261003-3"></script>
+</body>
+</html>

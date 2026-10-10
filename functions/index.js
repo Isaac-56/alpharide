@@ -1,0 +1,1600 @@
+"use strict";
+
+const { initializeApp } = require("firebase-admin/app");
+const { getDatabase } = require("firebase-admin/database");
+const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
+const {
+  FieldValue,
+  Timestamp,
+  getFirestore,
+} = require("firebase-admin/firestore");
+const { logger } = require("firebase-functions");
+const { defineSecret } = require("firebase-functions/params");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { HttpsError, onCall } = require("firebase-functions/v2/https");
+
+const {
+  ACCEPTANCE_PICKUP_RADIUS_METERS,
+  DISPATCH_ALGORITHM_VERSION,
+  approvedDriverPhotoStoragePath,
+  buildDriverPublicSummary,
+  presenceAllowsAcceptance,
+  presenceIsWithinPickupRadius,
+  profileAllowsDispatch,
+  validateRideId,
+} = require("./dispatch_logic");
+const {
+  PLATFORM_COMMISSION_BPS,
+  commissionBpsFromConfig,
+} = require("./accounting_logic");
+const {
+  CURRENCY_CODE,
+  calculateFare,
+  farePolicyFor,
+  isCancellableBeforePickup,
+  validateCancellationReason,
+  validateCreateRideInput,
+  waitingPolicyFor,
+} = require("./ride_logic");
+const {
+  estimatedPlatformFee,
+  walletRideEligibility,
+} = require("./wallet_logic");
+const {
+  advanceRoutePreviewLimit,
+  buildGoogleRouteRequest,
+  parseGoogleRouteResponse,
+  validateRoutePreviewInput,
+} = require("./route_logic");
+const {
+  CALL_CENTER_BOOKING_SOURCE,
+  callCenterPassengerId,
+  maskPhoneNumber,
+  parseGooglePlaceDetails,
+  parseGooglePlacePredictions,
+  validateCallCenterRideInput,
+  validatePlaceId,
+  validatePlaceSearchQuery,
+} = require("./call_center_logic");
+const { createDispatchEngine } = require("./dispatch_retry");
+const { createTtlCache } = require("./runtime_cache");
+const {
+  buildRideOfferMessage,
+  validatePushToken,
+} = require("./notification_logic");
+
+initializeApp();
+
+const db = getFirestore();
+const realtimeDb = getDatabase();
+const messaging = getMessaging();
+const storage = getStorage();
+const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
+
+const REGION = "africa-south1";
+const ROUTE_PREVIEW_LIMIT_COLLECTION = "route_preview_limits";
+const placeSearchCache = createTtlCache({ ttlMs: 5 * 60 * 1000, maxEntries: 250 });
+const placeDetailsCache = createTtlCache({ ttlMs: 30 * 60 * 1000, maxEntries: 500 });
+const routePreviewCache = createTtlCache({ ttlMs: 3 * 60 * 1000, maxEntries: 150 });
+const accountingConfigCache = createTtlCache({
+  ttlMs: 60 * 1000,
+  maxEntries: 1,
+});
+const ACTIVE_RIDE_STATUSES = new Set([
+  "requested",
+  "offered",
+  "accepted",
+  "driver_arriving",
+  "arrived",
+  "in_progress",
+]);
+const DRIVER_PUSH_TOKENS_COLLECTION = "driver_push_tokens";
+
+function routePreviewCacheKey(pickup, destination) {
+  return [
+    pickup.latitude,
+    pickup.longitude,
+    destination.latitude,
+    destination.longitude,
+  ].map((coordinate) => Number(coordinate).toFixed(5)).join(":");
+}
+
+async function accountingConfig() {
+  const cached = accountingConfigCache.get("accounting");
+  if (cached) return cached;
+  const snapshot = await db.collection("platform_config").doc("accounting").get();
+  return accountingConfigCache.set(
+    "accounting",
+    snapshot.exists ? snapshot.data() : {},
+  );
+}
+
+function requireAuthenticatedUser(request) {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Sign in before using the live ride service.",
+    );
+  }
+  return uid;
+}
+
+function requireCustomerServiceAgent(request) {
+  const uid = requireAuthenticatedUser(request);
+  if (
+    request.auth?.token?.customerService !== true &&
+    request.auth?.token?.admin !== true
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "An authorized Alpha customer-service account is required.",
+    );
+  }
+  return uid;
+}
+
+function callableError(error, fallbackMessage) {
+  if (error instanceof HttpsError) return error;
+  if (error instanceof TypeError || error instanceof RangeError) {
+    return new HttpsError("invalid-argument", error.message);
+  }
+  logger.error(fallbackMessage, error);
+  return new HttpsError("internal", fallbackMessage);
+}
+
+async function computeTrustedRoute(
+  pickup,
+  destination,
+  { includePolyline = false } = {},
+) {
+  const fieldMask = ["routes.distanceMeters", "routes.duration"];
+  if (includePolyline) {
+    fieldMask.push("routes.polyline.encodedPolyline");
+  }
+
+  let response;
+  try {
+    response = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": googleRoutesApiKey.value(),
+          "X-Goog-FieldMask": fieldMask.join(","),
+        },
+        body: JSON.stringify(
+          buildGoogleRouteRequest(pickup, destination, {
+            includePolyline,
+          }),
+        ),
+        signal: AbortSignal.timeout(20000),
+      },
+    );
+  } catch (error) {
+    logger.error("Google Routes could not be reached", error);
+    throw new HttpsError(
+      "unavailable",
+      "The road route service is temporarily unavailable.",
+    );
+  }
+
+  if (!response.ok) {
+    const body = await response.text();
+    logger.error("Google Routes rejected a ride quote", {
+      status: response.status,
+      body: body.slice(0, 1000),
+    });
+    throw new HttpsError(
+      "unavailable",
+      "A road route could not be calculated right now.",
+    );
+  }
+
+  const payload = await response.json();
+  try {
+    return parseGoogleRouteResponse(payload, { includePolyline });
+  } catch (error) {
+    logger.error("Google Routes returned an invalid route", error);
+    throw new HttpsError(
+      "unavailable",
+      "No drivable route was returned for this trip.",
+    );
+  }
+}
+
+async function enforceRoutePreviewLimit(userId) {
+  const limitRef = db
+    .collection(ROUTE_PREVIEW_LIMIT_COLLECTION)
+    .doc(userId);
+  const nowMillis = Date.now();
+  let limitResult;
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(limitRef);
+    const windowStart = snapshot.exists
+      ? snapshot.get("windowStart")
+      : null;
+    limitResult = advanceRoutePreviewLimit({
+      nowMillis,
+      windowStartMillis: windowStart instanceof Timestamp
+        ? windowStart.toMillis()
+        : null,
+      requestCount: snapshot.exists ? snapshot.get("requestCount") : 0,
+    });
+
+    if (!limitResult.allowed) return;
+
+    transaction.set(limitRef, {
+      userId,
+      windowStart: Timestamp.fromMillis(limitResult.windowStartMillis),
+      requestCount: limitResult.requestCount,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  if (!limitResult?.allowed) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Too many route requests. Please wait a moment and try again.",
+      { retryAfterSeconds: limitResult?.retryAfterSeconds ?? 60 },
+    );
+  }
+}
+
+function offerReference(driverId, rideId) {
+  return db
+    .collection("driver_ride_offers")
+    .doc(driverId)
+    .collection("offers")
+    .doc(rideId);
+}
+
+async function markDriverPresenceBusy(driverId, rideId) {
+  await realtimeDb.ref(`driver_locations/${driverId}`).update({
+    activeRideId: rideId,
+    updatedAt: Date.now(),
+  });
+}
+
+async function clearDriverPresenceBusy(driverId, rideId) {
+  const reference = realtimeDb.ref(`driver_locations/${driverId}`);
+  await reference.transaction((current) => {
+    if (!current || typeof current !== "object") return;
+    if (current.activeRideId !== rideId) return;
+    const next = { ...current, updatedAt: Date.now() };
+    delete next.activeRideId;
+    return next;
+  });
+}
+
+async function markOffers(rideId, driverIds, status) {
+  if (!Array.isArray(driverIds) || driverIds.length === 0) return;
+  const batch = db.batch();
+  const now = FieldValue.serverTimestamp();
+
+  for (const driverId of driverIds) {
+    if (typeof driverId !== "string" || !driverId) continue;
+    batch.set(
+      offerReference(driverId, rideId),
+      { status, respondedAt: now },
+      { merge: true },
+    );
+  }
+  await batch.commit();
+}
+
+async function sendRideOfferPushNotifications({
+  candidates,
+  rideId,
+  rideOptionId,
+  pickup,
+  estimatedFare,
+}) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return;
+
+  const references = candidates.map((candidate) =>
+    db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(candidate.driverId));
+  const snapshots = await db.getAll(...references);
+  const messages = [];
+  const messageDrivers = [];
+
+  for (let index = 0; index < snapshots.length; index += 1) {
+    const snapshot = snapshots[index];
+    const token = snapshot.exists && typeof snapshot.get("token") === "string"
+      ? snapshot.get("token").trim()
+      : "";
+    if (!token) continue;
+
+    messages.push(buildRideOfferMessage({
+      token,
+      rideId,
+      rideOptionId,
+      pickupAddress: pickup.address,
+      estimatedFare,
+      currencyCode: CURRENCY_CODE,
+    }));
+    messageDrivers.push(candidates[index].driverId);
+  }
+
+  if (messages.length === 0) return;
+  const response = await messaging.sendEach(messages);
+  const invalidDriverIds = [];
+  response.responses.forEach((result, index) => {
+    if (result.success) return;
+    const code = result.error?.code ?? "";
+    logger.warn("Unable to deliver a driver ride notification", {
+      driverId: messageDrivers[index],
+      rideId,
+      code,
+    });
+    if (
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-registration-token"
+    ) {
+      invalidDriverIds.push(messageDrivers[index]);
+    }
+  });
+  await Promise.all(
+    invalidDriverIds.map((driverId) =>
+      db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId).delete()),
+  );
+}
+
+exports.registerDriverPushToken = onCall(
+  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedUser(request);
+      const token = validatePushToken(request.data?.token);
+      const profile = await db.collection("drivers").doc(driverId).get();
+      if (!profile.exists || profile.get("reviewStatus") !== "approved") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Driver approval is required before enabling ride notifications.",
+        );
+      }
+      await db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId).set({
+        driverId,
+        token,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { registered: true };
+    } catch (error) {
+      throw callableError(error, "Unable to enable ride notifications.");
+    }
+  },
+);
+
+exports.unregisterDriverPushToken = onCall(
+  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedUser(request);
+      const token = validatePushToken(request.data?.token);
+      const reference = db
+        .collection(DRIVER_PUSH_TOKENS_COLLECTION)
+        .doc(driverId);
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(reference);
+        if (snapshot.exists && snapshot.get("token") === token) {
+          transaction.delete(reference);
+        }
+      });
+      return { registered: false };
+    } catch (error) {
+      throw callableError(error, "Unable to disable ride notifications.");
+    }
+  },
+);
+
+const { dispatchRide } = createDispatchEngine({
+  db, realtimeDb, Timestamp, FieldValue,
+  sendPush: sendRideOfferPushNotifications, logger,
+});
+
+exports.retryRideDispatch = onCall(
+  { region: REGION, timeoutSeconds: 30, memory: "256MiB" },
+  async (request) => {
+    const passengerId = requireAuthenticatedUser(request);
+    const rideId = validateRideId(request.data?.rideId);
+    const ride = await db.collection("rides").doc(rideId).get();
+    if (!ride.exists || ride.get("passengerId") !== passengerId) {
+      throw new HttpsError("permission-denied", "This ride belongs to another passenger.");
+    }
+    try {
+      return { rideId, status: await dispatchRide({ rideId }) };
+    } catch (error) {
+      throw callableError(error, "Unable to retry driver matching.");
+    }
+  },
+);
+
+function timestampMillis(value) {
+  return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+function safeText(value) {
+  return typeof value === "string" ? value : "";
+}
+
+function customerServiceRidePayload(rideId, data = {}) {
+  const driverSummary = data.driverSummary &&
+    typeof data.driverSummary === "object" &&
+    !Array.isArray(data.driverSummary)
+    ? data.driverSummary
+    : {};
+  return {
+    rideId,
+    status: safeText(data.status),
+    customerName: safeText(data.customerName),
+    customerPhone: safeText(data.customerPhone),
+    customerPhoneMasked: data.customerPhone
+      ? maskPhoneNumber(data.customerPhone)
+      : "",
+    customerNote: safeText(data.customerNote),
+    pickup: data.pickup ?? null,
+    destination: data.destination ?? null,
+    rideOptionId: safeText(data.rideOptionId),
+    paymentMethod: safeText(data.paymentMethod),
+    estimatedFare: Number(data.estimatedFare) || 0,
+    finalFare: Number(data.finalFare) || 0,
+    currencyCode: safeText(data.currencyCode) || CURRENCY_CODE,
+    routeDistanceMeters: Number(data.routeDistanceMeters) || 0,
+    routeDurationSeconds: Number(data.routeDurationSeconds) || 0,
+    driverId: safeText(data.driverId),
+    driverName:
+      `${safeText(driverSummary.firstName)} ${safeText(driverSummary.lastName)}`.trim() ||
+      safeText(driverSummary.name),
+    requestedAtMillis: timestampMillis(data.requestedAt),
+    updatedAtMillis: timestampMillis(data.updatedAt),
+  };
+}
+
+async function fetchGooglePlaces(url, fallbackMessage, options = {}) {
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (error) {
+    logger.error("Google Places could not be reached", error);
+    throw new HttpsError("unavailable", fallbackMessage);
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    logger.error("Google Places rejected a call-centre request", {
+      status: response.status,
+      body: body.slice(0, 1000),
+    });
+    throw new HttpsError("unavailable", fallbackMessage);
+  }
+  return response.json();
+}
+
+exports.customerServiceSearchPlaces = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 15,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const query = validatePlaceSearchQuery(request.data?.query);
+      const cacheKey = query.toLocaleLowerCase("en");
+      const cachedResults = placeSearchCache.get(cacheKey);
+      if (cachedResults) return { results: cachedResults };
+      const searchGooglePlaces = async (input, restrictToSouthSudan) =>
+        fetchGooglePlaces(
+          "https://places.googleapis.com/v1/places:autocomplete",
+          "Location search is temporarily unavailable.",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": googleRoutesApiKey.value(),
+              "X-Goog-FieldMask": [
+                "suggestions.placePrediction.placeId",
+                "suggestions.placePrediction.text",
+                "suggestions.placePrediction.structuredFormat",
+              ].join(","),
+            },
+            body: JSON.stringify({
+              input,
+              ...(restrictToSouthSudan
+                ? { includedRegionCodes: ["ss"] }
+                : {}),
+              languageCode: "en",
+              locationBias: {
+                circle: {
+                  center: { latitude: 4.8594, longitude: 31.5713 },
+                  radius: 50000,
+                },
+              },
+            }),
+          },
+        );
+
+      const [, results] = await Promise.all([
+        enforceRoutePreviewLimit(`customer_service_${agentId}`),
+        (async () => {
+          let predictions = parseGooglePlacePredictions(
+            await searchGooglePlaces(query, true),
+          );
+          if (!predictions.length) {
+            predictions = parseGooglePlacePredictions(
+              await searchGooglePlaces(`${query}, South Sudan`, false),
+            );
+          }
+          return predictions;
+        })(),
+      ]);
+      placeSearchCache.set(cacheKey, results);
+      return { results };
+    } catch (error) {
+      throw callableError(error, "Unable to search for locations.");
+    }
+  },
+);
+
+exports.customerServiceGetPlace = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 15,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      requireCustomerServiceAgent(request);
+      const placeId = validatePlaceId(request.data?.placeId);
+      const cachedPlace = placeDetailsCache.get(placeId);
+      if (cachedPlace) return cachedPlace;
+      const payload = await fetchGooglePlaces(
+        `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+        "That location could not be loaded right now.",
+        {
+          headers: {
+            "X-Goog-Api-Key": googleRoutesApiKey.value(),
+            "X-Goog-FieldMask": "id,displayName,formattedAddress,location",
+          },
+        },
+      );
+      return placeDetailsCache.set(
+        placeId,
+        parseGooglePlaceDetails(payload, placeId),
+      );
+    } catch (error) {
+      throw callableError(error, "Unable to load the location.");
+    }
+  },
+);
+
+exports.customerServiceQuoteRide = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const input = validateCreateRideInput({
+        pickup: request.data?.pickup,
+        destination: request.data?.destination,
+        rideOptionId: request.data?.rideOptionId,
+        paymentMethod: "cash",
+      });
+      const cacheKey = routePreviewCacheKey(input.pickup, input.destination);
+      let route = routePreviewCache.get(cacheKey);
+      if (!route) {
+        const [, computedRoute] = await Promise.all([
+          enforceRoutePreviewLimit(`customer_service_${agentId}`),
+          computeTrustedRoute(
+            input.pickup,
+            input.destination,
+            { includePolyline: true },
+          ),
+        ]);
+        route = routePreviewCache.set(cacheKey, computedRoute);
+      }
+      const settingsSnapshot = await db
+        .collection("platform_config")
+        .doc("accounting")
+        .get();
+      const settings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
+      const farePolicy = farePolicyFor(settings, input.rideOptionId);
+      return {
+        estimatedFare: calculateFare({
+          rideOptionId: input.rideOptionId,
+          distanceMeters: route.distanceMeters,
+          farePolicy,
+        }),
+        currencyCode: CURRENCY_CODE,
+        routeDistanceMeters: Math.round(route.distanceMeters),
+        routeDurationSeconds: Math.round(route.durationSeconds),
+        encodedPolyline: route.encodedPolyline,
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to calculate the phone-booking fare.");
+    }
+  },
+);
+
+exports.customerServiceCreateRide = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const agentEmail = safeText(request.auth?.token?.email);
+      const input = validateCallCenterRideInput(request.data);
+      const passengerId = callCenterPassengerId(input.customerPhone);
+      const [route, accountingConfigSnapshot] = await Promise.all([
+        computeTrustedRoute(input.pickup, input.destination),
+        db.collection("platform_config").doc("accounting").get(),
+      ]);
+      const accountingConfig = accountingConfigSnapshot.exists
+        ? accountingConfigSnapshot.data()
+        : {};
+      const commissionBps = commissionBpsFromConfig(
+        accountingConfig,
+        input.rideOptionId,
+      );
+      const farePolicy = farePolicyFor(accountingConfig, input.rideOptionId);
+      const estimatedFare = calculateFare({
+        rideOptionId: input.rideOptionId,
+        distanceMeters: route.distanceMeters,
+        farePolicy,
+      });
+      const waitingPolicy = waitingPolicyFor(input.rideOptionId, farePolicy);
+      const rideRef = db.collection("rides").doc();
+      const activeRideRef = db.collection("active_passenger_rides").doc(passengerId);
+      const bookingRef = db.collection("call_center_bookings").doc(rideRef.id);
+      const auditRef = db.collection("customer_service_audit").doc();
+
+      await db.runTransaction(async (transaction) => {
+        const activeSnapshot = await transaction.get(activeRideRef);
+        if (activeSnapshot.exists) {
+          const activeRideId = activeSnapshot.get("rideId");
+          if (typeof activeRideId === "string" && activeRideId) {
+            const existingRide = await transaction.get(
+              db.collection("rides").doc(activeRideId),
+            );
+            if (
+              existingRide.exists &&
+              ACTIVE_RIDE_STATUSES.has(existingRide.get("status"))
+            ) {
+              throw new HttpsError(
+                "already-exists",
+                "This phone number already has an active ride.",
+                { rideId: activeRideId },
+              );
+            }
+          }
+          transaction.delete(activeRideRef);
+        }
+
+        const now = FieldValue.serverTimestamp();
+        transaction.create(rideRef, {
+          schemaVersion: 1,
+          bookingSource: CALL_CENTER_BOOKING_SOURCE,
+          passengerId,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          customerNote: input.customerNote,
+          createdByStaffId: agentId,
+          createdByStaffEmail: agentEmail,
+          driverId: null,
+          driverSummary: null,
+          status: "requested",
+          pickup: input.pickup,
+          destination: input.destination,
+          rideOptionId: input.rideOptionId,
+          requiredVehicleType: input.rideOptionId,
+          paymentMethod: "cash",
+          estimatedFare,
+          finalFare: null,
+          farePolicy,
+          platformCommissionBps: commissionBps,
+          pricingVersion: "juba-distance-wait-v2",
+          currencyCode: CURRENCY_CODE,
+          routeDistanceMeters: Math.round(route.distanceMeters),
+          routeDurationSeconds: Math.round(route.durationSeconds),
+          isWaiting: false,
+          waitingStartedAt: null,
+          waitingSeconds: 0,
+          billableWaitingSeconds: 0,
+          waitingCharge: 0,
+          waitingGraceSeconds: waitingPolicy.graceSeconds,
+          waitingRatePerMinute: waitingPolicy.ratePerMinute,
+          cancelledBy: null,
+          cancellationReason: null,
+          offeredDriverIds: [],
+          offerExpiresAt: Timestamp.now(),
+          dispatchState: "pending",
+          dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
+          requestedAt: now,
+          updatedAt: now,
+          acceptedAt: null,
+          arrivedAt: null,
+          startedAt: null,
+          completedAt: null,
+          cancelledAt: null,
+        });
+        transaction.set(activeRideRef, {
+          passengerId,
+          rideId: rideRef.id,
+          bookingSource: CALL_CENTER_BOOKING_SOURCE,
+          createdAt: now,
+          updatedAt: now,
+        });
+        transaction.create(bookingRef, {
+          rideId: rideRef.id,
+          passengerId,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          customerPhoneMasked: maskPhoneNumber(input.customerPhone),
+          status: "requested",
+          createdByStaffId: agentId,
+          createdByStaffEmail: agentEmail,
+          createdAt: now,
+          updatedAt: now,
+        });
+        transaction.create(auditRef, {
+          action: "phone_booking_created",
+          actorId: agentId,
+          actorEmail: agentEmail,
+          rideId: rideRef.id,
+          customerPhoneMasked: maskPhoneNumber(input.customerPhone),
+          createdAt: now,
+        });
+      });
+
+      let status = "requested";
+      try {
+        status = await dispatchRide({
+          rideId: rideRef.id,
+          passengerId,
+          pickup: input.pickup,
+          destination: input.destination,
+          rideOptionId: input.rideOptionId,
+          requiredVehicleType: input.rideOptionId,
+          paymentMethod: "cash",
+          estimatedFare,
+          commissionBps,
+          bookingSource: CALL_CENTER_BOOKING_SOURCE,
+        });
+      } catch (dispatchError) {
+        logger.error("Call-centre ride dispatch failed", {
+          rideId: rideRef.id,
+          error: dispatchError,
+        });
+        await rideRef.update({
+          dispatchState: "error",
+          dispatchAttemptedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }).catch(() => {});
+      }
+      await bookingRef.set(
+        { status, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+
+      return {
+        rideId: rideRef.id,
+        status,
+        estimatedFare,
+        currencyCode: CURRENCY_CODE,
+        routeDistanceMeters: Math.round(route.distanceMeters),
+        routeDurationSeconds: Math.round(route.durationSeconds),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to create the phone booking.");
+    }
+  },
+);
+
+exports.customerServiceListBookings = onCall(
+  { region: REGION, timeoutSeconds: 20, memory: "256MiB" },
+  async (request) => {
+    try {
+      requireCustomerServiceAgent(request);
+      const rawLimit = request.data?.limit;
+      const limit = rawLimit == null
+        ? 50
+        : Math.min(Math.max(Number(rawLimit) || 1, 1), 100);
+      const bookingSnapshot = await db
+        .collection("call_center_bookings")
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .get();
+      const rideRefs = bookingSnapshot.docs.map((document) =>
+        db.collection("rides").doc(document.id));
+      const rides = rideRefs.length ? await db.getAll(...rideRefs) : [];
+      return {
+        bookings: rides
+          .filter((document) => document.exists)
+          .map((document) => customerServiceRidePayload(
+            document.id,
+            document.data(),
+          )),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to load phone bookings.");
+    }
+  },
+);
+
+exports.customerServiceCancelRide = onCall(
+  { region: REGION, timeoutSeconds: 20, memory: "256MiB" },
+  async (request) => {
+    try {
+      const agentId = requireCustomerServiceAgent(request);
+      const agentEmail = safeText(request.auth?.token?.email);
+      const rideId = validateRideId(request.data?.rideId);
+      const cancellationReason = validateCancellationReason(
+        request.data?.reason || "Cancelled by customer service",
+      );
+      const rideRef = db.collection("rides").doc(rideId);
+      const bookingRef = db.collection("call_center_bookings").doc(rideId);
+      const auditRef = db.collection("customer_service_audit").doc();
+      let offeredDriverIds = [];
+      let assignedDriverId = null;
+
+      await db.runTransaction(async (transaction) => {
+        const rideSnapshot = await transaction.get(rideRef);
+        if (!rideSnapshot.exists) {
+          throw new HttpsError("not-found", "The booking no longer exists.");
+        }
+        if (rideSnapshot.get("bookingSource") !== CALL_CENTER_BOOKING_SOURCE) {
+          throw new HttpsError(
+            "permission-denied",
+            "Customer service can only cancel phone bookings.",
+          );
+        }
+        const passengerId = rideSnapshot.get("passengerId");
+        const activePassengerRef = db
+          .collection("active_passenger_rides")
+          .doc(passengerId);
+        const activePassengerSnapshot = await transaction.get(activePassengerRef);
+        assignedDriverId = safeText(rideSnapshot.get("driverId")) || null;
+        const activeDriverRef = assignedDriverId
+          ? db.collection("active_driver_rides").doc(assignedDriverId)
+          : null;
+        const activeDriverSnapshot = activeDriverRef
+          ? await transaction.get(activeDriverRef)
+          : null;
+        offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+          ? rideSnapshot.get("offeredDriverIds")
+          : [];
+        const status = rideSnapshot.get("status");
+        if (status !== "cancelled" && !isCancellableBeforePickup(status)) {
+          throw new HttpsError(
+            "failed-precondition",
+            "This trip has started and can no longer be cancelled here.",
+          );
+        }
+        const now = FieldValue.serverTimestamp();
+        if (status !== "cancelled") {
+          transaction.update(rideRef, {
+            status: "cancelled",
+            offerExpiresAt: null,
+            isWaiting: false,
+            waitingStartedAt: null,
+            cancelledBy: "customer_service",
+            cancellationReason,
+            cancelledAt: now,
+            updatedAt: now,
+          });
+        }
+        transaction.set(bookingRef, { status: "cancelled", updatedAt: now }, { merge: true });
+        if (
+          activePassengerSnapshot.exists &&
+          activePassengerSnapshot.get("rideId") === rideId
+        ) transaction.delete(activePassengerRef);
+        if (
+          activeDriverRef &&
+          activeDriverSnapshot?.exists &&
+          activeDriverSnapshot.get("rideId") === rideId
+        ) transaction.delete(activeDriverRef);
+        transaction.create(auditRef, {
+          action: "phone_booking_cancelled",
+          actorId: agentId,
+          actorEmail: agentEmail,
+          rideId,
+          reason: cancellationReason,
+          createdAt: now,
+        });
+      });
+
+      if (assignedDriverId && !offeredDriverIds.includes(assignedDriverId)) {
+        offeredDriverIds.push(assignedDriverId);
+      }
+      if (assignedDriverId) {
+        await clearDriverPresenceBusy(assignedDriverId, rideId).catch(() => {});
+      }
+      await markOffers(rideId, offeredDriverIds, "cancelled").catch(() => {});
+      return { rideId, status: "cancelled" };
+    } catch (error) {
+      throw callableError(error, "Unable to cancel the phone booking.");
+    }
+  },
+);
+
+exports.calculateRoute = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+    minInstances: 1,
+  },
+  async (request) => {
+    try {
+      const userId = requireAuthenticatedUser(request);
+      const input = validateRoutePreviewInput(request.data);
+      const cacheKey = routePreviewCacheKey(input.origin, input.destination);
+      const cachedRoute = routePreviewCache.get(cacheKey);
+      const routeRequest = cachedRoute
+        ? Promise.resolve(cachedRoute)
+        : computeTrustedRoute(
+          input.origin,
+          input.destination,
+          { includePolyline: true },
+        ).then((route) => routePreviewCache.set(cacheKey, route));
+      // Start the rate-limit transaction, route lookup and pricing read
+      // together. The old sequential limiter added a full Firestore round trip
+      // before Google Routes even began.
+      const [, route, settings] = await Promise.all([
+        enforceRoutePreviewLimit(userId),
+        routeRequest,
+        accountingConfig(),
+      ]);
+      const fareEstimates = Object.fromEntries(
+        ["standard", "boda", "rickshaw", "comfort", "premium"].map((id) => {
+          const policy = farePolicyFor(settings, id);
+          return [id, {
+            estimatedFare: calculateFare({
+              rideOptionId: id,
+              distanceMeters: route.distanceMeters,
+              farePolicy: policy,
+            }),
+            ...policy,
+          }];
+        }),
+      );
+
+      return {
+        distanceMeters: route.distanceMeters,
+        durationSeconds: route.durationSeconds,
+        encodedPolyline: route.encodedPolyline,
+        fareEstimates,
+        currencyCode: CURRENCY_CODE,
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to calculate the road route.");
+    }
+  },
+);
+
+exports.createRide = onCall(
+  {
+    region: REGION,
+    secrets: [googleRoutesApiKey],
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    try {
+      const passengerId = requireAuthenticatedUser(request);
+      const input = validateCreateRideInput(request.data);
+      const customerPhone = typeof request.auth?.token?.phone_number === "string"
+        ? request.auth.token.phone_number.trim()
+        : "";
+      const [route, accountingConfigSnapshot] = await Promise.all([
+        computeTrustedRoute(input.pickup, input.destination),
+        db.collection("platform_config").doc("accounting").get(),
+      ]);
+      const accountingConfig = accountingConfigSnapshot.exists
+        ? accountingConfigSnapshot.data()
+        : {};
+      const commissionBps = commissionBpsFromConfig(
+        accountingConfig,
+        input.rideOptionId,
+      );
+      const farePolicy = farePolicyFor(accountingConfig, input.rideOptionId);
+      const estimatedFare = calculateFare({
+        rideOptionId: input.rideOptionId,
+        distanceMeters: route.distanceMeters,
+        farePolicy,
+      });
+      const waitingPolicy = waitingPolicyFor(input.rideOptionId, farePolicy);
+
+      const rideRef = db.collection("rides").doc();
+      const activeRideRef = db
+        .collection("active_passenger_rides")
+        .doc(passengerId);
+
+      await db.runTransaction(async (transaction) => {
+        const activeSnapshot = await transaction.get(activeRideRef);
+        if (activeSnapshot.exists) {
+          const activeRideId = activeSnapshot.get("rideId");
+          if (typeof activeRideId === "string" && activeRideId) {
+            const existingRideRef = db.collection("rides").doc(activeRideId);
+            const existingRide = await transaction.get(existingRideRef);
+            if (
+              existingRide.exists &&
+              ACTIVE_RIDE_STATUSES.has(existingRide.get("status"))
+            ) {
+              throw new HttpsError(
+                "already-exists",
+                "You already have an active ride.",
+                { rideId: activeRideId },
+              );
+            }
+          }
+          transaction.delete(activeRideRef);
+        }
+
+        const now = FieldValue.serverTimestamp();
+        transaction.create(rideRef, {
+          schemaVersion: 1,
+          passengerId,
+          customerPhone,
+          driverId: null,
+          driverSummary: null,
+          status: "requested",
+          pickup: input.pickup,
+          destination: input.destination,
+          rideOptionId: input.rideOptionId,
+          requiredVehicleType: input.rideOptionId,
+          paymentMethod: input.paymentMethod,
+          estimatedFare,
+          finalFare: null,
+          farePolicy,
+          platformCommissionBps: commissionBps,
+          pricingVersion: "juba-distance-wait-v2",
+          currencyCode: CURRENCY_CODE,
+          routeDistanceMeters: Math.round(route.distanceMeters),
+          routeDurationSeconds: Math.round(route.durationSeconds),
+          isWaiting: false,
+          waitingStartedAt: null,
+          waitingSeconds: 0,
+          billableWaitingSeconds: 0,
+          waitingCharge: 0,
+          waitingGraceSeconds: waitingPolicy.graceSeconds,
+          waitingRatePerMinute: waitingPolicy.ratePerMinute,
+          cancelledBy: null,
+          cancellationReason: null,
+          offeredDriverIds: [],
+          offerExpiresAt: Timestamp.now(),
+          dispatchState: "pending",
+          dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
+          requestedAt: now,
+          updatedAt: now,
+          acceptedAt: null,
+          arrivedAt: null,
+          startedAt: null,
+          completedAt: null,
+          cancelledAt: null,
+        });
+        transaction.set(activeRideRef, {
+          passengerId,
+          rideId: rideRef.id,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      let status = "requested";
+      try {
+        status = await dispatchRide({
+          rideId: rideRef.id,
+          passengerId,
+          pickup: input.pickup,
+          destination: input.destination,
+          rideOptionId: input.rideOptionId,
+          requiredVehicleType: input.rideOptionId,
+          paymentMethod: input.paymentMethod,
+          estimatedFare,
+          commissionBps,
+        });
+      } catch (dispatchError) {
+        logger.error("Initial ride dispatch failed", {
+          rideId: rideRef.id,
+          error: dispatchError,
+        });
+        await rideRef
+          .update({
+            dispatchState: "error",
+            dispatchAttemptedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+          .catch(() => {});
+      }
+
+      return {
+        rideId: rideRef.id,
+        status,
+        estimatedFare,
+        currencyCode: CURRENCY_CODE,
+        routeDistanceMeters: Math.round(route.distanceMeters),
+        routeDurationSeconds: Math.round(route.durationSeconds),
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to create the ride.");
+    }
+  },
+);
+
+exports.cancelRide = onCall(
+  { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
+  async (request) => {
+    try {
+      const passengerId = requireAuthenticatedUser(request);
+      const rideId = validateRideId(request.data?.rideId);
+      const cancellationReason = validateCancellationReason(
+        request.data?.reason,
+      );
+      const rideRef = db.collection("rides").doc(rideId);
+      const activeRideRef = db
+        .collection("active_passenger_rides")
+        .doc(passengerId);
+      const cancellationStartedAt = Date.now();
+
+      await db.runTransaction(async (transaction) => {
+        const [rideSnapshot, activeSnapshot] = await Promise.all([
+          transaction.get(rideRef), transaction.get(activeRideRef),
+        ]);
+        if (!rideSnapshot.exists) {
+          throw new HttpsError("not-found", "The ride no longer exists.");
+        }
+        if (rideSnapshot.get("passengerId") !== passengerId) {
+          throw new HttpsError(
+            "permission-denied",
+            "This ride belongs to another passenger.",
+          );
+        }
+
+        const offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+          ? rideSnapshot.get("offeredDriverIds")
+          : [];
+        const rawDriverId = rideSnapshot.get("driverId");
+        const assignedDriverId =
+          typeof rawDriverId === "string" && rawDriverId.trim()
+            ? rawDriverId.trim()
+            : null;
+        const activeDriverRef = assignedDriverId
+          ? db.collection("active_driver_rides").doc(assignedDriverId)
+          : null;
+        const activeDriverSnapshot = activeDriverRef
+          ? await transaction.get(activeDriverRef)
+          : null;
+        const status = rideSnapshot.get("status");
+        if (status !== "cancelled" && !isCancellableBeforePickup(status)) {
+          throw new HttpsError(
+            "failed-precondition",
+            "This ride can no longer be cancelled from the passenger app.",
+          );
+        }
+
+        // Close offers with the ride itself: no second batch or race with
+        // acceptance, and the callable can return as soon as this commits.
+        const driverIds = new Set(offeredDriverIds);
+        if (assignedDriverId) driverIds.add(assignedDriverId);
+        for (const driverId of driverIds) {
+          if (typeof driverId !== "string" || !driverId) continue;
+          transaction.set(offerReference(driverId, rideId), {
+            status: "cancelled",
+            respondedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+
+        if (status !== "cancelled") {
+          transaction.update(rideRef, {
+            status: "cancelled",
+            offerExpiresAt: null,
+            isWaiting: false,
+            waitingStartedAt: null,
+            cancelledBy: "passenger",
+            cancellationReason,
+            cancelledAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        if (
+          activeSnapshot.exists &&
+          activeSnapshot.get("rideId") === rideId
+        ) {
+          transaction.delete(activeRideRef);
+        }
+        if (
+          activeDriverRef &&
+          activeDriverSnapshot?.exists &&
+          activeDriverSnapshot.get("rideId") === rideId
+        ) {
+          transaction.delete(activeDriverRef);
+        }
+      });
+
+      // Deleting the driver lock invokes releaseFinishedDriverPresence,
+      // which retries and only clears presence still assigned to this ride.
+      logger.info("Passenger ride cancellation committed", {
+        rideId,
+        elapsedMs: Date.now() - cancellationStartedAt,
+      });
+      return { rideId, status: "cancelled" };
+    } catch (error) {
+      throw callableError(error, "Unable to cancel the ride.");
+    }
+  },
+);
+
+exports.getAssignedDriverPhoto = onCall(
+  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
+  async (request) => {
+    try {
+      const passengerId = requireAuthenticatedUser(request);
+      const rideId = validateRideId(request.data?.rideId);
+      const rideSnapshot = await db.collection("rides").doc(rideId).get();
+      if (!rideSnapshot.exists) {
+        throw new HttpsError("not-found", "This ride no longer exists.");
+      }
+
+      const ride = rideSnapshot.data();
+      if (ride.passengerId !== passengerId) {
+        throw new HttpsError(
+          "permission-denied",
+          "Only the assigned passenger can view this driver profile.",
+        );
+      }
+
+      const driverId =
+        typeof ride.driverId === "string" ? ride.driverId.trim() : "";
+      if (!driverId) return { photoUrl: "", expiresAtMillis: null };
+
+      const photoSnapshot = await db
+        .collection("driver_photo_checks")
+        .doc(driverId)
+        .get();
+      const storagePath = approvedDriverPhotoStoragePath({
+        ride,
+        passengerId,
+        photoCheck: photoSnapshot.exists ? photoSnapshot.data() : null,
+      });
+      if (!storagePath) return { photoUrl: "", expiresAtMillis: null };
+
+      const expiresAtMillis = Date.now() + 10 * 60 * 1000;
+      const [photoUrl] = await storage.bucket().file(storagePath).getSignedUrl({
+        action: "read",
+        expires: expiresAtMillis,
+      });
+      return { photoUrl, expiresAtMillis };
+    } catch (error) {
+      throw callableError(error, "Unable to load the assigned driver photo.");
+    }
+  },
+);
+
+exports.acceptRideOffer = onCall(
+  { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedUser(request);
+      const rideId = validateRideId(request.data?.rideId);
+      const rideRef = db.collection("rides").doc(rideId);
+      const offerRef = offerReference(driverId, rideId);
+      const profileRef = db.collection("drivers").doc(driverId);
+      const activeDriverRef = db
+        .collection("active_driver_rides")
+        .doc(driverId);
+      const walletRef = db.collection("driver_wallets").doc(driverId);
+
+      const preOffer = await offerRef.get();
+      if (preOffer.exists && preOffer.get("status") === "accepted") {
+        const acceptedRide = await rideRef.get();
+        if (acceptedRide.get("driverId") === driverId &&
+            ["accepted", "driver_arriving", "arrived", "in_progress"].includes(acceptedRide.get("status"))) {
+          return { rideId, status: acceptedRide.get("status"), driverId };
+        }
+      }
+      if (!preOffer.exists || preOffer.get("status") !== "pending") {
+        throw new HttpsError(
+          "failed-precondition",
+          "This ride offer is no longer active.",
+        );
+      }
+      const presenceSnapshot = await realtimeDb
+        .ref(`driver_locations/${driverId}`)
+        .get();
+      if (
+        !presenceAllowsAcceptance({
+          presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
+          driverId,
+          requiredVehicleType: preOffer.get("requiredVehicleType"),
+        }) ||
+        !presenceIsWithinPickupRadius({
+          presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
+          pickup: preOffer.get("pickup"),
+          radiusMeters: ACCEPTANCE_PICKUP_RADIUS_METERS,
+        })
+      ) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Go online with your approved vehicle before accepting this ride.",
+        );
+      }
+
+      let competingDriverIds = [];
+      await db.runTransaction(async (transaction) => {
+        const [offerSnapshot, rideSnapshot, profileSnapshot, activeDriverSnapshot, walletSnapshot] =
+          await Promise.all([offerRef, rideRef, profileRef, activeDriverRef, walletRef]
+            .map((reference) => transaction.get(reference)));
+        const passengerId = safeText(rideSnapshot.get("passengerId"));
+        const passengerProfile = passengerId
+          ? await transaction.get(db.collection("users").doc(passengerId)) : null;
+
+        if (!offerSnapshot.exists || !rideSnapshot.exists) {
+          throw new HttpsError(
+            "not-found",
+            "This ride offer is no longer available.",
+          );
+        }
+        if (
+          rideSnapshot.get("status") === "accepted" &&
+          rideSnapshot.get("driverId") === driverId
+        ) {
+          return;
+        }
+        if (offerSnapshot.get("status") !== "pending") {
+          throw new HttpsError(
+            "failed-precondition",
+            "This offer is no longer active.",
+          );
+        }
+
+        const expiresAt = offerSnapshot.get("expiresAt");
+        if (
+          !(expiresAt instanceof Timestamp) ||
+          expiresAt.toMillis() <= Date.now()
+        ) {
+          throw new HttpsError(
+            "failed-precondition",
+            "This ride offer has expired.",
+          );
+        }
+        if (
+          rideSnapshot.get("status") !== "offered" ||
+          rideSnapshot.get("driverId") != null
+        ) {
+          throw new HttpsError(
+            "already-exists",
+            "Another driver already accepted this ride.",
+          );
+        }
+
+        const requiredVehicleType = rideSnapshot.get("requiredVehicleType");
+        if (
+          !profileSnapshot.exists ||
+          !profileAllowsDispatch(profileSnapshot.data(), requiredVehicleType)
+        ) {
+          throw new HttpsError(
+            "permission-denied",
+            "Your approved vehicle is not eligible for this ride.",
+          );
+        }
+        if (
+          activeDriverSnapshot.exists &&
+          activeDriverSnapshot.get("rideId") !== rideId
+        ) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Finish your active ride before accepting another request.",
+          );
+        }
+
+        const walletEligibility = walletRideEligibility({
+          wallet: walletSnapshot.exists ? walletSnapshot.data() : {},
+          estimatedFare: rideSnapshot.get("estimatedFare"),
+          commissionBps:
+            rideSnapshot.get("platformCommissionBps") ??
+            PLATFORM_COMMISSION_BPS,
+        });
+        if (!walletEligibility.allowed) {
+          const message = walletEligibility.reason === "wallet_suspended"
+            ? "Your driver wallet is suspended. Visit the Alpha office for help."
+            : walletEligibility.reason === "wallet_empty"
+              ? "Recharge your driver wallet at the Alpha office before accepting rides."
+              : "Your wallet does not cover this ride's estimated Alpha fee. Recharge before accepting.";
+          throw new HttpsError(
+            "failed-precondition",
+            message,
+            {
+              reason: walletEligibility.reason,
+              balance: walletEligibility.balance,
+              requiredCredit: walletEligibility.requiredCredit,
+              currencyCode: walletEligibility.currencyCode,
+            },
+          );
+        }
+
+        competingDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+          ? rideSnapshot.get("offeredDriverIds")
+          : [];
+        const driverSummary = buildDriverPublicSummary(profileSnapshot.data());
+        const now = FieldValue.serverTimestamp();
+        transaction.update(rideRef, {
+          status: "accepted",
+          driverId,
+          driverSummary,
+          customerName: safeText(passengerProfile?.get("name")) || safeText(rideSnapshot.get("customerName")),
+          customerPhotoUrl: safeText(passengerProfile?.get("photoUrl")),
+          offerExpiresAt: null,
+          acceptedAt: now,
+          updatedAt: now,
+        });
+        transaction.update(offerRef, {
+          status: "accepted",
+          respondedAt: now,
+        });
+        transaction.set(activeDriverRef, {
+          driverId,
+          rideId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      await Promise.all([
+        markDriverPresenceBusy(driverId, rideId).catch((error) => {
+          logger.warn("Accepted ride presence synchronization failed", { rideId, driverId, error });
+        }),
+        markOffers(
+        rideId,
+        competingDriverIds.filter((candidateId) => candidateId !== driverId),
+        "expired",
+      ).catch((cleanupError) => {
+        logger.warn("Could not expire competing ride offers", {
+          rideId,
+          driverId,
+          error: cleanupError,
+        });
+        }),
+      ]);
+
+      return { rideId, status: "accepted", driverId };
+    } catch (error) {
+      throw callableError(error, "Unable to accept the ride offer.");
+    }
+  },
+);
+
+exports.rejectRideOffer = onCall(
+  { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
+  async (request) => {
+    try {
+      const driverId = requireAuthenticatedUser(request);
+      const rideId = validateRideId(request.data?.rideId);
+      const rideRef = db.collection("rides").doc(rideId);
+      const offerRef = offerReference(driverId, rideId);
+      let retryDispatch = false;
+      let allDriverIds = [];
+
+      await db.runTransaction(async (transaction) => {
+        const offerSnapshot = await transaction.get(offerRef);
+        const rideSnapshot = await transaction.get(rideRef);
+        if (!offerSnapshot.exists) {
+          throw new HttpsError(
+            "not-found",
+            "This ride offer is no longer available.",
+          );
+        }
+
+        const currentOfferStatus = offerSnapshot.get("status");
+        if (
+          currentOfferStatus === "rejected" ||
+          currentOfferStatus === "expired"
+        ) {
+          return;
+        }
+        if (currentOfferStatus !== "pending") {
+          throw new HttpsError(
+            "failed-precondition",
+            "This offer is no longer active.",
+          );
+        }
+        if (!rideSnapshot.exists || rideSnapshot.get("status") !== "offered") {
+          transaction.update(offerRef, {
+            status: "expired",
+            respondedAt: FieldValue.serverTimestamp(),
+          });
+          return;
+        }
+
+        allDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
+          ? rideSnapshot.get("offeredDriverIds")
+          : [];
+        const otherRefs = allDriverIds
+          .filter((candidateId) => candidateId !== driverId)
+          .map((candidateId) => offerReference(candidateId, rideId));
+        const otherSnapshots = [];
+        otherSnapshots.push(...await Promise.all(otherRefs.map((ref) => transaction.get(ref))));
+        const nowMs = Date.now();
+        const anotherOfferActive = otherSnapshots.some((snapshot) => {
+          if (!snapshot.exists || snapshot.get("status") !== "pending") {
+            return false;
+          }
+          const expiresAt = snapshot.get("expiresAt");
+          return expiresAt instanceof Timestamp && expiresAt.toMillis() > nowMs;
+        });
+
+        const now = FieldValue.serverTimestamp();
+        transaction.update(offerRef, {
+          status: "rejected",
+          respondedAt: now,
+        });
+
+        transaction.update(rideRef, {
+          rejectedDriverIds: FieldValue.arrayUnion(driverId),
+          updatedAt: now,
+          ...(!anotherOfferActive ? {
+            status: "requested",
+            offerExpiresAt: Timestamp.fromMillis(nowMs),
+          } : {}),
+        });
+        retryDispatch = !anotherOfferActive;
+      });
+
+      if (retryDispatch) {
+        await dispatchRide({ rideId }).catch((error) => {
+          logger.warn("Dispatch retry after rejection failed", { rideId, error });
+        });
+      }
+      return {
+        rideId,
+        status: "rejected",
+        driverId,
+      };
+    } catch (error) {
+      throw callableError(error, "Unable to reject the ride offer.");
+    }
+  },
+);
+
+exports.expireRideOffers = onSchedule(
+  {
+    region: "europe-west1",
+    schedule: "every 1 minutes",
+    timeZone: "UTC",
+    memory: "256MiB",
+  },
+  async () => {
+    const snapshot = await db
+      .collection("rides")
+      .where("status", "in", ["requested", "offered"])
+      .where("offerExpiresAt", "<=", Timestamp.now())
+      .limit(50)
+      .get();
+
+    for (let offset = 0; offset < snapshot.docs.length; offset += 10) {
+      await Promise.all(snapshot.docs.slice(offset, offset + 10).map(async (rideSnapshot) => {
+        try {
+          await dispatchRide({ rideId: rideSnapshot.id });
+        } catch (error) {
+          logger.error("Could not continue driver matching", { rideId: rideSnapshot.id, error });
+        }
+      }));
+    }
+  },
+);

@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUserDocument(userKey) {
+      return signedIn() &&
+          (request.auth.uid == userKey ||
+           request.auth.token.phone_number == userKey);
+    }
+
+    function ownsDriverProfile(driverId) {
+      return signedIn() && request.auth.uid == driverId;
+    }
+
+    function hasAccountRole(role) {
+      return signedIn() &&
+          exists(/databases/$(database)/documents/account_roles/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/account_roles/$(request.auth.uid))
+              .data.role == role;
+    }
+
+    function hasSafeDriverFields(driverId) {
+      return request.resource.data.uid == driverId
+          && request.resource.data.phoneNumber ==
+              request.auth.token.phone_number
+          && request.resource.data.reviewStatus in [
+            'draft',
+            'pending'
+          ];
+    }
+
+    function isRideParticipant() {
+      return signedIn() &&
+          (resource.data.passengerId == request.auth.uid ||
+           resource.data.driverId == request.auth.uid);
+    }
+
+    match /users/{userKey} {
+      allow read:
+          if ownsUserDocument(userKey);
+
+      allow create:
+          if ownsUserDocument(userKey) &&
+             hasAccountRole('passenger');
+
+      allow update, delete:
+          if ownsUserDocument(userKey);
+
+      match /{privateDocument=**} {
+        allow read, write:
+            if ownsUserDocument(userKey);
+      }
+    }
+
+    match /drivers/{driverId} {
+      allow read, delete:
+          if ownsDriverProfile(driverId);
+
+      allow create:
+          if ownsDriverProfile(driverId) &&
+             hasAccountRole('driver') &&
+             hasSafeDriverFields(driverId);
+
+      allow update:
+          if ownsDriverProfile(driverId) &&
+             hasSafeDriverFields(driverId);
+    }
+
+    match /account_roles/{uid} {
+      allow read, write: if false;
+    }
+
+    match /identity_registry/{phoneHash} {
+      allow read, write: if false;
+    }
+
+    match /user_sessions/{uid} {
+      allow read, create, update, delete:
+          if signedIn() && request.auth.uid == uid;
+    }
+
+    match /driver_sessions/{uid} {
+      allow read, create, update, delete:
+          if signedIn() && request.auth.uid == uid;
+    }
+
+    match /driver_photo_checks/{driverId} {
+      allow read:
+          if ownsDriverProfile(driverId);
+
+      allow create:
+          if ownsDriverProfile(driverId) &&
+             request.resource.data.keys().hasOnly([
+               'driverId',
+               'storagePath',
+               'status',
+               'automatedScreeningPassed',
+               'submittedAt',
+               'updatedAt'
+             ]) &&
+             request.resource.data.driverId == driverId &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.automatedScreeningPassed == true;
+
+      allow update:
+          if ownsDriverProfile(driverId) &&
+             request.resource.data.driverId == driverId &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.automatedScreeningPassed == true &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'storagePath',
+               'status',
+               'automatedScreeningPassed',
+               'submittedAt',
+               'updatedAt'
+             ]);
+
+      allow delete: if false;
+    }
+
+    match /rides/{rideId} {
+      allow read: if isRideParticipant();
+      allow create, update, delete: if false;
+    }
+
+    match /driver_ride_offers/{driverId}/offers/{rideId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+    }
+
+    match /active_driver_rides/{driverId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+    }
+
+    match /active_passenger_rides/{passengerId} {
+      allow read:
+          if signedIn() && request.auth.uid == passengerId;
+      allow create, update, delete: if false;
+    }
+
+    match /driver_ride_summaries/{driverId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+    }
+
+    match /driver_wallets/{driverId} {
+      allow read:
+          if signedIn() && request.auth.uid == driverId;
+      allow create, update, delete: if false;
+
+      match /transactions/{transactionId} {
+        allow read:
+            if signedIn() && request.auth.uid == driverId;
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /admin_audit_log/{auditId} {
+      allow read, write: if false;
+    }
+
+    match /route_preview_limits/{userId} {
+      allow read, write: if false;
+    }
+
+    match /app_feedback/{feedbackId} {
+      allow create:
+          if signedIn() &&
+             request.resource.data.userId == request.auth.uid;
+
+      allow read, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
