@@ -31,7 +31,7 @@ const {
   resolveWaitingInterval,
   validateDriverRideTransition,
 } = require("./lifecycle_logic");
-const { farePolicyFor, waitingPolicyFor } = require("./ride_logic");
+const { calculateFare, farePolicyFor, waitingPolicyFor } = require("./ride_logic");
 const { buildReceiptNumber } = require("./receipt_logic");
 const { effectiveVehicleClassForProfile } = require("./vehicle_logic");
 
@@ -396,6 +396,10 @@ exports.recordRideProgress = onCall(
           lastTrackedLocation: progress.point,
           lastTrackedAt: now,
           trackedDistanceMeters,
+          liveDistanceFare: calculateFare({
+            rideOptionId: snapshot.get("rideOptionId"), distanceMeters: trackedDistanceMeters,
+            allowZeroDistance: true, farePolicy: snapshot.get("farePolicy"),
+          }),
           updatedAt: now,
         });
       });
@@ -538,6 +542,10 @@ exports.updateRideStatus = onCall(
         if (transition.status === "in_progress") {
           const pickup = rideSnapshot.get("pickup");
           Object.assign(rideUpdate, {
+            liveDistanceFare: calculateFare({
+              rideOptionId: rideSnapshot.get("rideOptionId"), distanceMeters: 0,
+              allowZeroDistance: true, farePolicy: rideSnapshot.get("farePolicy"),
+            }),
             trackedDistanceMeters: 0,
             lastTrackedLocation: {
               latitude: pickup?.latitude,

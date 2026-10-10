@@ -3,6 +3,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:passengerapp/models/ride_backend.dart';
 
 void main() {
+  test(
+    'running fare uses trusted distance fare, including zero, and waiting',
+    () {
+      for (final int distanceFare in <int>[0, 1700, 25000]) {
+        final ride = RideLiveState.fromFirestore(
+          rideId: 'ride',
+          data: <String, dynamic>{
+            'status': 'in_progress',
+            'driverId': 'driver',
+            'driverSummary': null,
+            'pickup': <String, dynamic>{'address': 'Pickup'},
+            'destination': <String, dynamic>{'address': 'Destination'},
+            'rideOptionId': 'standard',
+            'paymentMethod': 'cash',
+            'estimatedFare': 20000,
+            'finalFare': null,
+            'currencyCode': 'SSP',
+            'liveDistanceFare': distanceFare,
+            'waitingCharge': 300,
+          },
+        );
+        expect(ride.fareAt(DateTime(2026)), distanceFare + 300);
+      }
+    },
+  );
+
   test('ride creation response parses trusted backend quote', () {
     final RideCreationResult result = RideCreationResult.fromCallableData(
       <String, dynamic>{
@@ -74,11 +100,7 @@ void main() {
   });
 
   test('terminal ride states are recognized', () {
-    for (final String status in <String>[
-      'cancelled',
-      'expired',
-      'completed',
-    ]) {
+    for (final String status in <String>['cancelled', 'expired', 'completed']) {
       final RideLiveState state = RideLiveState.fromFirestore(
         rideId: 'ride-123',
         data: <String, dynamic>{

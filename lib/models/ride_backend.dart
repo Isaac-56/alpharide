@@ -83,6 +83,7 @@ class RideLiveState {
   final int estimatedFare;
   final int? finalFare;
   final String currencyCode;
+  final int? liveDistanceFare;
   final bool isWaiting;
   final DateTime? waitingStartedAt;
   final int waitingSeconds;
@@ -99,6 +100,7 @@ class RideLiveState {
     required this.estimatedFare,
     required this.finalFare,
     required this.currencyCode,
+    this.liveDistanceFare,
     this.isWaiting = false,
     this.waitingStartedAt,
     this.waitingSeconds = 0,
@@ -112,12 +114,12 @@ class RideLiveState {
       status == 'completed' || status == 'cancelled' || status == 'expired';
 
   bool get canPassengerCancel => const <String>{
-        'requested',
-        'offered',
-        'accepted',
-        'driver_arriving',
-        'arrived',
-      }.contains(status);
+    'requested',
+    'offered',
+    'accepted',
+    'driver_arriving',
+    'arrived',
+  }.contains(status);
 
   int get fare => finalFare ?? estimatedFare;
 
@@ -131,16 +133,13 @@ class RideLiveState {
     if (!isWaiting || waitingStartedAt == null) {
       return billableWaitingSeconds;
     }
-    final int activeSeconds =
-        now
-            .difference(waitingStartedAt!)
-            .inSeconds
-            .clamp(0, 4 * 60 * 60)
-            .toInt();
+    final int activeSeconds = now
+        .difference(waitingStartedAt!)
+        .inSeconds
+        .clamp(0, 4 * 60 * 60)
+        .toInt();
     return billableWaitingSeconds +
-        (activeSeconds - waitingGraceSeconds)
-            .clamp(0, 4 * 60 * 60)
-            .toInt();
+        (activeSeconds - waitingGraceSeconds).clamp(0, 4 * 60 * 60).toInt();
   }
 
   int waitingChargeAt(DateTime now) {
@@ -151,7 +150,11 @@ class RideLiveState {
   }
 
   int fareAt(DateTime now) =>
-      finalFare ?? (estimatedFare + waitingChargeAt(now));
+      finalFare ??
+      ((status == 'in_progress'
+              ? liveDistanceFare ?? estimatedFare
+              : estimatedFare) +
+          waitingChargeAt(now));
 
   factory RideLiveState.fromFirestore({
     required String rideId,
@@ -178,19 +181,26 @@ class RideLiveState {
           : null,
       driver: driver,
       estimatedFare: _requiredInt(data, 'estimatedFare'),
-      finalFare:
-          rawFinalFare == null ? null : _asInt(rawFinalFare, 'finalFare'),
+      finalFare: rawFinalFare == null
+          ? null
+          : _asInt(rawFinalFare, 'finalFare'),
       currencyCode: _requiredString(data, 'currencyCode'),
+      liveDistanceFare: data['liveDistanceFare'] is num
+          ? (data['liveDistanceFare'] as num)
+                .toInt()
+                .clamp(0, 1000000000)
+                .toInt()
+          : null,
       isWaiting: data['isWaiting'] == true,
       waitingStartedAt: _optionalTimestamp(data['waitingStartedAt']),
       waitingSeconds: _nonNegativeInt(data['waitingSeconds']),
-      billableWaitingSeconds:
-          _nonNegativeInt(data['billableWaitingSeconds']),
+      billableWaitingSeconds: _nonNegativeInt(data['billableWaitingSeconds']),
       waitingCharge: _nonNegativeInt(data['waitingCharge']),
-      waitingGraceSeconds:
-          _nonNegativeInt(data['waitingGraceSeconds'], fallback: 120),
-      waitingRatePerMinute:
-          _nonNegativeInt(data['waitingRatePerMinute']),
+      waitingGraceSeconds: _nonNegativeInt(
+        data['waitingGraceSeconds'],
+        fallback: 120,
+      ),
+      waitingRatePerMinute: _nonNegativeInt(data['waitingRatePerMinute']),
     );
   }
 }
@@ -200,11 +210,7 @@ class RideBackendException implements Exception {
   final String? code;
   final String? rideId;
 
-  const RideBackendException(
-    this.message, {
-    this.code,
-    this.rideId,
-  });
+  const RideBackendException(this.message, {this.code, this.rideId});
 
   @override
   String toString() => message;
@@ -215,17 +221,15 @@ Map<String, dynamic> _stringMap(Object? raw) {
     throw const FormatException('Backend response is not a map.');
   }
 
-  return raw.map<String, dynamic>(
-    (Object? key, Object? value) {
-      if (key is! String) {
-        throw const FormatException(
-          'Backend response contains a non-string key.',
-        );
-      }
+  return raw.map<String, dynamic>((Object? key, Object? value) {
+    if (key is! String) {
+      throw const FormatException(
+        'Backend response contains a non-string key.',
+      );
+    }
 
-      return MapEntry<String, dynamic>(key, value);
-    },
-  );
+    return MapEntry<String, dynamic>(key, value);
+  });
 }
 
 String _requiredString(Map<String, dynamic> data, String field) {

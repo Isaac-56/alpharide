@@ -130,12 +130,14 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   void _listenToRide() {
-    _rideSubscription = _rideService.watchRide(widget.rideId).listen(
-      _handleRideState,
-      onError: (Object error, StackTrace stackTrace) {
-        debugPrint('Unable to watch ride ${widget.rideId}: $error');
-      },
-    );
+    _rideSubscription = _rideService
+        .watchRide(widget.rideId)
+        .listen(
+          _handleRideState,
+          onError: (Object error, StackTrace stackTrace) {
+            debugPrint('Unable to watch ride ${widget.rideId}: $error');
+          },
+        );
   }
 
   Future<void> _loadAssignedDriverPhoto(String? driverId) async {
@@ -195,11 +197,14 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     final bool statusChanged = _rideStatus != state.status;
     final bool driverChanged = _liveState?.driverId != state.driverId;
-    final bool summaryChanged = _liveState?.driver?.displayName !=
-            state.driver?.displayName ||
+    final bool summaryChanged =
+        _liveState?.driver?.displayName != state.driver?.displayName ||
         _liveState?.driver?.plateNumber != state.driver?.plateNumber;
 
-    if (statusChanged || driverChanged || summaryChanged || _liveState == null) {
+    if (statusChanged ||
+        driverChanged ||
+        summaryChanged ||
+        _liveState == null) {
       setState(() {
         _rideStatus = state.status;
         _liveState = state;
@@ -253,51 +258,51 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   }
 
   String get _statusLabel => switch (_rideStatus) {
-        'requested' => 'Request sent',
-        'offered' => 'Contacting drivers',
-        'accepted' => 'Driver assigned',
-        'driver_arriving' => 'Driver on the way',
-        'arrived' => 'Driver arrived',
-        'in_progress' => 'Trip in progress',
-        'completed' => 'Completed',
-        'cancelled' => 'Cancelled',
-        'expired' => 'Expired',
-        _ => 'Updating ride',
-      };
+    'requested' => 'Request sent',
+    'offered' => 'Contacting drivers',
+    'accepted' => 'Driver assigned',
+    'driver_arriving' => 'Driver on the way',
+    'arrived' => 'Driver arrived',
+    'in_progress' => 'Trip in progress',
+    'completed' => 'Completed',
+    'cancelled' => 'Cancelled',
+    'expired' => 'Expired',
+    _ => 'Updating ride',
+  };
 
   String get _searchTitle => switch (_rideStatus) {
-        'requested' || 'offered' => 'Looking for a driver',
-        'accepted' => 'Driver assigned',
-        'driver_arriving' => 'Driver on the way',
-        'arrived' => 'Driver arrived',
-        'in_progress' => 'Trip in progress',
-        'completed' => 'Ride completed',
-        'cancelled' => 'Ride cancelled',
-        'expired' => 'Request expired',
-        _ => 'Ride update',
-      };
+    'requested' || 'offered' => 'Looking for a driver',
+    'accepted' => 'Driver assigned',
+    'driver_arriving' => 'Driver on the way',
+    'arrived' => 'Driver arrived',
+    'in_progress' => 'Trip in progress',
+    'completed' => 'Ride completed',
+    'cancelled' => 'Ride cancelled',
+    'expired' => 'Request expired',
+    _ => 'Ride update',
+  };
 
   String get _statusMessage => switch (_rideStatus) {
-        'requested' || 'offered' =>
-          'We are matching you with the closest available driver.',
-        'accepted' =>
-          'Your driver accepted the request and is preparing to head to pickup.',
-        'driver_arriving' =>
-          'Your assigned driver is on the way to your pickup point.',
-        'arrived' => 'Your driver has arrived at the pickup point.',
-        'in_progress' => 'You are on the way to your destination.',
-        'completed' => 'Your trip is complete.',
-        _ => 'Your ride is being updated.',
-      };
+    'requested' ||
+    'offered' => 'We are matching you with the closest available driver.',
+    'accepted' =>
+      'Your driver accepted the request and is preparing to head to pickup.',
+    'driver_arriving' =>
+      'Your assigned driver is on the way to your pickup point.',
+    'arrived' => 'Your driver has arrived at the pickup point.',
+    'in_progress' => 'You are on the way to your destination.',
+    'completed' => 'Your trip is complete.',
+    _ => 'Your ride is being updated.',
+  };
 
   double get _rideProgress => switch (_rideStatus) {
-        'accepted' => 0.22,
-        'driver_arriving' => 0.45,
-        'arrived' => 0.68,
-        'in_progress' => 0.86,
-        'completed' => 1,
-        _ => 0,
-      };
+    'accepted' => 0.22,
+    'driver_arriving' => 0.45,
+    'arrived' => 0.68,
+    'in_progress' => 0.86,
+    'completed' => 1,
+    _ => 0,
+  };
 
   Set<Polyline> get _polylines {
     if (_routePoints.length < 2) return const <Polyline>{};
@@ -335,11 +340,11 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     });
 
     try {
-      final DrivingRoute route =
-          await _directionsService.getShortestDrivingRoute(
-        origin: widget.pickupLocation,
-        destination: widget.destinationLocation,
-      );
+      final DrivingRoute route = await _directionsService
+          .getShortestDrivingRoute(
+            origin: widget.pickupLocation,
+            destination: widget.destinationLocation,
+          );
 
       if (!mounted) return;
       setState(() {
@@ -414,9 +419,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         Marker(
           markerId: const MarkerId('destination'),
           position: widget.destinationLocation,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueRed,
-          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           infoWindow: InfoWindow(
             title: 'Destination',
             snippet: widget.destinationAddress,
@@ -579,9 +582,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     final String? reason = await Navigator.push<String>(
       context,
-      MaterialPageRoute<String>(
-        builder: (_) => const CancelReasonScreen(),
-      ),
+      MaterialPageRoute<String>(builder: (_) => const CancelReasonScreen()),
     );
 
     if (reason != null && mounted) {
@@ -592,130 +593,19 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   Future<void> _showCompletedRide(RideLiveState state) async {
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       isDismissible: false,
       enableDrag: false,
       backgroundColor: Colors.transparent,
-      builder: (BuildContext sheetContext) {
-        final Color backgroundColor = AlphaColors.background(sheetContext);
-        final Color textColor = AlphaColors.text(sheetContext);
-        final Color mutedColor = AlphaColors.muted(sheetContext);
-
-        return SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(22, 24, 22, 26),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(30),
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                const Align(
-                  alignment: Alignment.center,
-                  child: CircleAvatar(
-                    radius: 31,
-                    backgroundColor: primaryColor,
-                    child: Icon(
-                      Icons.check_rounded,
-                      color: Colors.black,
-                      size: 38,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Trip completed',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 27,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Thanks for riding with AlphaRide.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: mutedColor, fontSize: 14.5),
-                ),
-                const SizedBox(height: 22),
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: AlphaColors.surface(sheetContext),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AlphaColors.border(sheetContext)),
-                  ),
-                  child: Column(
-                    children: <Widget>[
-                      _ReceiptRow(
-                        label: 'Final fare',
-                        value:
-                            '${RideOption.formatAmount(state.fare)} ${state.currencyCode}',
-                      ),
-                      if (state.waitingCharge > 0) ...<Widget>[
-                        const SizedBox(height: 10),
-                        _ReceiptRow(
-                          label: 'Distance fare',
-                          value:
-                              '${RideOption.formatAmount(state.estimatedFare)} ${state.currencyCode}',
-                        ),
-                        const SizedBox(height: 10),
-                        _ReceiptRow(
-                          label: 'Customer waiting',
-                          value:
-                              '${RideOption.formatAmount(state.waitingCharge)} ${state.currencyCode}',
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      const _ReceiptRow(label: 'Payment', value: 'Cash'),
-                      const SizedBox(height: 16),
-                      _ReceiptLocation(
-                        icon: Icons.my_location_rounded,
-                        value: widget.pickupAddress,
-                      ),
-                      const SizedBox(height: 10),
-                      _ReceiptLocation(
-                        icon: Icons.flag_rounded,
-                        value: widget.destinationAddress,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      if (mounted) _closeRideFlow();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(17),
-                      ),
-                    ),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (BuildContext sheetContext) => RideCompletionReceipt(
+        state: state,
+        pickupAddress: widget.pickupAddress,
+        destinationAddress: widget.destinationAddress,
+        onDone: () {
+          Navigator.pop(sheetContext);
+          if (mounted) _closeRideFlow();
+        },
+      ),
     );
   }
 
@@ -810,10 +700,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   ),
                 ),
               ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: _searchPanel(),
-            ),
+            Align(alignment: Alignment.bottomCenter, child: _searchPanel()),
           ],
         ),
       ),
@@ -837,121 +724,122 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            AlphaFlowHeader(
-              title: _searchTitle,
-              subtitle: _statusMessage,
-              compact: true,
-              trailing: SizedBox(
-                width: 90,
-                height: 58,
-                child: Image.asset(
-                  widget.ride.assetPath,
-                  fit: BoxFit.contain,
-                  cacheWidth: 280,
-                  filterQuality: FilterQuality.medium,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                AlphaMetricChip(
-                  icon: widget.ride.id == 'boda'
-                      ? Icons.two_wheeler_rounded
-                      : widget.ride.id == 'rickshaw'
-                      ? Icons.electric_rickshaw_rounded
-                      : Icons.local_taxi_rounded,
-                  label: widget.ride.name,
-                ),
-                AlphaMetricChip(
-                  icon: Icons.payments_outlined,
-                  label:
-                      '~ ${RideOption.formatAmount(_liveState?.estimatedFare ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
-                ),
-                AlphaMetricChip(
-                  icon: _isSearching
-                      ? Icons.radar_rounded
-                      : Icons.navigation_rounded,
-                  label: _statusLabel,
-                  emphasized: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_isSearching)
-              AnimatedBuilder(
-                animation: _progressController,
-                builder: (BuildContext context, Widget? child) {
-                  return LinearProgressIndicator(
-                    value: _progressController.value,
-                    minHeight: 4,
-                    borderRadius: BorderRadius.circular(99),
-                    backgroundColor: surfaceColor,
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(primaryColor),
-                  );
-                },
-              )
-            else
-              LinearProgressIndicator(
-                value: _rideProgress,
-                minHeight: 4,
-                borderRadius: BorderRadius.circular(99),
-                backgroundColor: surfaceColor,
-                valueColor: const AlwaysStoppedAnimation<Color>(primaryColor),
-              ),
-            const SizedBox(height: 14),
-            if (_liveState?.isWaiting == true) ...<Widget>[
-              const SizedBox(height: 14),
-              _PassengerWaitingCard(state: _liveState!),
-            ],
-            if (!_isSearching && driver != null) ...<Widget>[
-              const SizedBox(height: 16),
-              _AssignedDriverCard(
-                driver: driver,
-                photoUrl: _driverPhotoUrl,
-                isPhotoLoading: _isDriverPhotoLoading,
-              ),
-            ],
-            const SizedBox(height: 16),
-            if (_canPassengerCancel)
-              TextButton(
-                onPressed: _showCancelConfirmation,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  foregroundColor: textColor,
-                ),
-                child: Text(
-                  _isCancelling ? 'Cancelling...' : 'Cancel order',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+              AlphaFlowHeader(
+                title: _searchTitle,
+                subtitle: _statusMessage,
+                compact: true,
+                trailing: SizedBox(
+                  width: 90,
+                  height: 58,
+                  child: Image.asset(
+                    widget.ride.assetPath,
+                    fit: BoxFit.contain,
+                    cacheWidth: 280,
+                    filterQuality: FilterQuality.medium,
                   ),
                 ),
-              )
-            else if (!_isSearching)
-              Row(
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: <Widget>[
-                  const Icon(
-                    Icons.lock_outline_rounded,
-                    size: 17,
-                    color: primaryColor,
+                  AlphaMetricChip(
+                    icon: widget.ride.id == 'boda'
+                        ? Icons.two_wheeler_rounded
+                        : widget.ride.id == 'rickshaw'
+                        ? Icons.electric_rickshaw_rounded
+                        : Icons.local_taxi_rounded,
+                    label: widget.ride.name,
                   ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      'The ride is active. Trip changes are controlled by the live ride status.',
-                      style: TextStyle(
-                        color: mutedColor,
-                        fontSize: 12.5,
-                        height: 1.35,
-                      ),
-                    ),
+                  AlphaMetricChip(
+                    icon: Icons.payments_outlined,
+                    label:
+                        '${_liveState?.status == 'in_progress' ? 'Current fare' : 'Estimate'} ${RideOption.formatAmount(_liveState?.fareAt(DateTime.now()) ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
+                  ),
+                  AlphaMetricChip(
+                    icon: _isSearching
+                        ? Icons.radar_rounded
+                        : Icons.navigation_rounded,
+                    label: _statusLabel,
+                    emphasized: true,
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              if (_isSearching)
+                AnimatedBuilder(
+                  animation: _progressController,
+                  builder: (BuildContext context, Widget? child) {
+                    return LinearProgressIndicator(
+                      value: _progressController.value,
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(99),
+                      backgroundColor: surfaceColor,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        primaryColor,
+                      ),
+                    );
+                  },
+                )
+              else
+                LinearProgressIndicator(
+                  value: _rideProgress,
+                  minHeight: 4,
+                  borderRadius: BorderRadius.circular(99),
+                  backgroundColor: surfaceColor,
+                  valueColor: const AlwaysStoppedAnimation<Color>(primaryColor),
+                ),
+              const SizedBox(height: 14),
+              if (_liveState?.isWaiting == true) ...<Widget>[
+                const SizedBox(height: 14),
+                _PassengerWaitingCard(state: _liveState!),
+              ],
+              if (!_isSearching && driver != null) ...<Widget>[
+                const SizedBox(height: 16),
+                _AssignedDriverCard(
+                  driver: driver,
+                  photoUrl: _driverPhotoUrl,
+                  isPhotoLoading: _isDriverPhotoLoading,
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (_canPassengerCancel)
+                TextButton(
+                  onPressed: _showCancelConfirmation,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    foregroundColor: textColor,
+                  ),
+                  child: Text(
+                    _isCancelling ? 'Cancelling...' : 'Cancel order',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else if (!_isSearching)
+                Row(
+                  children: <Widget>[
+                    const Icon(
+                      Icons.lock_outline_rounded,
+                      size: 17,
+                      color: primaryColor,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'The ride is active. Trip changes are controlled by the live ride status.',
+                        style: TextStyle(
+                          color: mutedColor,
+                          fontSize: 12.5,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -995,9 +883,7 @@ class _AssignedDriverCard extends StatelessWidget {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
-          content: Text('The phone dialer could not be opened.'),
-        ),
+        const SnackBar(content: Text('The phone dialer could not be opened.')),
       );
   }
 
@@ -1007,18 +893,18 @@ class _AssignedDriverCard extends StatelessWidget {
         photoUrl == null || photoUrl!.trim().isEmpty ? null : photoUrl!.trim();
 
     Widget fallback() => ColoredBox(
-          color: primaryColor.withValues(alpha: 0.18),
-          child: Center(
-            child: Text(
-              _initials,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 21,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+      color: primaryColor.withValues(alpha: 0.18),
+      child: Center(
+        child: Text(
+          _initials,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 21,
+            fontWeight: FontWeight.w900,
           ),
-        );
+        ),
+      ),
+    );
 
     return Semantics(
       image: true,
@@ -1051,13 +937,13 @@ class _AssignedDriverCard extends StatelessWidget {
                         ),
                       )
                     : resolvedPhotoUrl == null
-                        ? fallback()
-                        : Image.network(
-                            resolvedPhotoUrl,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            errorBuilder: (_, __, ___) => fallback(),
-                          ),
+                    ? fallback()
+                    : Image.network(
+                        resolvedPhotoUrl,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) => fallback(),
+                      ),
               ),
             ),
             Positioned(
@@ -1295,10 +1181,10 @@ class _PassengerWaitingCard extends StatelessWidget {
         final int activeSeconds = state.waitingStartedAt == null
             ? 0
             : now
-                .difference(state.waitingStartedAt!)
-                .inSeconds
-                .clamp(0, 4 * 60 * 60)
-                .toInt();
+                  .difference(state.waitingStartedAt!)
+                  .inSeconds
+                  .clamp(0, 4 * 60 * 60)
+                  .toInt();
         final int freeRemaining = (state.waitingGraceSeconds - activeSeconds)
             .clamp(0, 999999)
             .toInt();
@@ -1382,13 +1268,21 @@ class _ReceiptRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        Text(label, style: TextStyle(color: AlphaColors.muted(context))),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            color: AlphaColors.text(context),
-            fontWeight: FontWeight.w800,
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(color: AlphaColors.muted(context)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: AlphaColors.text(context),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ],
@@ -1423,6 +1317,150 @@ class _ReceiptLocation extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class RideCompletionReceipt extends StatelessWidget {
+  const RideCompletionReceipt({
+    super.key,
+    required this.state,
+    required this.pickupAddress,
+    required this.destinationAddress,
+    required this.onDone,
+  });
+  final RideLiveState state;
+  final String pickupAddress;
+  final String destinationAddress;
+  final VoidCallback onDone;
+  @override
+  Widget build(BuildContext sheetContext) {
+    final Color backgroundColor = AlphaColors.background(sheetContext);
+    final Color textColor = AlphaColors.text(sheetContext);
+    final Color mutedColor = AlphaColors.muted(sheetContext);
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.9,
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 26),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      const Align(
+                        alignment: Alignment.center,
+                        child: CircleAvatar(
+                          radius: 31,
+                          backgroundColor: primaryColor,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.black,
+                            size: 38,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Trip completed',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 27,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Thanks for riding with AlphaRide.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: mutedColor, fontSize: 14.5),
+                      ),
+                      const SizedBox(height: 22),
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: AlphaColors.surface(sheetContext),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AlphaColors.border(sheetContext),
+                          ),
+                        ),
+                        child: Column(
+                          children: <Widget>[
+                            _ReceiptRow(
+                              label: 'Final fare',
+                              value:
+                                  '${RideOption.formatAmount(state.fare)} ${state.currencyCode}',
+                            ),
+                            if (state.waitingCharge > 0) ...<Widget>[
+                              const SizedBox(height: 10),
+                              _ReceiptRow(
+                                label: 'Distance fare',
+                                value:
+                                    '${RideOption.formatAmount((state.fare - state.waitingCharge).clamp(0, state.fare).toInt())} ${state.currencyCode}',
+                              ),
+                              const SizedBox(height: 10),
+                              _ReceiptRow(
+                                label: 'Customer waiting',
+                                value:
+                                    '${RideOption.formatAmount(state.waitingCharge)} ${state.currencyCode}',
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            const _ReceiptRow(label: 'Payment', value: 'Cash'),
+                            const SizedBox(height: 16),
+                            _ReceiptLocation(
+                              icon: Icons.my_location_rounded,
+                              value: pickupAddress,
+                            ),
+                            const SizedBox(height: 10),
+                            _ReceiptLocation(
+                              icon: Icons.flag_rounded,
+                              value: destinationAddress,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: onDone,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.black,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                  ),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
