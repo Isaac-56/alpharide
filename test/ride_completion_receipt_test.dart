@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/home/driver_search_screen.dart';
-import '../lib/models/ride_backend.dart';
+import 'package:passengerapp/home/driver_search_screen.dart';
+import 'package:passengerapp/models/ride_backend.dart';
 
 void main() {
   for (final double scale in <double>[1, 1.8]) {
