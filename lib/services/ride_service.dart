@@ -57,6 +57,12 @@ class RideService {
     }
   }
 
+  Future<void> retryDriverMatching(String rideId) async {
+    await _functions.httpsCallable('retryRideDispatch').call<dynamic>(
+      <String, dynamic>{'rideId': rideId},
+    );
+  }
+
   Future<void> cancelRide({
     required String rideId,
     required String reason,
