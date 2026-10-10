@@ -102,7 +102,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     _listenToRide();
     // The server owns the search deadline and throttles duplicate retries.
     // The scheduled worker also continues matching while this app is closed.
-    _dispatchRetryTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _dispatchRetryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       unawaited(_retryDriverMatching());
     });
 

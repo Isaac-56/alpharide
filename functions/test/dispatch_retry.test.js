@@ -47,7 +47,13 @@ function harness(count = 1) {
   };
   const engine = createDispatchEngine({
     db, Timestamp, FieldValue: { serverTimestamp: () => Timestamp.fromMillis(now) },
-    realtimeDb: { ref: () => ({ get: async () => {
+    realtimeDb: { ref: (path) => ({ transaction: async (callback) => {
+      const id = path.split("/").at(-1);
+      const next = callback(presence[id]);
+      if (next === undefined) return { committed: false };
+      presence[id] = next;
+      return { committed: true, snapshot: { val: () => next } };
+    }, get: async () => {
       if (beforePresence) await beforePresence();
       return { exists: () => true, val: () => presence };
     } }) },
@@ -179,4 +185,46 @@ test("a driver becoming busy during verification is skipped at publication", asy
   };
   assert.equal(await h.dispatch(), "requested");
   assert.equal(h.sent.length, 0);
+});
+
+
+test("completed ride presence is released during the very next dispatch", async () => {
+  const h = harness();
+  h.presence.driver0.activeRideId = "previous";
+  h.docs.set("rides/previous", { driverId: "driver0", status: "completed" });
+  h.docs.set("active_driver_rides/driver0", { rideId: "previous" });
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.presence.driver0.activeRideId, undefined);
+  assert.equal(h.docs.has("active_driver_rides/driver0"), false);
+  assert.equal(h.sent.length, 1);
+});
+
+test("cancelled ride presence without a lock is recovered without going offline", async () => {
+  const h = harness();
+  h.presence.driver0.activeRideId = "previous";
+  h.docs.set("rides/previous", { driverId: "driver0", status: "cancelled" });
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.presence.driver0.isOnline, true);
+});
+
+test("active or unverified ride pointers remain busy", async () => {
+  for (const previous of [null, { driverId: "driver0", status: "in_progress" },
+    { driverId: "another", status: "completed" }]) {
+    const h = harness();
+    h.presence.driver0.activeRideId = "previous";
+    if (previous) h.docs.set("rides/previous", previous);
+    assert.equal(await h.dispatch(), "requested");
+    assert.equal(h.presence.driver0.activeRideId, "previous");
+    assert.equal(h.sent.length, 0);
+  }
+});
+
+test("a newer driver lock is never released by old trip reconciliation", async () => {
+  const h = harness();
+  h.presence.driver0.activeRideId = "previous";
+  h.docs.set("rides/previous", { driverId: "driver0", status: "completed" });
+  h.docs.set("active_driver_rides/driver0", { rideId: "new-trip" });
+  assert.equal(await h.dispatch(), "requested");
+  assert.equal(h.docs.get("active_driver_rides/driver0").rideId, "new-trip");
+  assert.equal(h.presence.driver0.activeRideId, "previous");
 });

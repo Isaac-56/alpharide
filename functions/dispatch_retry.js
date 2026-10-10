@@ -9,7 +9,7 @@ const { walletRideEligibility, estimatedPlatformFee } = require("./wallet_logic"
 const { PLATFORM_COMMISSION_BPS } = require("./accounting_logic");
 
 const SEARCH_WINDOW_MS = 180000;
-const NO_CANDIDATE_RETRY_MS = 10000;
+const NO_CANDIDATE_RETRY_MS = 3000;
 const LEASE_MS = 45000;
 const UNANSWERED_RETRY_COOLDOWN_MS = 60000;
 const MAX_OFFERS_PER_DRIVER = 2;
@@ -72,8 +72,41 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
     }
     try {
       const presence = await realtimeDb.ref("driver_locations").get();
+      const presenceMap = presence.exists() ? presence.val() : null;
+      // Only examine fresh nearby drivers. A leftover terminal ride pointer
+      // must not hide a driver before the authoritative lock check.
+      const availableView = Object.fromEntries(Object.entries(presenceMap ?? {}).map(([id, value]) =>
+        [id, value && typeof value === "object" ? { ...value, activeRideId: null } : value]));
+      const nearby = selectPresenceCandidates({ presenceMap: availableView,
+        pickup: ride.pickup, requiredVehicleType: ride.requiredVehicleType,
+        nowMs: clock(), limit: Number.MAX_SAFE_INTEGER, excludedDriverIds: [...excluded] });
+      await Promise.all(nearby.map(async ({ driverId }) => {
+        const currentPresence = presenceMap[driverId];
+        const previousRideId = currentPresence?.activeRideId;
+        if (typeof previousRideId !== "string" || !previousRideId || previousRideId.includes("/")) return;
+        const previousRideRef = db.collection("rides").doc(previousRideId);
+        const lockRef = db.collection("active_driver_rides").doc(driverId);
+        const released = await db.runTransaction(async (tx) => {
+          const previousRide = await tx.get(previousRideRef);
+          const lock = await tx.get(lockRef);
+          if (!previousRide.exists || previousRide.get("driverId") !== driverId ||
+              !["completed", "cancelled", "expired"].includes(previousRide.get("status")) ||
+              (lock.exists && lock.get("rideId") !== previousRideId)) return false;
+          if (lock.exists) tx.delete(lockRef);
+          return true;
+        });
+        if (!released) return;
+        const result = await realtimeDb.ref(`driver_locations/${driverId}`).transaction((current) => {
+          if (!current || current.activeRideId !== previousRideId) return;
+          const next = { ...current };
+          delete next.activeRideId;
+          return next;
+        });
+        // Use the committed value: a newer trip/session may have replaced it.
+        if (result.committed) presenceMap[driverId] = result.snapshot.val();
+      }));
       const candidates = selectPresenceCandidates({
-        presenceMap: presence.exists() ? presence.val() : null,
+        presenceMap,
         pickup: ride.pickup, requiredVehicleType: ride.requiredVehicleType,
         nowMs: clock(), limit: Number.MAX_SAFE_INTEGER, excludedDriverIds: [...excluded],
       });
