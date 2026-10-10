@@ -11,8 +11,8 @@ const DISPATCH_RADIUS_METERS = 12 * 1000;
 const ACCEPTANCE_PICKUP_RADIUS_METERS = 15 * 1000;
 const PRESENCE_CANDIDATE_SCAN_LIMIT = 25;
 const MAX_DRIVER_OFFERS = 5;
-const OFFER_WINDOW_MS = 45 * 1000;
-const DISPATCH_ALGORITHM_VERSION = 2;
+const OFFER_WINDOW_MS = 30 * 1000;
+const DISPATCH_ALGORITHM_VERSION = 3;
 
 function normalizeVehicleType(value) {
   return normalizeVehicleClass(value);
@@ -209,11 +209,13 @@ function selectPresenceCandidates({
   nowMs = Date.now(),
   radiusMeters = DISPATCH_RADIUS_METERS,
   limit = PRESENCE_CANDIDATE_SCAN_LIMIT,
+  excludedDriverIds = [],
 }) {
   if (!presenceMap || typeof presenceMap !== "object") return [];
 
   const required = normalizeVehicleType(requiredVehicleType);
   const candidates = [];
+  const excluded = new Set(excludedDriverIds);
 
   for (const [presenceKey, raw] of Object.entries(presenceMap)) {
     const driverId =
@@ -222,6 +224,7 @@ function selectPresenceCandidates({
         : presenceKey;
 
     if (
+      excluded.has(driverId) ||
       !presenceAllowsAcceptance({
         presence: raw,
         driverId,
