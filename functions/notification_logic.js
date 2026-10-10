@@ -38,13 +38,42 @@ function buildRideOfferMessage({
     data: { type: "ride_offer", rideId, rideOptionId },
     android: {
       priority: "high",
-      notification: { priority: "high", sound: "default" },
+      notification: { priority: "high", sound: "default", channelId: "alpha_ride_alerts_v1", tag: `ride_offer:${rideId}` },
     },
     apns: { payload: { aps: { sound: "default" } } },
   };
 }
 
+function buildUpdateMessage({ token, eventId, title, body, type = "news" }) {
+  const urgent = type === "ride_update";
+  return {
+    token: validatePushToken(token),
+    notification: { title: String(title).slice(0, 120), body: String(body).slice(0, 500) },
+    data: { type, eventId },
+    android: { priority: urgent ? "high" : "normal", notification: {
+      channelId: urgent ? "alpha_ride_alerts_v1" : "alpha_updates_v1",
+      sound: "default", tag: eventId,
+    } },
+    apns: { payload: { aps: { sound: "default" } } },
+  };
+}
+
+function passengerRideUpdate(before, after) {
+  if (!before || !after || before.status === after.status) return null;
+  const updates = {
+    accepted: ["Driver accepted your ride", "Your driver is preparing to pick you up."],
+    arrived: ["Your driver has arrived", "Meet your driver at the pickup location."],
+    in_progress: ["Your trip has started", "Follow your trip in Alpha Ride."],
+    completed: ["Your trip is complete", "Open Alpha Ride to view your final fare."],
+    cancelled: ["Your ride was cancelled", "Open Alpha Ride for the latest ride status."],
+  };
+  const update = updates[after.status];
+  return update ? { title: update[0], body: update[1], type: "ride_update" } : null;
+}
+
 module.exports = {
+  buildUpdateMessage,
+  passengerRideUpdate,
   buildRideOfferMessage,
   rideLabel,
   validatePushToken,

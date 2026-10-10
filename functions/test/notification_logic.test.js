@@ -29,3 +29,26 @@ test("Boda offers create an urgent data and display notification", () => {
   assert.equal(message.android.priority, "high");
   assert.equal(message.android.notification.sound, "default");
 });
+
+const { buildUpdateMessage, passengerRideUpdate } = require("../notification_logic");
+
+test("news and discounts use the normal sound channel, ride updates the urgent channel", () => {
+  for (const type of ["news", "discount", "ride_update"]) {
+    const message = buildUpdateMessage({ token: "passenger-token-that-is-long-enough",
+      eventId: "unique-event", title: "Update", body: "Details", type });
+    assert.equal(message.android.notification.sound, "default");
+    assert.equal(message.apns.payload.aps.sound, "default");
+    assert.equal(message.android.notification.channelId,
+      type === "ride_update" ? "alpha_ride_alerts_v1" : "alpha_updates_v1");
+    assert.equal(message.data.eventId, "unique-event");
+  }
+});
+
+test("only meaningful passenger status changes alert, live fare writes do not", () => {
+  for (const status of ["accepted", "arrived", "in_progress", "completed", "cancelled"]) {
+    assert.equal(passengerRideUpdate({ status: "offered" }, { status }).type, "ride_update");
+    assert.equal(passengerRideUpdate({ status }, { status, liveDistanceFare: 1200 }), null);
+  }
+  assert.equal(passengerRideUpdate({ status: "requested" }, { status: "offered" }), null);
+  assert.equal(passengerRideUpdate(null, { status: "accepted" }), null);
+});

@@ -11,6 +11,7 @@ import 'core/theme/alpha_theme.dart';
 import 'firebase_options.dart';
 import 'home/active_ride_gate.dart';
 import 'services/session_service.dart';
+import 'services/passenger_push_notification_service.dart';
 import 'theme_controller.dart';
 import 'widgets/loading_screen.dart';
 
@@ -18,12 +19,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final Future<void> themeInitialization = AppThemeController.initialize();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await themeInitialization;
 
   runApp(const MyApp());
+  PassengerPushNotificationService.instance.bindAuthentication();
 }
 
 class MyApp extends StatelessWidget {
@@ -33,11 +33,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppThemeController.themeMode,
-      builder: (
-        BuildContext context,
-        ThemeMode themeMode,
-        Widget? child,
-      ) {
+      builder: (BuildContext context, ThemeMode themeMode, Widget? child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Alpha Passenger',
@@ -47,9 +43,7 @@ class MyApp extends StatelessWidget {
           theme: AlphaTheme.light,
           darkTheme: AlphaTheme.dark,
           home: const AuthWrapper(),
-          routes: {
-            '/login': (_) => const LoginScreen(),
-          },
+          routes: {'/login': (_) => const LoginScreen()},
           onGenerateRoute: (RouteSettings settings) {
             switch (settings.name) {
               case '/otp':
@@ -67,9 +61,7 @@ class MyApp extends StatelessWidget {
                 final String phoneNumber = settings.arguments as String;
 
                 return MaterialPageRoute<void>(
-                  builder: (_) => SignUpScreen(
-                    phoneNumber: phoneNumber,
-                  ),
+                  builder: (_) => SignUpScreen(phoneNumber: phoneNumber),
                 );
 
               default:
@@ -121,10 +113,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 class ActiveSessionGate extends StatefulWidget {
   final User user;
 
-  const ActiveSessionGate({
-    required this.user,
-    super.key,
-  });
+  const ActiveSessionGate({required this.user, super.key});
 
   @override
   State<ActiveSessionGate> createState() => _ActiveSessionGateState();
@@ -186,10 +175,7 @@ class _ActiveSessionGateState extends State<ActiveSessionGate>
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
       future: _validation,
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<bool> validationSnapshot,
-      ) {
+      builder: (BuildContext context, AsyncSnapshot<bool> validationSnapshot) {
         if (validationSnapshot.connectionState != ConnectionState.done) {
           return const _SessionCheckingScreen();
         }
@@ -203,10 +189,7 @@ class _ActiveSessionGateState extends State<ActiveSessionGate>
 
         return StreamBuilder<bool>(
           stream: SessionService.instance.watchSession(widget.user),
-          builder: (
-            BuildContext context,
-            AsyncSnapshot<bool> sessionSnapshot,
-          ) {
+          builder: (BuildContext context, AsyncSnapshot<bool> sessionSnapshot) {
             if (sessionSnapshot.hasData && sessionSnapshot.data == false) {
               _scheduleForcedSignOut();
               return const _SessionCheckingScreen(
@@ -225,9 +208,7 @@ class _ActiveSessionGateState extends State<ActiveSessionGate>
 class _SessionCheckingScreen extends StatelessWidget {
   final String? message;
 
-  const _SessionCheckingScreen({
-    this.message,
-  });
+  const _SessionCheckingScreen({this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -240,9 +221,7 @@ class _SessionCheckingScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(
-                color: colors.primary,
-              ),
+              CircularProgressIndicator(color: colors.primary),
               if (message != null) ...[
                 const SizedBox(height: 18),
                 Text(
