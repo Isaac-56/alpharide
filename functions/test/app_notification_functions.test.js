@@ -76,5 +76,5 @@ test("fresh news alerts but historical unread inbox migration does not", async (
   event.data.data = () => ({ type: "discount", title: "Discount", message: "Details", createdAt: { toMillis: () => Date.now() } });
   await h.exports.notifyDriverInbox(event);
   assert.equal(h.sent.length, 1);
-  assert.equal(h.sent[0].android.notification.channelId, "alpha_updates_v1");
+  assert.equal(h.sent[0].android.notification.channelId, "alpha_updates_luxe_v2");
 });

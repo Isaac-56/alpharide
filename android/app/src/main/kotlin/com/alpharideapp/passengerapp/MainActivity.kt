@@ -5,7 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.media.AudioAttributes
 import android.os.Build
-import android.provider.Settings
+import android.net.Uri
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -15,13 +15,17 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val manager = getSystemService(NotificationManager::class.java)
+        // Resolve by stable resource name; the R.raw reference also retains the
+        // approved audio when release resource shrinking is enabled.
+        val soundName = resources.getResourceEntryName(R.raw.alpha_luxe)
+        val soundUri = Uri.parse("android.resource://$packageName/raw/$soundName")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             for ((id, name, importance) in listOf(
-                Triple("alpha_ride_alerts_v1", "Ride requests and updates", NotificationManager.IMPORTANCE_HIGH),
-                Triple("alpha_updates_v1", "News and discounts", NotificationManager.IMPORTANCE_DEFAULT)
+                Triple("alpha_ride_alerts_luxe_v2", "Ride requests and updates", NotificationManager.IMPORTANCE_HIGH),
+                Triple("alpha_updates_luxe_v2", "News and discounts", NotificationManager.IMPORTANCE_DEFAULT)
             )) {
                 val channel = NotificationChannel(id, name, importance)
-                channel.setSound(Settings.System.DEFAULT_NOTIFICATION_URI,
+                channel.setSound(soundUri,
                     AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
                 channel.enableVibration(true)
                 manager.createNotificationChannel(channel)
@@ -34,7 +38,7 @@ class MainActivity : FlutterActivity() {
                 } else {
                     try {
                         val urgent = call.argument<Boolean>("urgent") == true
-                        val channelId = if (urgent) "alpha_ride_alerts_v1" else "alpha_updates_v1"
+                        val channelId = if (urgent) "alpha_ride_alerts_luxe_v2" else "alpha_updates_luxe_v2"
                         val eventId = call.argument<String>("eventId") ?: "alpha-update"
                         val launch = packageManager.getLaunchIntentForPackage(packageName) ?: intent
                         val pending = PendingIntent.getActivity(this, 0, launch,
@@ -49,7 +53,8 @@ class MainActivity : FlutterActivity() {
                             .setContentIntent(pending)
                             .setVisibility(android.app.Notification.VISIBILITY_PRIVATE)
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                            builder.setDefaults(android.app.Notification.DEFAULT_ALL)
+                            builder.setDefaults(android.app.Notification.DEFAULT_VIBRATE or android.app.Notification.DEFAULT_LIGHTS)
+                            builder.setSound(soundUri)
                             builder.setPriority(if (urgent) android.app.Notification.PRIORITY_HIGH
                                 else android.app.Notification.PRIORITY_DEFAULT)
                         }

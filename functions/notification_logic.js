@@ -38,9 +38,9 @@ function buildRideOfferMessage({
     data: { type: "ride_offer", rideId, rideOptionId },
     android: {
       priority: "high",
-      notification: { priority: "high", sound: "default", channelId: "alpha_ride_alerts_v1", tag: `ride_offer:${rideId}` },
+      notification: { priority: "high", sound: "alpha_luxe", channelId: "alpha_ride_alerts_luxe_v2", tag: `ride_offer:${rideId}` },
     },
-    apns: { payload: { aps: { sound: "default" } } },
+    apns: { payload: { aps: { sound: "alpha_luxe.wav" } } },
   };
 }
 
@@ -51,10 +51,10 @@ function buildUpdateMessage({ token, eventId, title, body, type = "news" }) {
     notification: { title: String(title).slice(0, 120), body: String(body).slice(0, 500) },
     data: { type, eventId },
     android: { priority: urgent ? "high" : "normal", notification: {
-      channelId: urgent ? "alpha_ride_alerts_v1" : "alpha_updates_v1",
-      sound: "default", tag: eventId,
+      channelId: urgent ? "alpha_ride_alerts_luxe_v2" : "alpha_updates_luxe_v2",
+      sound: "alpha_luxe", tag: eventId,
     } },
-    apns: { payload: { aps: { sound: "default" } } },
+    apns: { payload: { aps: { sound: "alpha_luxe.wav" } } },
   };
 }
 
