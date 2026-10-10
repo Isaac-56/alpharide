@@ -67,6 +67,8 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
   int _driverPhotoRequestId = 0;
   Timer? _driverPhotoRetry;
   int _photoAttempts = 0;
+  Timer? _dispatchRetryTimer;
+  bool _dispatchRetryInFlight = false;
 
   bool get _canPassengerCancel =>
       !_isCancelling &&
@@ -98,9 +100,32 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     _buildStaticMarkers();
     _listenToRide();
+    // The server owns the search deadline and throttles duplicate retries.
+    // The scheduled worker also continues matching while this app is closed.
+    _dispatchRetryTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      unawaited(_retryDriverMatching());
+    });
 
     if (_routePoints.length < 2) {
       _loadRoadRoute();
+    }
+  }
+
+  Future<void> _retryDriverMatching() async {
+    if (!mounted ||
+        !_isSearching ||
+        _isCancelling ||
+        _terminalHandled ||
+        _dispatchRetryInFlight) {
+      return;
+    }
+    _dispatchRetryInFlight = true;
+    try {
+      await _rideService.retryDriverMatching(widget.rideId);
+    } catch (error) {
+      debugPrint('Driver matching retry delayed: $error');
+    } finally {
+      _dispatchRetryInFlight = false;
     }
   }
 
@@ -696,6 +721,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   @override
   void dispose() {
+    _dispatchRetryTimer?.cancel();
     _driverPhotoRetry?.cancel();
     _driverPhotoRequestId++;
     _rideSubscription?.cancel();

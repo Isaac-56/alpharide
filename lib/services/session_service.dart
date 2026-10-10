@@ -10,14 +10,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'account_role_service.dart';
 
 class SessionService {
-  SessionService._();
+  SessionService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+      : _auth = auth ?? FirebaseAuth.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance;
 
-  static final SessionService instance = SessionService._();
+  static final SessionService instance = SessionService();
 
   static const String _sessionPrefix = 'alpharide_active_session_';
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
 
   bool _signInInProgress = false;
 
@@ -82,7 +84,10 @@ class SessionService {
     try {
       // A verified sign-in owns exactly one Alpha product role. Claiming here
       // also migrates sessions created by older app versions.
-      await AccountRoleService.instance.claimPassengerRole();
+      // A local session is only persisted after a successful role claim.
+      if (localSessionId == null) {
+        await AccountRoleService.instance.claimPassengerRole();
+      }
     } on FirebaseAuthException catch (error) {
       debugPrint('Unable to confirm the AlphaRide account role: $error');
 
@@ -93,12 +98,27 @@ class SessionService {
       }
     }
 
+    if (!forceServer && localSessionId != null) {
+      try {
+        final cached = await _sessionReference(user.uid)
+            .get(const GetOptions(source: Source.cache));
+        if (cached.exists &&
+            cached.data()?['activeSessionId'] == localSessionId) {
+          return true;
+        }
+      } on FirebaseException {
+        // Cache miss: validate with the server instead.
+      }
+    }
+
     try {
       final DocumentSnapshot<Map<String, dynamic>> snapshot = forceServer
-          ? await _sessionReference(user.uid).get(
-              const GetOptions(source: Source.server),
-            )
-          : await _sessionReference(user.uid).get();
+          ? await _sessionReference(user.uid)
+                .get(const GetOptions(source: Source.server))
+                .timeout(const Duration(seconds: 6))
+          : await _sessionReference(user.uid)
+                .get()
+                .timeout(const Duration(seconds: 6));
       final String? remoteSessionId =
           snapshot.data()?['activeSessionId'] as String?;
 
@@ -106,22 +126,21 @@ class SessionService {
         final String newSessionId = localSessionId ?? _createSessionId();
 
         await preferences.setString(key, newSessionId);
-        await _sessionReference(user.uid).set(
-          <String, dynamic>{
-            'activeSessionId': newSessionId,
-            'uid': user.uid,
-            'phoneNumber': user.phoneNumber,
-            'platform': 'passenger',
-            'signedInAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        await _sessionReference(user.uid).set(<String, dynamic>{
+          'activeSessionId': newSessionId,
+          'uid': user.uid,
+          'phoneNumber': user.phoneNumber,
+          'platform': 'passenger',
+          'signedInAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
         return true;
       }
 
       return localSessionId != null && localSessionId == remoteSessionId;
+    } on TimeoutException {
+      return localSessionId != null;
     } on FirebaseException catch (error) {
       debugPrint('Unable to validate the active session: $error');
 
@@ -147,6 +166,7 @@ class SessionService {
             in _sessionReference(user.uid).snapshots(
           includeMetadataChanges: true,
         )) {
+          if (snapshot.metadata.isFromCache) continue;
           final String? remoteSessionId =
               snapshot.data()?['activeSessionId'] as String?;
 

@@ -17,15 +17,11 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const {
   ACCEPTANCE_PICKUP_RADIUS_METERS,
   DISPATCH_ALGORITHM_VERSION,
-  OFFER_WINDOW_MS,
-  PRESENCE_CANDIDATE_SCAN_LIMIT,
   approvedDriverPhotoStoragePath,
   buildDriverPublicSummary,
   presenceAllowsAcceptance,
   presenceIsWithinPickupRadius,
   profileAllowsDispatch,
-  selectEligibleDispatchCandidates,
-  selectPresenceCandidates,
   validateRideId,
 } = require("./dispatch_logic");
 const {
@@ -61,6 +57,7 @@ const {
   validatePlaceId,
   validatePlaceSearchQuery,
 } = require("./call_center_logic");
+const { createDispatchEngine } = require("./dispatch_retry");
 const { createTtlCache } = require("./runtime_cache");
 const {
   buildRideOfferMessage,
@@ -393,192 +390,27 @@ exports.unregisterDriverPushToken = onCall(
   },
 );
 
-async function dispatchRide({
-  rideId,
-  passengerId,
-  pickup,
-  destination,
-  rideOptionId,
-  requiredVehicleType,
-  paymentMethod,
-  estimatedFare,
-  commissionBps,
-  bookingSource = "app",
-}) {
-  const rideRef = db.collection("rides").doc(rideId);
-  const presenceSnapshot = await realtimeDb.ref("driver_locations").get();
-  const presenceCandidates = selectPresenceCandidates({
-    presenceMap: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
-    pickup,
-    requiredVehicleType,
-    limit: PRESENCE_CANDIDATE_SCAN_LIMIT,
-  });
+const { dispatchRide } = createDispatchEngine({
+  db, realtimeDb, Timestamp, FieldValue,
+  sendPush: sendRideOfferPushNotifications, logger,
+});
 
-  if (presenceCandidates.length === 0) {
-    await rideRef.update({
-      dispatchState: "no_candidates",
-      dispatchCandidateCount: 0,
-      dispatchScannedCandidateCount: 0,
-      dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
-      dispatchAttemptedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    return "requested";
-  }
-
-  const verificationResults = await Promise.all(
-    presenceCandidates.map(async (candidate) => {
-      const [profileSnapshot, activeRideSnapshot, walletSnapshot] =
-        await Promise.all([
-          db.collection("drivers").doc(candidate.driverId).get(),
-          db.collection("active_driver_rides").doc(candidate.driverId).get(),
-          db.collection("driver_wallets").doc(candidate.driverId).get(),
-        ]);
-      return {
-        driverId: candidate.driverId,
-        profile: profileSnapshot.exists ? profileSnapshot.data() : null,
-        busy: activeRideSnapshot.exists,
-        wallet: walletSnapshot.exists ? walletSnapshot.data() : null,
-      };
-    }),
-  );
-  const profilesByDriverId = Object.fromEntries(
-    verificationResults.map((result) => [result.driverId, result.profile]),
-  );
-  const busyDriverIds = verificationResults
-    .filter((result) => result.busy)
-    .map((result) => result.driverId);
-  const approvedCandidates = selectEligibleDispatchCandidates({
-    presenceCandidates,
-    profilesByDriverId,
-    busyDriverIds,
-    requiredVehicleType,
-  });
-  const walletsByDriverId = Object.fromEntries(
-    verificationResults.map((result) => [result.driverId, result.wallet]),
-  );
-  const verifiedCandidates = approvedCandidates.filter((candidate) =>
-    walletRideEligibility({
-      wallet: walletsByDriverId[candidate.driverId] ?? {},
-      estimatedFare,
-      commissionBps,
-    }).allowed,
-  );
-
-  if (verifiedCandidates.length === 0) {
-    await rideRef.update({
-      dispatchState: "no_approved_candidates",
-      dispatchCandidateCount: 0,
-      dispatchScannedCandidateCount: presenceCandidates.length,
-      dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
-      dispatchAttemptedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    return "requested";
-  }
-
-  const driverIds = verifiedCandidates.map((candidate) => candidate.driverId);
-  const expiresAt = Timestamp.fromMillis(Date.now() + OFFER_WINDOW_MS);
-  const batch = db.batch();
-
-  for (const [candidateIndex, candidate] of verifiedCandidates.entries()) {
-    batch.set(offerReference(candidate.driverId, rideId), {
-      schemaVersion: 1,
-      rideId,
-      driverId: candidate.driverId,
-      passengerId,
-      status: "pending",
-      pickup,
-      destination,
-      rideOptionId,
-      requiredVehicleType,
-      paymentMethod,
-      estimatedFare,
-      requiredWalletCredit: estimatedPlatformFee({
-        estimatedFare,
-        commissionBps,
-      }),
-      currencyCode: CURRENCY_CODE,
-      bookingSource,
-      distanceToPickupMeters: candidate.distanceToPickupMeters,
-      dispatchRank: candidateIndex + 1,
-      dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
-      createdAt: FieldValue.serverTimestamp(),
-      expiresAt,
-      respondedAt: null,
-    });
-  }
-
-  batch.update(rideRef, {
-    status: "offered",
-    offeredDriverIds: driverIds,
-    offerExpiresAt: expiresAt,
-    dispatchState: "offers_created",
-    dispatchCandidateCount: driverIds.length,
-    dispatchScannedCandidateCount: presenceCandidates.length,
-    dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
-    dispatchAttemptedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-  await batch.commit();
-  await sendRideOfferPushNotifications({
-    candidates: verifiedCandidates,
-    rideId,
-    rideOptionId,
-    pickup,
-    estimatedFare,
-  }).catch((error) => {
-    // The Firestore offer is authoritative; a temporary push failure must not
-    // cancel a valid ride request. The live listener still shows it in-app.
-    logger.error("Driver ride push delivery failed", { rideId, error });
-  });
-  return "offered";
-}
-
-async function expireOfferedRide(rideRef) {
-  let offeredDriverIds = [];
-  let expired = false;
-
-  await db.runTransaction(async (transaction) => {
-    const rideSnapshot = await transaction.get(rideRef);
-    if (!rideSnapshot.exists || rideSnapshot.get("status") !== "offered") {
-      return;
+exports.retryRideDispatch = onCall(
+  { region: REGION, timeoutSeconds: 30, memory: "256MiB" },
+  async (request) => {
+    const passengerId = requireAuthenticatedUser(request);
+    const rideId = validateRideId(request.data?.rideId);
+    const ride = await db.collection("rides").doc(rideId).get();
+    if (!ride.exists || ride.get("passengerId") !== passengerId) {
+      throw new HttpsError("permission-denied", "This ride belongs to another passenger.");
     }
-
-    const expiresAt = rideSnapshot.get("offerExpiresAt");
-    if (!(expiresAt instanceof Timestamp) || expiresAt.toMillis() > Date.now()) {
-      return;
+    try {
+      return { rideId, status: await dispatchRide({ rideId }) };
+    } catch (error) {
+      throw callableError(error, "Unable to retry driver matching.");
     }
-
-    const passengerId = rideSnapshot.get("passengerId");
-    const activePassengerRef = db
-      .collection("active_passenger_rides")
-      .doc(passengerId);
-    const activePassengerSnapshot = await transaction.get(activePassengerRef);
-    offeredDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
-      ? rideSnapshot.get("offeredDriverIds")
-      : [];
-    const now = FieldValue.serverTimestamp();
-
-    transaction.update(rideRef, {
-      status: "expired",
-      offerExpiresAt: null,
-      expiredAt: now,
-      updatedAt: now,
-    });
-    if (
-      activePassengerSnapshot.exists &&
-      activePassengerSnapshot.get("rideId") === rideRef.id
-    ) {
-      transaction.delete(activePassengerRef);
-    }
-    expired = true;
-  });
-
-  if (expired) {
-    await markOffers(rideRef.id, offeredDriverIds, "expired");
-  }
-}
+  },
+);
 
 function timestampMillis(value) {
   return value instanceof Timestamp ? value.toMillis() : null;
@@ -889,6 +721,7 @@ exports.customerServiceCreateRide = onCall(
           cancelledBy: null,
           cancellationReason: null,
           offeredDriverIds: [],
+          offerExpiresAt: Timestamp.now(),
           dispatchState: "pending",
           dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
           requestedAt: now,
@@ -1245,6 +1078,7 @@ exports.createRide = onCall(
           cancelledBy: null,
           cancellationReason: null,
           offeredDriverIds: [],
+          offerExpiresAt: Timestamp.now(),
           dispatchState: "pending",
           dispatchAlgorithmVersion: DISPATCH_ALGORITHM_VERSION,
           requestedAt: now,
@@ -1654,7 +1488,7 @@ exports.rejectRideOffer = onCall(
       const rideId = validateRideId(request.data?.rideId);
       const rideRef = db.collection("rides").doc(rideId);
       const offerRef = offerReference(driverId, rideId);
-      let rideExpired = false;
+      let retryDispatch = false;
       let allDriverIds = [];
 
       await db.runTransaction(async (transaction) => {
@@ -1695,9 +1529,7 @@ exports.rejectRideOffer = onCall(
           .filter((candidateId) => candidateId !== driverId)
           .map((candidateId) => offerReference(candidateId, rideId));
         const otherSnapshots = [];
-        for (const otherRef of otherRefs) {
-          otherSnapshots.push(await transaction.get(otherRef));
-        }
+        otherSnapshots.push(...await Promise.all(otherRefs.map((ref) => transaction.get(ref))));
         const nowMs = Date.now();
         const anotherOfferActive = otherSnapshots.some((snapshot) => {
           if (!snapshot.exists || snapshot.get("status") !== "pending") {
@@ -1707,45 +1539,31 @@ exports.rejectRideOffer = onCall(
           return expiresAt instanceof Timestamp && expiresAt.toMillis() > nowMs;
         });
 
-        let activePassengerRef = null;
-        let activePassengerSnapshot = null;
-        if (!anotherOfferActive) {
-          activePassengerRef = db
-            .collection("active_passenger_rides")
-            .doc(rideSnapshot.get("passengerId"));
-          activePassengerSnapshot = await transaction.get(activePassengerRef);
-        }
-
         const now = FieldValue.serverTimestamp();
         transaction.update(offerRef, {
           status: "rejected",
           respondedAt: now,
         });
 
-        if (!anotherOfferActive) {
-          transaction.update(rideRef, {
-            status: "expired",
-            offerExpiresAt: null,
-            expiredAt: now,
-            updatedAt: now,
-          });
-          if (
-            activePassengerRef != null &&
-            activePassengerSnapshot.exists &&
-            activePassengerSnapshot.get("rideId") === rideId
-          ) {
-            transaction.delete(activePassengerRef);
-          }
-          rideExpired = true;
-        }
+        transaction.update(rideRef, {
+          rejectedDriverIds: FieldValue.arrayUnion(driverId),
+          updatedAt: now,
+          ...(!anotherOfferActive ? {
+            status: "requested",
+            offerExpiresAt: Timestamp.fromMillis(nowMs),
+          } : {}),
+        });
+        retryDispatch = !anotherOfferActive;
       });
 
-      if (rideExpired) {
-        await markOffers(rideId, allDriverIds, "expired").catch(() => {});
+      if (retryDispatch) {
+        await dispatchRide({ rideId }).catch((error) => {
+          logger.warn("Dispatch retry after rejection failed", { rideId, error });
+        });
       }
       return {
         rideId,
-        status: rideExpired ? "expired" : "rejected",
+        status: "rejected",
         driverId,
       };
     } catch (error) {
@@ -1764,19 +1582,19 @@ exports.expireRideOffers = onSchedule(
   async () => {
     const snapshot = await db
       .collection("rides")
+      .where("status", "in", ["requested", "offered"])
       .where("offerExpiresAt", "<=", Timestamp.now())
       .limit(50)
       .get();
 
-    for (const rideSnapshot of snapshot.docs) {
-      try {
-        await expireOfferedRide(rideSnapshot.ref);
-      } catch (error) {
-        logger.error("Could not expire a ride offer window", {
-          rideId: rideSnapshot.id,
-          error,
-        });
-      }
+    for (let offset = 0; offset < snapshot.docs.length; offset += 10) {
+      await Promise.all(snapshot.docs.slice(offset, offset + 10).map(async (rideSnapshot) => {
+        try {
+          await dispatchRide({ rideId: rideSnapshot.id });
+        } catch (error) {
+          logger.error("Could not continue driver matching", { rideId: rideSnapshot.id, error });
+        }
+      }));
     }
   },
 );
