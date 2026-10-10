@@ -23,8 +23,9 @@ class PassengerPushNotificationService {
   void bindAuthentication() {
     if (kIsWeb || _auth != null || _messages != null) return;
     _messages = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (_uid == null || FirebaseAuth.instance.currentUser?.uid != _uid)
+      if (_uid == null || FirebaseAuth.instance.currentUser?.uid != _uid) {
         return;
+      }
       unawaited(
         NotificationAlerts.show(
           eventId:
@@ -67,8 +68,9 @@ class PassengerPushNotificationService {
         sound: true,
       );
       if (settings.authorizationStatus == AuthorizationStatus.denied ||
-          _uid != user.uid)
+          _uid != user.uid) {
         return;
+      }
       await messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
@@ -92,8 +94,9 @@ class PassengerPushNotificationService {
   Future<void> _register(String uid, String token) async {
     if (_uid != uid ||
         FirebaseAuth.instance.currentUser?.uid != uid ||
-        _token == token)
+        _token == token) {
       return;
+    }
     await _functions.httpsCallable('registerPassengerPushToken').call<void>(
       <String, dynamic>{'token': token},
     );

@@ -54,8 +54,9 @@ void main() {
       int attempts = 0;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (MethodCall call) async {
-            if (++attempts == 1)
+            if (++attempts == 1) {
               throw PlatformException(code: 'permission-denied');
+            }
             return null;
           });
       await NotificationAlerts.show(
