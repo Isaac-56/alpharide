@@ -50,3 +50,12 @@ test("foreign buckets, another phone's image and traversal paths are rejected", 
   }
   assert.equal(passengerPhotoPath({ photoUrl: "https://example.com/a.jpg" }, ride, bucketName), "");
 });
+
+test("a legacy URL signing failure cannot prevent authenticated photo bytes from loading", async () => {
+  const h = harness();
+  // The fixture intentionally supplies no URL signer, as on a service account
+  // with object read access but without signing capability.
+  const image = await h.load("p1", "driver");
+  assert.equal(image.photoUrl, "");
+  assert.ok(image.imageBase64);
+});

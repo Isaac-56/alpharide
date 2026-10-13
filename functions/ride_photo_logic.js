@@ -50,7 +50,17 @@ function createRidePhotoLoader({ db, storage, HttpsError }) {
       }
       const [bytes] = await bucket.file(path, { generation: metadata.generation }).download();
       if (bytes.length > MAX_PHOTO_BYTES) throw new HttpsError("failed-precondition", "This profile image is too large.");
-      return { photoUrl: "", contentType: metadata.contentType, imageBase64: bytes.toString("base64") };
+      // Older passenger APKs still read photoUrl. New APKs prefer the image
+      // bytes, so missing IAM signing rights cannot break their photo display.
+      let photoUrl = "";
+      const expiresAtMillis = Date.now() + 10 * 60 * 1000;
+      const file = bucket.file(path, { generation: metadata.generation });
+      if (kind === "driver" && typeof file.getSignedUrl === "function") {
+        try { [photoUrl] = await file.getSignedUrl({ action: "read", expires: expiresAtMillis }); }
+        catch { /* Authenticated bytes remain available without a signer. */ }
+      }
+      return { photoUrl, expiresAtMillis: photoUrl ? expiresAtMillis : null,
+        contentType: metadata.contentType, imageBase64: bytes.toString("base64") };
     } catch (error) {
       if (Number(error.code) === 404) return { photoUrl: "", imageBase64: "" };
       throw error;
