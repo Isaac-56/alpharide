@@ -772,3 +772,28 @@ exports.adminGetCommissionDetails = callable(async (request) => {
     }),
   };
 }, "The commission details could not be loaded.");
+
+exports.adminListPassengers = callable(async (request) => {
+  const limit = limitFrom(request.data?.limit, 100, 200);
+  const cursor = request.data?.cursor;
+  if (cursor != null && (typeof cursor !== "string" || !cursor || cursor.length > 1500 || cursor.includes("/"))) {
+    throw new TypeError("Choose a valid passenger page.");
+  }
+  const { FieldPath } = require("firebase-admin/firestore");
+  let query = db.collection("users").orderBy(FieldPath.documentId());
+  if (cursor) query = query.startAfter(cursor);
+  const snapshot = await query.limit(limit + 1).get();
+  const page = snapshot.docs.slice(0, limit);
+  const locks = page.length ? await db.getAll(...page.map((doc) => db.collection("active_passenger_rides").doc(doc.id))) : [];
+  const passengers = page.map((doc, index) => {
+    const profile = doc.data() || {};
+    return { passengerId: doc.id,
+      name: text(profile.name) || profileName(profile) || "Passenger",
+      phoneNumber: text(profile.phoneNumber),
+      createdAtMillis: millis(profile.createdAt),
+      photoUploaded: Boolean(text(profile.photoUrl) || text(profile.photoStoragePath)),
+      rideId: locks[index]?.exists ? text(locks[index].get("rideId")) : "",
+    };
+  });
+  return { passengers, nextCursor: snapshot.docs.length > limit ? page.at(-1).id : null };
+}, "Passenger accounts could not be loaded. Try again.");

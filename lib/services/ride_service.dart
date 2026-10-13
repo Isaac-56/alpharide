@@ -17,8 +17,8 @@ class RideService {
   RideService._({
     required FirebaseFunctions functions,
     required FirebaseFirestore firestore,
-  })  : _functions = functions,
-        _firestore = firestore;
+  }) : _functions = functions,
+       _firestore = firestore;
 
   Future<RideCreationResult> createRide({
     required String pickupAddress,
@@ -69,12 +69,10 @@ class RideService {
   }) async {
     try {
       final HttpsCallable callable = _functions.httpsCallable('cancelRide');
-      await callable.call<dynamic>(
-        <String, dynamic>{
-          'rideId': rideId,
-          'reason': reason,
-        },
-      );
+      await callable.call<dynamic>(<String, dynamic>{
+        'rideId': rideId,
+        'reason': reason,
+      });
     } on FirebaseFunctionsException catch (error) {
       throw _fromFunctionsException(error);
     }
@@ -82,13 +80,18 @@ class RideService {
 
   Future<String?> getAssignedDriverPhotoUrl(String rideId) async {
     try {
-      final HttpsCallable callable =
-          _functions.httpsCallable('getAssignedDriverPhoto');
+      final HttpsCallable callable = _functions.httpsCallable(
+        'getAssignedDriverPhoto',
+      );
       final HttpsCallableResult<dynamic> result = await callable.call<dynamic>(
         <String, dynamic>{'rideId': rideId},
       );
       final Object? raw = result.data;
       if (raw is! Map) return null;
+      final Object? encoded = raw['imageBase64'];
+      if (encoded is String && encoded.isNotEmpty) {
+        return 'data:${raw['contentType'] ?? 'image/jpeg'};base64,$encoded';
+      }
       final Object? rawPhotoUrl = raw['photoUrl'];
       if (rawPhotoUrl is! String || rawPhotoUrl.trim().isEmpty) return null;
       return rawPhotoUrl.trim();
@@ -102,17 +105,12 @@ class RideService {
         .collection('rides')
         .doc(rideId)
         .snapshots()
-        .map<RideLiveState?>(
-      (DocumentSnapshot<Map<String, dynamic>> snapshot) {
-        final Map<String, dynamic>? data = snapshot.data();
-        if (!snapshot.exists || data == null) return null;
+        .map<RideLiveState?>((DocumentSnapshot<Map<String, dynamic>> snapshot) {
+          final Map<String, dynamic>? data = snapshot.data();
+          if (!snapshot.exists || data == null) return null;
 
-        return RideLiveState.fromFirestore(
-          rideId: snapshot.id,
-          data: data,
-        );
-      },
-    );
+          return RideLiveState.fromFirestore(rideId: snapshot.id, data: data);
+        });
   }
 
   RideBackendException _fromFunctionsException(

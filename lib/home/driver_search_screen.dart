@@ -10,6 +10,7 @@ import '../core/widgets/alpha_components.dart';
 import '../models/ride_backend.dart';
 import '../models/ride_option.dart';
 import '../services/ride_service.dart';
+import '../services/ride_photo_provider.dart';
 import 'cancel_reason_screen.dart';
 import 'services/directions_service.dart';
 import 'services/live_driver_marker_controller.dart';
@@ -892,6 +893,8 @@ class _AssignedDriverCard extends StatelessWidget {
     final String? resolvedPhotoUrl =
         photoUrl == null || photoUrl!.trim().isEmpty ? null : photoUrl!.trim();
 
+    final ImageProvider<Object>? photo = ridePhotoProvider(resolvedPhotoUrl);
+
     Widget fallback() => ColoredBox(
       color: primaryColor.withValues(alpha: 0.18),
       child: Center(
@@ -936,10 +939,10 @@ class _AssignedDriverCard extends StatelessWidget {
                           ),
                         ),
                       )
-                    : resolvedPhotoUrl == null
+                    : photo == null
                     ? fallback()
-                    : Image.network(
-                        resolvedPhotoUrl,
+                    : Image(
+                        image: photo,
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
                         errorBuilder: (_, __, ___) => fallback(),

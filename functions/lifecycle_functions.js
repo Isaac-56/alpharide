@@ -217,13 +217,22 @@ async function prepareDriverActiveRide(driverId) {
     const rideLock = await driverRideLock(driverId, rideId);
 
     if (rideLock.value === "active") {
-      await activeDriverRef.set({
-        driverId,
-        rideId,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-      await syncDriverPresenceRide(driverId, rideId, false);
-      return rideId;
+      const stillActive = await db.runTransaction(async (transaction) => {
+        const currentLock = await transaction.get(activeDriverRef);
+        const currentRide = await transaction.get(rideLock.rideRef);
+        if (!currentRide.exists || currentRide.get("driverId") !== driverId ||
+            !["accepted", "driver_arriving", "arrived", "in_progress"].includes(currentRide.get("status")) ||
+            (currentLock.exists && currentLock.get("rideId") !== rideId)) return false;
+        transaction.set(activeDriverRef, { driverId, rideId,
+          updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return true;
+      });
+      // Availability recovery never writes a busy RTDB pointer: a delayed
+      // heartbeat must not re-busy a driver after completion has cleared it.
+      if (stillActive) return rideId;
+      await deleteMatchingActiveDriverRide(driverId, rideId);
+      await syncDriverPresenceRide(driverId, rideId, true);
+      continue;
     }
 
     if (rideLock.value === "stale") {

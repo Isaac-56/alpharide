@@ -49,7 +49,10 @@
         "$other": {
           ".validate": false
         }
-      }
+      },
+      ".indexOn": [
+        "latitude"
+      ]
     }
   }
 }

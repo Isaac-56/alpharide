@@ -18,6 +18,7 @@ const call = (name) => httpsCallable(functions, name);
 const api = {
   overview: call("adminGetOperationsOverview"),
   drivers: call("adminListDrivers"),
+  passengers: call("adminListPassengers"),
   driverReview: call("adminGetDriverReview"),
   driverDocument: httpsCallable(functions, "adminGetDriverDocument", { timeout: 25000 }),
   rides: call("adminListRides"),
@@ -64,6 +65,10 @@ const el = {
 };
 
 let drivers = [];
+let passengers = [];
+let passengerCursor = null;
+let passengerRequestId = 0;
+const passengerUi = { search: $("#passenger-search"), count: $("#passenger-count"), body: $("#passengers-body"), more: $("#passenger-load-more"), refresh: $("#refresh-passengers") };
 let rides = [];
 let receipts = [];
 let commissionTrips = [];
@@ -130,6 +135,7 @@ function navigate(view) {
   $$("[data-page]").forEach((page) => page.classList.toggle("active", page.dataset.page === view));
   $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (view === "passengers") loadPassengers();
   if (view === "rides" && rides.length === 0) loadRides();
   if (view === "receipts" && receipts.length === 0) loadReceipts();
   if (view === "recharges") loadRecharges();
@@ -704,6 +710,8 @@ setInterval(() => {
 }, 15000);
 
 onAuthStateChanged(auth, async (user) => {
+  passengerRequestId++; passengers = []; passengerCursor = null;
+  passengerUi.body.replaceChildren(); passengerUi.count.textContent = ''; passengerUi.more.hidden = true;
   if (!user) { el.loginView.hidden = false; el.adminView.hidden = true; el.password.value = ""; return; }
   try {
     const token = await getIdTokenResult(user, true); if (token.claims.admin !== true) { await signOut(auth); el.loginError.textContent = "This account is not authorized for Alpha administration."; return; }
@@ -719,3 +727,46 @@ $("#commission-load-more").addEventListener("click", () => loadCommissionDetails
 const commissionToday = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
 $("#commission-start").value = `${commissionToday.slice(0, 7)}-01`;
 $("#commission-end").value = commissionToday;
+
+
+function renderPassengers() {
+  const query = passengerUi.search.value.trim().toLowerCase();
+  const filtered = passengers.filter((p) => `${p.name} ${p.phoneNumber} ${p.passengerId}`.toLowerCase().includes(query));
+  passengerUi.body.replaceChildren();
+  for (const passenger of filtered) {
+    const row = document.createElement("tr");
+    for (const value of [`${passenger.name} · ${passenger.passengerId}`, passenger.phoneNumber || "Not supplied", dateTime(passenger.createdAtMillis), passenger.photoUploaded ? "Uploaded" : "Not uploaded", passenger.rideId || "—"]) {
+      const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+    }
+    passengerUi.body.append(row);
+  }
+  passengerUi.count.textContent = `${filtered.length} matching · ${passengers.length} loaded`;
+  if (!filtered.length) {
+    const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5;
+    cell.textContent = query ? "No loaded passengers match your search. Load more accounts to search further." : "No passenger accounts found.";
+    row.append(cell); passengerUi.body.append(row);
+  }
+  passengerUi.more.hidden = !passengerCursor;
+}
+
+async function loadPassengers(append = false) {
+  const requestId = ++passengerRequestId;
+  passengerUi.refresh.disabled = true; passengerUi.more.disabled = true;
+  passengerUi.count.textContent = "Loading passengers…";
+  try {
+    const result = await api.passengers({ limit: 100, ...(append && passengerCursor ? { cursor: passengerCursor } : {}) });
+    if (requestId !== passengerRequestId || !auth.currentUser) return;
+    const page = Array.isArray(result.data?.passengers) ? result.data.passengers : [];
+    passengers = append ? [...new Map([...passengers, ...page].map((p) => [p.passengerId, p])).values()] : page;
+    passengerCursor = result.data?.nextCursor || null;
+    renderPassengers();
+  } catch (error) {
+    if (requestId !== passengerRequestId) return;
+    passengerUi.count.textContent = readableError(error); showToast(readableError(error), "error");
+  } finally {
+    if (requestId === passengerRequestId) { passengerUi.refresh.disabled = false; passengerUi.more.disabled = false; }
+  }
+}
+passengerUi.refresh.addEventListener("click", () => loadPassengers());
+passengerUi.more.addEventListener("click", () => loadPassengers(true));
+passengerUi.search.addEventListener("input", renderPassengers);

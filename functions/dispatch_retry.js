@@ -2,7 +2,7 @@
 
 const { randomUUID } = require("node:crypto");
 const {
-  DISPATCH_ALGORITHM_VERSION, MAX_DRIVER_OFFERS, OFFER_WINDOW_MS,
+  DISPATCH_ALGORITHM_VERSION, DISPATCH_RADIUS_METERS, MAX_DRIVER_OFFERS, OFFER_WINDOW_MS,
   selectPresenceCandidates, profileAllowsDispatch,
 } = require("./dispatch_logic");
 const { walletRideEligibility, estimatedPlatformFee } = require("./wallet_logic");
@@ -71,7 +71,10 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
       }
     }
     try {
-      const presence = await realtimeDb.ref("driver_locations").get();
+      const latitudeRadius = DISPATCH_RADIUS_METERS / 6371000 * 180 / Math.PI;
+      const presence = await realtimeDb.ref("driver_locations").orderByChild("latitude")
+        .startAt(Math.max(-90, ride.pickup.latitude - latitudeRadius))
+        .endAt(Math.min(90, ride.pickup.latitude + latitudeRadius)).get();
       const presenceMap = presence.exists() ? presence.val() : null;
       // Only examine fresh nearby drivers. A leftover terminal ride pointer
       // must not hide a driver before the authoritative lock check.
@@ -82,7 +85,9 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         nowMs: clock(), limit: Number.MAX_SAFE_INTEGER, excludedDriverIds: [...excluded] });
       await Promise.all(nearby.map(async ({ driverId }) => {
         const currentPresence = presenceMap[driverId];
-        const previousRideId = currentPresence?.activeRideId;
+        // A terminal Firestore lock can also survive without an RTDB pointer.
+        const initialLock = await db.collection("active_driver_rides").doc(driverId).get();
+        const previousRideId = currentPresence?.activeRideId || initialLock.get("rideId");
         if (typeof previousRideId !== "string" || !previousRideId || previousRideId.includes("/")) return;
         const previousRideRef = db.collection("rides").doc(previousRideId);
         const lockRef = db.collection("active_driver_rides").doc(driverId);

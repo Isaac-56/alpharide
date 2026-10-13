@@ -18,7 +18,7 @@ function harness(count = 1) {
   let beforePresence;
   let tail = Promise.resolve();
   let wroteBeforeRead = false;
-  const ref = (path) => ({ path, id: path.split("/").at(-1), doc: (id) => ref(`${path}/${id}`), collection: (id) => ref(`${path}/${id}`) });
+  const ref = (path) => ({ path, id: path.split("/").at(-1), get: async () => snap(ref(path)), doc: (id) => ref(`${path}/${id}`), collection: (id) => ref(`${path}/${id}`) });
   const snap = (reference) => {
     const data = docs.get(reference.path);
     return { exists: !!data, get: (key) => data?.[key], data: () => data };
@@ -47,7 +47,12 @@ function harness(count = 1) {
   };
   const engine = createDispatchEngine({
     db, Timestamp, FieldValue: { serverTimestamp: () => Timestamp.fromMillis(now) },
-    realtimeDb: { ref: (path) => ({ transaction: async (callback) => {
+    realtimeDb: { ref: (path) => ({
+      orderByChild: () => ({ startAt: () => ({ endAt: () => ({ get: async () => {
+        if (beforePresence) await beforePresence();
+        return { exists: () => true, val: () => presence };
+      } }) }) }),
+      transaction: async (callback) => {
       const id = path.split("/").at(-1);
       const next = callback(presence[id]);
       if (next === undefined) return { committed: false };
@@ -227,4 +232,13 @@ test("a newer driver lock is never released by old trip reconciliation", async (
   assert.equal(await h.dispatch(), "requested");
   assert.equal(h.docs.get("active_driver_rides/driver0").rideId, "new-trip");
   assert.equal(h.presence.driver0.activeRideId, "previous");
+});
+
+test("a completed Firestore lock without an RTDB busy pointer is immediately dispatchable", async () => {
+  const h = harness(1);
+  h.docs.set("rides/previous", { driverId: "driver0", status: "completed" });
+  h.docs.set("active_driver_rides/driver0", { rideId: "previous" });
+  assert.equal(await h.dispatch(), "offered");
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver0"]);
+  assert.equal(h.docs.has("active_driver_rides/driver0"), false);
 });

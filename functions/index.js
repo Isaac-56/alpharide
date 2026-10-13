@@ -334,12 +334,15 @@ async function sendRideOfferPushNotifications({
       code === "messaging/registration-token-not-registered" ||
       code === "messaging/invalid-registration-token"
     ) {
-      invalidDriverIds.push(messageDrivers[index]);
+      invalidDriverIds.push({ driverId: messageDrivers[index], token: messages[index].token });
     }
   });
   await Promise.all(
-    invalidDriverIds.map((driverId) =>
-      db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId).delete()),
+    invalidDriverIds.map(({ driverId, token }) => db.runTransaction(async (transaction) => {
+      const ref = db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId);
+      const current = await transaction.get(ref);
+      if (current.exists && current.get("token") === token) transaction.delete(ref);
+    })),
   );
 }
 
@@ -1241,51 +1244,14 @@ exports.cancelRide = onCall(
   },
 );
 
-exports.getAssignedDriverPhoto = onCall(
-  { region: REGION, timeoutSeconds: 10, memory: "256MiB" },
-  async (request) => {
-    try {
-      const passengerId = requireAuthenticatedUser(request);
-      const rideId = validateRideId(request.data?.rideId);
-      const rideSnapshot = await db.collection("rides").doc(rideId).get();
-      if (!rideSnapshot.exists) {
-        throw new HttpsError("not-found", "This ride no longer exists.");
-      }
-
-      const ride = rideSnapshot.data();
-      if (ride.passengerId !== passengerId) {
-        throw new HttpsError(
-          "permission-denied",
-          "Only the assigned passenger can view this driver profile.",
-        );
-      }
-
-      const driverId =
-        typeof ride.driverId === "string" ? ride.driverId.trim() : "";
-      if (!driverId) return { photoUrl: "", expiresAtMillis: null };
-
-      const photoSnapshot = await db
-        .collection("driver_photo_checks")
-        .doc(driverId)
-        .get();
-      const storagePath = approvedDriverPhotoStoragePath({
-        ride,
-        passengerId,
-        photoCheck: photoSnapshot.exists ? photoSnapshot.data() : null,
-      });
-      if (!storagePath) return { photoUrl: "", expiresAtMillis: null };
-
-      const expiresAtMillis = Date.now() + 10 * 60 * 1000;
-      const [photoUrl] = await storage.bucket().file(storagePath).getSignedUrl({
-        action: "read",
-        expires: expiresAtMillis,
-      });
-      return { photoUrl, expiresAtMillis };
-    } catch (error) {
-      throw callableError(error, "Unable to load the assigned driver photo.");
-    }
-  },
-);
+const { createRidePhotoLoader } = require("./ride_photo_logic");
+const loadRidePhoto = createRidePhotoLoader({ db, storage, HttpsError });
+for (const [functionName, kind] of [["getAssignedDriverPhoto", "driver"], ["getAssignedPassengerPhoto", "passenger"]]) {
+  exports[functionName] = onCall({ region: REGION, timeoutSeconds: 20, memory: "256MiB" }, async (request) => {
+    try { return await loadRidePhoto(request, kind); }
+    catch (error) { throw callableError(error, "Unable to load the assigned profile photo."); }
+  });
+}
 
 exports.acceptRideOffer = onCall(
   { region: REGION, timeoutSeconds: 15, memory: "256MiB" },

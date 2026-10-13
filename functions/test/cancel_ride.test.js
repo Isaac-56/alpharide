@@ -57,7 +57,7 @@ function harness({ status = "accepted", passengerId = "passenger", driverLock = 
   };
   const source = readFileSync(join(__dirname, "..", "index.js"), "utf8");
   const start = source.indexOf("exports.cancelRide = onCall(");
-  const end = source.indexOf("\nexports.getAssignedDriverPhoto", start);
+  const end = source.indexOf("\nconst { createRidePhotoLoader", start);
   assert.ok(start >= 0 && end > start);
   runInNewContext(source.slice(start, end), context);
   return {
