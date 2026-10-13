@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createRidePhotoLoader, passengerPhotoPath } = require("../ride_photo_logic");
 const bucketName = "alpha-ride-29708.firebasestorage.app";
-function harness() {
+function harness({ signer } = {}) {
   const docs = new Map([
     ["rides/r1", { status: "accepted", passengerId: "p1", driverId: "d1", customerPhone: "+211912345678" }],
     ["driver_photo_checks/d1", { status: "approved", driverId: "d1", storagePath: "drivers/d1/documents/photo_checks/face.jpg" }],
@@ -11,6 +11,7 @@ function harness() {
   ]);
   const downloaded = [];
   const storage = { bucket: () => ({ name: bucketName, file: (path, options) => ({
+    getSignedUrl: signer,
     getMetadata: async () => [{ size: 10, contentType: "image/jpeg", generation: "3" }],
     download: async () => { downloaded.push({ path, options }); return [Buffer.from("photo-data")]; },
   }) }) };
@@ -52,10 +53,17 @@ test("foreign buckets, another phone's image and traversal paths are rejected", 
 });
 
 test("a legacy URL signing failure cannot prevent authenticated photo bytes from loading", async () => {
-  const h = harness();
-  // The fixture intentionally supplies no URL signer, as on a service account
-  // with object read access but without signing capability.
+  const h = harness({ signer: async () => { throw new Error("IAM signing is unavailable"); } });
   const image = await h.load("p1", "driver");
   assert.equal(image.photoUrl, "");
+  assert.ok(image.imageBase64);
+});
+
+
+test("legacy APKs retain a signed photo URL where signing is available", async () => {
+  const h = harness({ signer: async () => ["https://storage.googleapis.com/approved-photo?signature=test"] });
+  const image = await h.load("p1", "driver");
+  assert.ok(image.photoUrl.startsWith("https://"));
+  assert.ok(image.expiresAtMillis > Date.now());
   assert.ok(image.imageBase64);
 });
