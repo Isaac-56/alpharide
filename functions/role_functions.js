@@ -66,7 +66,7 @@ async function evaluateAccountRolePreflight(request) {
   // Alpha accounts may not have a normalized phoneNumber field or role index,
   // so resolving the UID first lets preflight inspect their real profile before
   // an SMS is sent.
-  const uid = await userIdForPhoneNumber(phoneNumber);
+  const uidPromise = userIdForPhoneNumber(phoneNumber);
   const identityRef = db.collection("identity_registry").doc(phoneHash);
   const accountRoleQuery = db
     .collection("account_roles")
@@ -82,31 +82,25 @@ async function evaluateAccountRolePreflight(request) {
     .where("phoneNumber", "==", phoneNumber)
     .limit(1);
 
-  const directAccountRoleRef = uid
-    ? db.collection("account_roles").doc(uid)
-    : null;
-  const directPassengerRef = uid ? db.collection("users").doc(uid) : null;
-  const directDriverRef = uid ? db.collection("drivers").doc(uid) : null;
-
-  const [
-    identitySnapshot,
-    accountRoleSnapshot,
-    legacyPassengerSnapshot,
-    passengerSnapshot,
-    driverSnapshot,
-    directAccountRoleSnapshot,
-    directPassengerSnapshot,
-    directDriverSnapshot,
-  ] = await Promise.all([
-    identityRef.get(),
-    accountRoleQuery.get(),
-    legacyPassengerRef.get(),
-    passengerQuery.get(),
-    driverQuery.get(),
-    directAccountRoleRef?.get() ?? Promise.resolve(null),
-    directPassengerRef?.get() ?? Promise.resolve(null),
-    directDriverRef?.get() ?? Promise.resolve(null),
+  // Independent legacy/index reads run while Auth resolves the UID.
+  // Attach all rejection handlers immediately so neither branch is orphaned.
+  const [indexedSnapshots, directSnapshots] = await Promise.all([
+    Promise.all([
+      identityRef.get(), accountRoleQuery.get(), legacyPassengerRef.get(),
+      passengerQuery.get(), driverQuery.get(),
+    ]),
+    uidPromise.then((uid) => uid
+      ? db.getAll(
+        db.collection("account_roles").doc(uid),
+        db.collection("users").doc(uid),
+        db.collection("drivers").doc(uid),
+      )
+      : [null, null, null]),
   ]);
+  const [identitySnapshot, accountRoleSnapshot, legacyPassengerSnapshot,
+    passengerSnapshot, driverSnapshot] = indexedSnapshots;
+  const [directAccountRoleSnapshot, directPassengerSnapshot,
+    directDriverSnapshot] = directSnapshots;
 
   const registryRoles = new Set();
   const addRegistryRole = (value) => {
@@ -131,7 +125,7 @@ async function evaluateAccountRolePreflight(request) {
     passengerExists:
       (directPassengerSnapshot?.exists ?? false) || !passengerSnapshot.empty,
     legacyPassengerExists:
-      legacyPassengerRef.path !== directPassengerRef?.path &&
+      legacyPassengerRef.path !== directPassengerSnapshot?.ref.path &&
       legacyPassengerSnapshot.exists,
     driverExists:
       (directDriverSnapshot?.exists ?? false) || !driverSnapshot.empty,
@@ -170,11 +164,11 @@ async function evaluateAccountRole(request, { claimIfUnassigned }) {
   let migrated = false;
 
   await db.runTransaction(async (transaction) => {
-    const accountRoleSnapshot = await transaction.get(accountRoleRef);
-    const identitySnapshot = await transaction.get(identityRef);
-    const passengerSnapshot = await transaction.get(passengerRef);
-    const legacyPassengerSnapshot = await transaction.get(legacyPassengerRef);
-    const driverSnapshot = await transaction.get(driverRef);
+    // One transactional batch replaces five sequential network round trips.
+    const [accountRoleSnapshot, identitySnapshot, passengerSnapshot,
+      legacyPassengerSnapshot, driverSnapshot] = await transaction.getAll(
+      accountRoleRef, identityRef, passengerRef, legacyPassengerRef, driverRef,
+    );
 
     const existingRole = inferExistingRole({
       accountRole: accountRoleSnapshot.data()?.role ?? null,
@@ -227,8 +221,15 @@ async function evaluateAccountRole(request, { claimIfUnassigned }) {
       identityData.createdAt = now;
     }
 
-    transaction.set(accountRoleRef, accountRoleData, { merge: true });
-    transaction.set(identityRef, identityData, { merge: true });
+    // Existing correct claims need no writes on every login/profile check.
+    if (accountRoleSnapshot.data()?.role !== resolvedRole ||
+        accountRoleSnapshot.data()?.phoneHash !== phoneHash) {
+      transaction.set(accountRoleRef, accountRoleData, { merge: true });
+    }
+    if (identitySnapshot.data()?.role !== resolvedRole ||
+        identitySnapshot.data()?.uid !== uid) {
+      transaction.set(identityRef, identityData, { merge: true });
+    }
   });
 
   return {
@@ -324,3 +325,4 @@ exports.checkAccountRole = roleCallable(false);
 // This is the authoritative, transactional "first completed registration wins"
 // operation used by both apps.
 exports.claimAccountRole = roleCallable(true);
+
