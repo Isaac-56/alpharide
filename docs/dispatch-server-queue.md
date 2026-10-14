@@ -9,6 +9,12 @@ The queue uses deterministic hashed task IDs, retryable enqueue failures, existi
 transactional dispatch leases, a fixed search deadline and terminal-state checks.
 It does not promise exactly-once FCM delivery or override an offline driver.
 
+The task queue and processRideDispatch worker run in europe-west1 because Cloud
+Tasks does not support africa-south1. The enqueue client explicitly targets the
+same region. Existing callable functions and the Firestore scheduling trigger
+remain in africa-south1. Supported regions:
+https://docs.cloud.google.com/tasks/docs/locations
+
 Deploy processRideDispatch first so the queue exists, then deploy
 scheduleRideDispatch and all functions that import dispatch_retry.js:
 createRide, retryRideDispatch, rejectRideOffer, expireRideOffers,

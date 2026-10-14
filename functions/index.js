@@ -77,6 +77,8 @@ const storage = getStorage();
 const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
 
 const REGION = "africa-south1";
+// Cloud Tasks is unavailable in africa-south1. Keep the queue and worker together.
+const DISPATCH_QUEUE_REGION = "europe-west1";
 const ROUTE_PREVIEW_LIMIT_COLLECTION = "route_preview_limits";
 const placeSearchCache = createTtlCache({ ttlMs: 5 * 60 * 1000, maxEntries: 250 });
 const placeDetailsCache = createTtlCache({ ttlMs: 30 * 60 * 1000, maxEntries: 500 });
@@ -406,7 +408,7 @@ const dispatchQueue = createDispatchQueue({
   db, dispatchRide,
   queue: {
     enqueue: (data, options) => getFunctions()
-      .taskQueue(`locations/${REGION}/functions/processRideDispatch`)
+      .taskQueue(`locations/${DISPATCH_QUEUE_REGION}/functions/processRideDispatch`)
       .enqueue(data, options),
   },
 });
@@ -418,7 +420,7 @@ exports.scheduleRideDispatch = onDocumentWritten(
 
 exports.processRideDispatch = onTaskDispatched(
   {
-    region: REGION, timeoutSeconds: 60, memory: "256MiB",
+    region: DISPATCH_QUEUE_REGION, timeoutSeconds: 60, memory: "256MiB",
     retryConfig: { maxAttempts: 10, minBackoffSeconds: 2, maxBackoffSeconds: 15 },
     rateLimits: { maxConcurrentDispatches: 50, maxDispatchesPerSecond: 50 },
   },
