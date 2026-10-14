@@ -122,6 +122,7 @@ class ActiveSessionGate extends StatefulWidget {
 class _ActiveSessionGateState extends State<ActiveSessionGate>
     with WidgetsBindingObserver {
   late final Future<bool> _validation;
+  late final Stream<bool> _sessionChanges;
   bool _signOutScheduled = false;
   bool _resumeCheckInProgress = false;
 
@@ -130,6 +131,7 @@ class _ActiveSessionGateState extends State<ActiveSessionGate>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _validation = SessionService.instance.validateExistingSession(widget.user);
+    _sessionChanges = SessionService.instance.watchSession(widget.user);
   }
 
   @override
@@ -188,7 +190,7 @@ class _ActiveSessionGateState extends State<ActiveSessionGate>
         }
 
         return StreamBuilder<bool>(
-          stream: SessionService.instance.watchSession(widget.user),
+          stream: _sessionChanges,
           builder: (BuildContext context, AsyncSnapshot<bool> sessionSnapshot) {
             if (sessionSnapshot.hasData && sessionSnapshot.data == false) {
               _scheduleForcedSignOut();
