@@ -83,12 +83,11 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
       const nearby = selectPresenceCandidates({ presenceMap: availableView,
         pickup: ride.pickup, requiredVehicleType: ride.requiredVehicleType,
         nowMs: clock(), limit: Number.MAX_SAFE_INTEGER, excludedDriverIds: [...excluded] });
-      await Promise.all(nearby.map(async ({ driverId }) => {
+      async function releaseTerminalLock(driverId, initialLock) {
         const currentPresence = presenceMap[driverId];
-        // A terminal Firestore lock can also survive without an RTDB pointer.
-        const initialLock = await db.collection("active_driver_rides").doc(driverId).get();
         const previousRideId = currentPresence?.activeRideId || initialLock.get("rideId");
-        if (typeof previousRideId !== "string" || !previousRideId || previousRideId.includes("/")) return;
+        if (!previousRideId) return !initialLock.exists;
+        if (typeof previousRideId !== "string" || previousRideId.includes("/")) return false;
         const previousRideRef = db.collection("rides").doc(previousRideId);
         const lockRef = db.collection("active_driver_rides").doc(driverId);
         const released = await db.runTransaction(async (tx) => {
@@ -100,7 +99,7 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
           if (lock.exists) tx.delete(lockRef);
           return true;
         });
-        if (!released) return;
+        if (!released) return false;
         const result = await realtimeDb.ref(`driver_locations/${driverId}`).transaction((current) => {
           if (!current || current.activeRideId !== previousRideId) return;
           const next = { ...current };
@@ -109,12 +108,9 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         });
         // Use the committed value: a newer trip/session may have replaced it.
         if (result.committed) presenceMap[driverId] = result.snapshot.val();
-      }));
-      const candidates = selectPresenceCandidates({
-        presenceMap,
-        pickup: ride.pickup, requiredVehicleType: ride.requiredVehicleType,
-        nowMs: clock(), limit: Number.MAX_SAFE_INTEGER, excludedDriverIds: [...excluded],
-      });
+        return true;
+      }
+      const candidates = nearby;
       const verified = [];
       const exclusionCounts = { busy: 0, unapprovedOrWrongVehicle: 0, wallet: 0 };
       let scanned = 0;
@@ -127,10 +123,12 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
           db.collection("driver_wallets").doc(candidate.driverId),
         ]);
         const snapshots = await db.getAll(...refs);
+        const available = await Promise.all(chunk.map((candidate, index) =>
+          releaseTerminalLock(candidate.driverId, snapshots[index * 3 + 1])));
         for (const [index, candidate] of chunk.entries()) {
           scanned++;
-          const [profile, lock, wallet] = snapshots.slice(index * 3, index * 3 + 3);
-          if (lock.exists) { exclusionCounts.busy++; continue; }
+          const [profile, , wallet] = snapshots.slice(index * 3, index * 3 + 3);
+          if (!available[index]) { exclusionCounts.busy++; continue; }
           if (!profileAllowsDispatch(profile.data(), ride.requiredVehicleType)) {
             exclusionCounts.unapprovedOrWrongVehicle++; continue;
           }
@@ -203,6 +201,11 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         });
         return nextStatus;
       });
+      logger.info?.("Ride dispatch round finished", {
+        rideId, status: result, nearbyCount: nearby.length, scanned,
+        offeredCount: offered.length, exclusionCounts,
+        durationMs: clock() - nowMs,
+      });
       if (offered.length) {
         await sendPush({ candidates: offered, rideId, rideOptionId: ride.rideOptionId,
           pickup: ride.pickup, estimatedFare: ride.estimatedFare }).catch((error) => {
@@ -225,3 +228,4 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
   return { dispatchRide };
 }
 module.exports = { createDispatchEngine, SEARCH_WINDOW_MS, NO_CANDIDATE_RETRY_MS };
+

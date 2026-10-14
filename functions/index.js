@@ -12,6 +12,10 @@ const {
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onTaskDispatched } = require("firebase-functions/v2/tasks");
+const { getFunctions } = require("firebase-admin/functions");
+const { createDispatchQueue } = require("./dispatch_queue");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const {
@@ -397,6 +401,29 @@ const { dispatchRide } = createDispatchEngine({
   db, realtimeDb, Timestamp, FieldValue,
   sendPush: sendRideOfferPushNotifications, logger,
 });
+
+const dispatchQueue = createDispatchQueue({
+  db, dispatchRide,
+  queue: {
+    enqueue: (data, options) => getFunctions()
+      .taskQueue(`locations/${REGION}/functions/processRideDispatch`)
+      .enqueue(data, options),
+  },
+});
+
+exports.scheduleRideDispatch = onDocumentWritten(
+  { document: "rides/{rideId}", region: REGION, retry: true },
+  dispatchQueue.onRideWritten,
+);
+
+exports.processRideDispatch = onTaskDispatched(
+  {
+    region: REGION, timeoutSeconds: 60, memory: "256MiB",
+    retryConfig: { maxAttempts: 10, minBackoffSeconds: 2, maxBackoffSeconds: 15 },
+    rateLimits: { maxConcurrentDispatches: 50, maxDispatchesPerSecond: 50 },
+  },
+  dispatchQueue.processTask,
+);
 
 exports.retryRideDispatch = onCall(
   { region: REGION, timeoutSeconds: 30, memory: "256MiB" },
@@ -1564,3 +1591,4 @@ exports.expireRideOffers = onSchedule(
     }
   },
 );
+

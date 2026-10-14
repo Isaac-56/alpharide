@@ -18,8 +18,10 @@ function harness(count = 1) {
   let beforePresence;
   let tail = Promise.resolve();
   let wroteBeforeRead = false;
+  let reads = 0;
   const ref = (path) => ({ path, id: path.split("/").at(-1), get: async () => snap(ref(path)), doc: (id) => ref(`${path}/${id}`), collection: (id) => ref(`${path}/${id}`) });
   const snap = (reference) => {
+    reads++;
     const data = docs.get(reference.path);
     return { exists: !!data, get: (key) => data?.[key], data: () => data };
   };
@@ -75,6 +77,7 @@ function harness(count = 1) {
     advance: (ms) => { now += ms; for (const value of Object.values(presence)) value.updatedAt = now; },
     beforePresence: (fn) => { beforePresence = fn; },
     wroteBeforeRead: () => wroteBeforeRead,
+    reads: () => reads,
   };
 }
 
@@ -241,4 +244,38 @@ test("a completed Firestore lock without an RTDB busy pointer is immediately dis
   assert.equal(await h.dispatch(), "offered");
   assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver0"]);
   assert.equal(h.docs.has("active_driver_rides/driver0"), false);
+});
+
+
+
+test("an idle online driver receives a later request without toggling presence", async () => {
+  const h = harness(1);
+  h.advance(300000);
+  h.docs.get("rides/ride").requestedAt = Timestamp.fromMillis(400000);
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.sent.length, 1);
+});
+
+test("nearby fleet growth does not force a lock read for every driver", async () => {
+  const h = harness(250);
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.sent[0].candidates.length, 5);
+  assert.ok(h.reads() < 110, `Expected bounded nearest-driver reads, got ${h.reads()}`);
+});
+
+test("server queue finds a newly online driver without a passenger retry", async () => {
+  const { createDispatchQueue } = require("../dispatch_queue");
+  const h = harness(0);
+  await h.dispatch();
+  const tasks = [];
+  const server = createDispatchQueue({
+    db: h.db, queue: { enqueue: async (data) => tasks.push(data) },
+    dispatchRide: () => h.dispatch(), clock: () => 100000,
+  });
+  await server.schedule("ride");
+  h.advance(3001);
+  h.addDriver("ready-driver");
+  await server.processTask({ data: tasks[0] });
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["ready-driver"]);
+  assert.equal(h.sent.length, 1);
 });
