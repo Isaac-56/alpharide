@@ -28,17 +28,21 @@ function buildRideOfferMessage({
   pickupAddress,
   estimatedFare,
   currencyCode,
+  dispatchRound,
 }) {
+  const round = Number.isInteger(dispatchRound) && dispatchRound > 0 ? dispatchRound : 0;
+  const eventId = `ride_offer:${rideId}${round ? `:${round}` : ""}`;
   return {
     token: validatePushToken(token),
     notification: {
       title: `New ${rideLabel(rideOptionId)} ride request`,
       body: `${pickupAddress} · ${estimatedFare} ${currencyCode}`,
     },
-    data: { type: "ride_offer", rideId, rideOptionId },
+    data: { type: "ride_offer", rideId, rideOptionId, eventId, dispatchRound: String(round) },
     android: {
       priority: "high",
-      notification: { priority: "high", sound: "alpha_luxe", channelId: "alpha_ride_alerts_luxe_v2", tag: `ride_offer:${rideId}` },
+      ttl: 30000,
+      notification: { priority: "high", sound: "alpha_luxe", channelId: "alpha_ride_alerts_luxe_v2", tag: eventId },
     },
     apns: { payload: { aps: { sound: "alpha_luxe.wav" } } },
   };
@@ -78,3 +82,4 @@ module.exports = {
   rideLabel,
   validatePushToken,
 };
+

@@ -78,3 +78,17 @@ test("Android and iOS bundle the same valid, short PCM notification recording", 
   assert.ok(duration > 0 && duration < 30);
   assert.ok(android.subarray(44).some((byte) => byte !== 0));
 });
+
+
+
+test("reissued offers have distinct alert identities, repeated delivery of one round does not", () => {
+  const args = { token: "driver-token-that-is-long-enough", rideId: "ride-1", rideOptionId: "boda",
+    pickupAddress: "Pickup", estimatedFare: 1000, currencyCode: "SSP" };
+  const first = buildRideOfferMessage({ ...args, dispatchRound: 1 });
+  const retry = buildRideOfferMessage({ ...args, dispatchRound: 2 });
+  assert.notEqual(first.data.eventId, retry.data.eventId);
+  assert.equal(retry.data.eventId, "ride_offer:ride-1:2");
+  assert.equal(retry.data.eventId, buildRideOfferMessage({ ...args, dispatchRound: 2 }).data.eventId);
+  assert.equal(retry.android.notification.tag, retry.data.eventId);
+  assert.equal(retry.android.ttl, 30000);
+});

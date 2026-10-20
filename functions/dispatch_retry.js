@@ -12,7 +12,8 @@ const SEARCH_WINDOW_MS = 180000;
 const NO_CANDIDATE_RETRY_MS = 3000;
 const LEASE_MS = 45000;
 const UNANSWERED_RETRY_COOLDOWN_MS = 60000;
-const MAX_OFFERS_PER_DRIVER = 2;
+const REJECTED_RETRY_COOLDOWN_MS = 60000;
+const MAX_OFFERS_PER_DRIVER = 3;
 const searching = (status) => status === "requested" || status === "offered";
 const ids = (value) => Array.isArray(value)
   ? [...new Set(value.filter((id) => typeof id === "string" && id && !id.includes("/")))] : [];
@@ -62,13 +63,18 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
     const previousIds = ids(ride.offeredDriverIds);
     const lastOffers = ride.driverLastOfferAtMs ?? {};
     const offerCounts = ride.driverOfferCounts ?? {};
-    const excluded = new Set(ids(ride.rejectedDriverIds));
-    for (const driverId of new Set([...attempted, ...previousIds])) {
-      const lastOffer = Number(lastOffers[driverId]) || millis(ride.dispatchAttemptedAt) || nowMs;
+    const rejected = new Set(ids(ride.rejectedDriverIds));
+    const lastRejections = ride.driverLastRejectedAtMs ?? {};
+    const excluded = new Set();
+    for (const driverId of new Set([...attempted, ...previousIds, ...rejected])) {
+      // Use a stable fallback for legacy rides; polling must not restart cooldown.
+      const lastOffer = Number(lastOffers[driverId]) || millis(ride.requestedAt) || nowMs;
       const count = Number(offerCounts[driverId]) || 1;
-      if (count >= MAX_OFFERS_PER_DRIVER || nowMs - lastOffer < UNANSWERED_RETRY_COOLDOWN_MS) {
-        excluded.add(driverId);
-      }
+      const rejectionAt = rejected.has(driverId)
+        ? Number(lastRejections[driverId]) || lastOffer : 0;
+      const retryAt = Math.max(lastOffer + UNANSWERED_RETRY_COOLDOWN_MS,
+        rejectionAt ? rejectionAt + REJECTED_RETRY_COOLDOWN_MS : 0);
+      if (count >= MAX_OFFERS_PER_DRIVER || nowMs < retryAt) excluded.add(driverId);
     }
     try {
       const latitudeRadius = DISPATCH_RADIUS_METERS / 6371000 * 180 / Math.PI;
@@ -110,7 +116,11 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         if (result.committed) presenceMap[driverId] = result.snapshot.val();
         return true;
       }
-      const candidates = nearby;
+      // Reach the rest of the eligible fleet before repeating nearby drivers.
+      // Stable sorting retains distance/category ordering within each attempt count.
+      const candidates = nearby.sort((a, b) =>
+        (Number(offerCounts[a.driverId]) || (attempted.includes(a.driverId) ? 1 : 0)) -
+        (Number(offerCounts[b.driverId]) || (attempted.includes(b.driverId) ? 1 : 0)));
       const verified = [];
       const exclusionCounts = { busy: 0, unapprovedOrWrongVehicle: 0, wallet: 0 };
       let scanned = 0;
@@ -145,6 +155,7 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         }
       }
       let offered = [];
+      let publishedRound = 0;
       const result = await db.runTransaction(async (tx) => {
         offered = [];
         const current = await tx.get(rideRef);
@@ -165,6 +176,7 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
           tx.set(offerRef(driverId, rideId), { status: "expired", respondedAt: FieldValue.serverTimestamp() }, { merge: true });
         }
         const round = (Number(current.get("dispatchRound")) || 0) + 1;
+        publishedRound = round;
         for (const [index, candidate] of offered.entries()) {
           tx.set(offerRef(candidate.driverId, rideId), {
             schemaVersion: 1, rideId, driverId: candidate.driverId,
@@ -207,7 +219,7 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         durationMs: clock() - nowMs,
       });
       if (offered.length) {
-        await sendPush({ candidates: offered, rideId, rideOptionId: ride.rideOptionId,
+        await sendPush({ candidates: offered, rideId, dispatchRound: publishedRound, rideOptionId: ride.rideOptionId,
           pickup: ride.pickup, estimatedFare: ride.estimatedFare }).catch((error) => {
           logger.warn("Ride offers committed but push failed", { rideId, error });
         });
@@ -228,4 +240,5 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
   return { dispatchRide };
 }
 module.exports = { createDispatchEngine, SEARCH_WINDOW_MS, NO_CANDIDATE_RETRY_MS };
+
 

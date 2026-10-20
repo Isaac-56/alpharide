@@ -39,7 +39,11 @@ function harness(count = 1) {
         });
         for (const [path, value, merge] of writes) {
           if (value === null) docs.delete(path);
-          else docs.set(path, merge ? { ...docs.get(path), ...value } : value);
+          else {
+            const resolved = Object.fromEntries(Object.entries(value).map(([key, item]) =>
+              [key, item?.arrayUnion ? [...new Set([...(docs.get(path)?.[key] ?? []), ...item.arrayUnion])] : item]));
+            docs.set(path, merge ? { ...docs.get(path), ...resolved } : resolved);
+          }
         }
         return result;
       });
@@ -72,7 +76,21 @@ function harness(count = 1) {
     docs.set(`driver_wallets/${id}`, { balance: 10000 });
   };
   for (let i = 0; i < count; i++) addDriver(`driver${i}`, i / 10000);
+  const vm = require("node:vm");
+  const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "../index.js"), "utf8");
+  const handlerSource = source.slice(source.indexOf("function assertOfferRound("), source.indexOf("exports.acceptRideOffer =")) +
+    source.slice(source.indexOf("exports.rejectRideOffer ="), source.indexOf("exports.expireRideOffers ="));
+  const context = { exports: {}, REGION: "test", onCall: (_, handler) => handler,
+    requireAuthenticatedUser: (request) => request.auth.uid, validateRideId: (id) => id,
+    offerReference: (driverId, rideId) => ref(`driver_ride_offers/${driverId}/offers/${rideId}`),
+    db, Timestamp, Date: { now: () => now },
+    FieldValue: { serverTimestamp: () => Timestamp.fromMillis(now), arrayUnion: (...values) => ({ arrayUnion: values }) },
+    HttpsError: class extends Error { constructor(code, message) { super(message); this.code = code; } },
+    callableError: (error) => error, dispatchRide: engine.dispatchRide, logger: { warn() {} },
+  };
+  vm.runInNewContext(handlerSource, context);
   return { docs, sent, presence, db, addDriver,
+    reject: (driverId, dispatchRound) => context.exports.rejectRideOffer({ auth: { uid: driverId }, data: { rideId: "ride", dispatchRound } }),
     dispatch: () => engine.dispatchRide({ rideId: "ride" }),
     advance: (ms) => { now += ms; for (const value of Object.values(presence)) value.updatedAt = now; },
     beforePresence: (fn) => { beforePresence = fn; },
@@ -136,7 +154,7 @@ test("search expires at its fixed deadline without deleting a newer passenger lo
   assert.equal(h.docs.get("active_passenger_rides/passenger").rideId, "newer");
 });
 
-test("explicitly rejected drivers are not offered the same search again", async () => {
+test("legacy rejected drivers wait for cooldown instead of receiving an immediate repeat", async () => {
   const h = harness(3);
   h.docs.get("rides/ride").rejectedDriverIds = ["driver0"];
   await h.dispatch();
@@ -169,7 +187,7 @@ test("one malformed wallet cannot block the rest of the nearby fleet", async () 
   assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver1"]);
 });
 
-test("an unanswered driver gets one retry after cooldown, not an endless notification loop", async () => {
+test("an unanswered driver gets bounded retries after cooldown, not an endless notification loop", async () => {
   const h = harness(1);
   await h.dispatch();
   h.advance(30001);
@@ -179,8 +197,11 @@ test("an unanswered driver gets one retry after cooldown, not an endless notific
   assert.equal(await h.dispatch(), "offered");
   assert.equal(h.sent.length, 2);
   h.advance(60001);
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.sent.length, 3);
+  h.advance(30001);
   assert.equal(await h.dispatch(), "requested");
-  assert.equal(h.sent.length, 2);
+  assert.equal(h.sent.length, 3);
 });
 
 test("a driver becoming busy during verification is skipped at publication", async () => {
@@ -278,4 +299,72 @@ test("server queue finds a newly online driver without a passenger retry", async
   await server.processTask({ data: tasks[0] });
   assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["ready-driver"]);
   assert.equal(h.sent.length, 1);
+});
+
+
+
+test("unseen drivers are reached before recycling the nearest timed-out drivers", async () => {
+  const h = harness(12);
+  await h.dispatch();
+  h.advance(30001);
+  await h.dispatch();
+  h.advance(30001);
+  await h.dispatch();
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver10", "driver11", "driver0", "driver1", "driver2"]);
+  assert.equal(h.sent[2].dispatchRound, h.docs.get("rides/ride").dispatchRound);
+});
+
+test("decline keeps other live offers and allows the declining driver back after cooldown", async () => {
+  const h = harness(2);
+  await h.dispatch();
+  await h.reject("driver0", 1);
+  assert.equal(h.docs.get("driver_ride_offers/driver0/offers/ride").status, "rejected");
+  assert.equal(h.docs.get("driver_ride_offers/driver1/offers/ride").status, "pending");
+  assert.equal(h.docs.get("rides/ride").status, "offered");
+  assert.equal(h.docs.get("rides/ride").driverLastRejectedAtMs.driver0, 100000);
+  h.advance(30001);
+  await h.dispatch();
+  assert.equal(h.docs.get("rides/ride").status, "requested");
+  h.advance(30001);
+  await h.dispatch();
+  assert.ok(h.docs.get("rides/ride").offeredDriverIds.includes("driver0"));
+  assert.equal(h.docs.get("driver_ride_offers/driver0/offers/ride").status, "pending");
+  assert.equal(h.wroteBeforeRead(), false);
+});
+
+test("last rejection immediately continues search to the next eligible driver", async () => {
+  const h = harness(6);
+  await h.dispatch();
+  for (let i = 0; i < 5; i++) await h.reject(`driver${i}`, 1);
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver5"]);
+  assert.equal(h.sent.length, 2);
+});
+
+test("delayed decline from an older offer cannot dismiss the renewed round", async () => {
+  const h = harness(1);
+  await h.dispatch();
+  h.advance(60001);
+  await h.dispatch();
+  await assert.rejects(h.reject("driver0", 1), /offer has refreshed/);
+  assert.equal(h.docs.get("driver_ride_offers/driver0/offers/ride").status, "pending");
+  assert.equal(h.docs.get("rides/ride").driverLastRejectedAtMs, undefined);
+});
+
+test("declining an expired offer does not turn a timeout into an explicit rejection", async () => {
+  const h = harness(1);
+  await h.dispatch();
+  h.advance(30001);
+  await h.reject("driver0", 1);
+  assert.equal(h.docs.get("rides/ride").driverLastRejectedAtMs, undefined);
+});
+
+test("rejection cooldown starts at decline time, not the earlier offer time", async () => {
+  const h = harness(1);
+  await h.dispatch();
+  h.advance(25000);
+  await h.reject("driver0", 1);
+  h.advance(35001);
+  assert.equal(await h.dispatch(), "requested");
+  h.advance(25001);
+  assert.equal(await h.dispatch(), "offered");
 });

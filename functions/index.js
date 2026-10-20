@@ -299,6 +299,7 @@ async function sendRideOfferPushNotifications({
   rideOptionId,
   pickup,
   estimatedFare,
+  dispatchRound,
 }) {
   if (!Array.isArray(candidates) || candidates.length === 0) return;
 
@@ -322,6 +323,7 @@ async function sendRideOfferPushNotifications({
       pickupAddress: pickup.address,
       estimatedFare,
       currencyCode: CURRENCY_CODE,
+      dispatchRound,
     }));
     messageDrivers.push(candidates[index].driverId);
   }
@@ -1283,6 +1285,15 @@ for (const [functionName, kind] of [["getAssignedDriverPhoto", "driver"], ["getA
   });
 }
 
+function assertOfferRound(requestedRound, currentRound) {
+  if (requestedRound == null) return;
+  if (!Number.isInteger(requestedRound) || requestedRound < 1 || requestedRound !== currentRound) {
+    throw new HttpsError("failed-precondition",
+      "This offer has refreshed. Respond to the latest request shown in Alpha Plus.",
+      { reason: "offer_round_changed" });
+  }
+}
+
 exports.acceptRideOffer = onCall(
   { region: REGION, timeoutSeconds: 15, memory: "256MiB" },
   async (request) => {
@@ -1311,6 +1322,7 @@ exports.acceptRideOffer = onCall(
           "This ride offer is no longer active.",
         );
       }
+      assertOfferRound(request.data?.dispatchRound, preOffer.get("dispatchRound"));
       const presenceSnapshot = await realtimeDb
         .ref(`driver_locations/${driverId}`)
         .get();
@@ -1364,6 +1376,7 @@ exports.acceptRideOffer = onCall(
           );
         }
 
+        assertOfferRound(request.data?.dispatchRound, offerSnapshot.get("dispatchRound"));
         const expiresAt = offerSnapshot.get("expiresAt");
         if (
           !(expiresAt instanceof Timestamp) ||
@@ -1497,6 +1510,7 @@ exports.rejectRideOffer = onCall(
       let allDriverIds = [];
 
       await db.runTransaction(async (transaction) => {
+        retryDispatch = false;
         const offerSnapshot = await transaction.get(offerRef);
         const rideSnapshot = await transaction.get(rideRef);
         if (!offerSnapshot.exists) {
@@ -1506,6 +1520,7 @@ exports.rejectRideOffer = onCall(
           );
         }
 
+        assertOfferRound(request.data?.dispatchRound, offerSnapshot.get("dispatchRound"));
         const currentOfferStatus = offerSnapshot.get("status");
         if (
           currentOfferStatus === "rejected" ||
@@ -1526,6 +1541,9 @@ exports.rejectRideOffer = onCall(
           });
           return;
         }
+
+        const expiry = offerSnapshot.get("expiresAt");
+        if (!(expiry instanceof Timestamp) || expiry.toMillis() <= Date.now()) return;
 
         allDriverIds = Array.isArray(rideSnapshot.get("offeredDriverIds"))
           ? rideSnapshot.get("offeredDriverIds")
@@ -1552,6 +1570,10 @@ exports.rejectRideOffer = onCall(
 
         transaction.update(rideRef, {
           rejectedDriverIds: FieldValue.arrayUnion(driverId),
+          driverLastRejectedAtMs: {
+            ...(rideSnapshot.get("driverLastRejectedAtMs") ?? {}),
+            [driverId]: nowMs,
+          },
           updatedAt: now,
           ...(!anotherOfferActive ? {
             status: "requested",
@@ -1603,5 +1625,6 @@ exports.expireRideOffers = onSchedule(
     }
   },
 );
+
 
 
