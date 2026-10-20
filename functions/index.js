@@ -23,6 +23,7 @@ const {
   DISPATCH_ALGORITHM_VERSION,
   approvedDriverPhotoStoragePath,
   buildDriverPublicSummary,
+  completedDriverAssignment,
   presenceAllowsAcceptance,
   presenceIsWithinPickupRadius,
   profileAllowsDispatch,
@@ -1313,22 +1314,26 @@ exports.acceptRideOffer = onCall(
       const presenceSnapshot = await realtimeDb
         .ref(`driver_locations/${driverId}`)
         .get();
-      if (
-        !presenceAllowsAcceptance({
-          presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
-          driverId,
-          requiredVehicleType: preOffer.get("requiredVehicleType"),
-        }) ||
-        !presenceIsWithinPickupRadius({
-          presence: presenceSnapshot.exists() ? presenceSnapshot.val() : null,
-          pickup: preOffer.get("pickup"),
-          radiusMeters: ACCEPTANCE_PICKUP_RADIUS_METERS,
-        })
-      ) {
-        throw new HttpsError(
-          "failed-precondition",
-          "Go online with your approved vehicle before accepting this ride.",
-        );
+      const presence = presenceSnapshot.exists() ? presenceSnapshot.val() : null;
+      // Firestore owns assignment state. Validate any RTDB pointer inside the
+      // acceptance transaction instead of rejecting a completed trip here.
+      if (!presenceAllowsAcceptance({
+        presence: presence ? { ...presence, activeRideId: null } : null,
+        driverId,
+      })) {
+        logger.warn("Ride acceptance presence rejected", {
+          driverId, rideId, reason: "offline_or_stale",
+          presenceAgeMs: presence ? Date.now() - Number(presence.updatedAt ?? presence.lastUpdated) : null,
+        });
+        throw new HttpsError("failed-precondition",
+          "Your online connection needs refreshing. Keep Alpha Plus open and try again.",
+          { reason: "presence_unavailable" });
+      }
+      if (!presenceIsWithinPickupRadius({ presence, pickup: preOffer.get("pickup"),
+        radiusMeters: ACCEPTANCE_PICKUP_RADIUS_METERS })) {
+        throw new HttpsError("failed-precondition",
+          "Your current location is too far from this pickup. Wait for a closer request.",
+          { reason: "pickup_out_of_range" });
       }
 
       let competingDriverIds = [];
@@ -1389,14 +1394,19 @@ exports.acceptRideOffer = onCall(
             "Your approved vehicle is not eligible for this ride.",
           );
         }
-        if (
-          activeDriverSnapshot.exists &&
-          activeDriverSnapshot.get("rideId") !== rideId
-        ) {
-          throw new HttpsError(
-            "failed-precondition",
-            "Finish your active ride before accepting another request.",
-          );
+        const previousIds = [...new Set([
+          activeDriverSnapshot.get("rideId"), presence?.activeRideId,
+        ].filter((id) => id != null && id !== "" && id !== rideId))];
+        for (const previousId of previousIds) {
+          if (typeof previousId !== "string" || previousId.includes("/")) {
+            throw new HttpsError("failed-precondition", "Your previous trip needs review before accepting another request.");
+          }
+          const previousRide = await transaction.get(db.collection("rides").doc(previousId));
+          if (!completedDriverAssignment(previousRide.data(), driverId)) {
+            throw new HttpsError("failed-precondition",
+              "Finish your active ride before accepting another request.",
+              { reason: "active_assignment" });
+          }
         }
 
         const walletEligibility = walletRideEligibility({
@@ -1593,4 +1603,5 @@ exports.expireRideOffers = onSchedule(
     }
   },
 );
+
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/account_role_service.dart';
+import '../services/phone_verification_error.dart';
 import '../services/session_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -146,6 +147,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String _messageForAuthError(FirebaseAuthException error) {
+    final serviceError = phoneVerificationServiceError(error.code, error.message);
+    if (serviceError != null) return serviceError;
     switch (error.code) {
       case 'invalid-phone-number':
         return 'Enter a valid phone number, including the correct country code.';
@@ -160,7 +163,6 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'app-not-authorized':
       case 'captcha-check-failed':
       case 'missing-client-identifier':
-      case 'internal-error':
         return 'AlphaRide could not complete app verification. Close the verification page and try again. If it continues, the Android SHA configuration must be updated in Firebase.';
       default:
         return error.message ?? 'Phone verification failed. Please try again.';
@@ -668,3 +670,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

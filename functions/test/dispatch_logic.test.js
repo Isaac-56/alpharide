@@ -466,3 +466,24 @@ test("ride ids are validated before callable actions", () => {
   assert.equal(validateRideId(" ride-123 "), "ride-123");
   assert.throws(() => validateRideId("   "), /valid ride ID/);
 });
+
+
+
+test("acceptance tolerates bounded cross-service clock skew only", () => {
+  const nowMs = 1800000000000;
+  const presence = { driverId: "d", isOnline: true, updatedAt: nowMs + 2000 };
+  assert.equal(presenceAllowsAcceptance({ presence, driverId: "d", nowMs }), true);
+  assert.equal(presenceAllowsAcceptance({ presence: { ...presence, updatedAt: nowMs + 6000 }, driverId: "d", nowMs }), false);
+});
+
+test("old assignment is releasable only for the same driver and a terminal ride", () => {
+  const { completedDriverAssignment } = require("../dispatch_logic");
+  for (const status of ["completed", "cancelled", "expired"]) {
+    assert.equal(completedDriverAssignment({ driverId: "d", status }, "d"), true);
+    assert.equal(completedDriverAssignment({ driverId: "other", status }, "d"), false);
+  }
+  for (const status of ["accepted", "arrived", "driver_arriving", "in_progress"]) {
+    assert.equal(completedDriverAssignment({ driverId: "d", status }, "d"), false);
+  }
+  assert.equal(completedDriverAssignment(undefined, "d"), false);
+});

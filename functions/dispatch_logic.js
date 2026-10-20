@@ -146,7 +146,8 @@ function presenceAllowsAcceptance({
   const updatedAt = Number(presence.updatedAt ?? presence.lastUpdated);
   if (!Number.isFinite(updatedAt)) return false;
   const ageMs = nowMs - updatedAt;
-  if (ageMs < 0 || ageMs > PRESENCE_FRESH_MS) return false;
+  // RTDB and Functions clocks can differ slightly; reject substantial future dates.
+  if (ageMs < -5000 || ageMs > PRESENCE_FRESH_MS) return false;
 
   const storedDriverId =
     typeof presence.driverId === "string" ? presence.driverId.trim() : "";
@@ -157,6 +158,11 @@ function presenceAllowsAcceptance({
       ? presence.activeRideId.trim()
       : "";
   return activeRideId === "";
+}
+
+function completedDriverAssignment(ride, driverId) {
+  return Boolean(ride && ride.driverId === driverId &&
+    ["completed", "cancelled", "expired"].includes(ride.status));
 }
 
 function presenceIsWithinPickupRadius({
@@ -343,6 +349,7 @@ function validateRideId(value) {
 }
 
 module.exports = {
+  completedDriverAssignment,
   ACCEPTANCE_PICKUP_RADIUS_METERS,
   DISPATCH_ALGORITHM_VERSION,
   DISPATCH_RADIUS_METERS,
@@ -361,3 +368,4 @@ module.exports = {
   selectPresenceCandidates,
   validateRideId,
 };
+
