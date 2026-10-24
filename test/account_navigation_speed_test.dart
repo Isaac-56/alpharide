@@ -49,7 +49,7 @@ void main() {
     expect(data.historySubscriptions, 1);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
-    await data.history.close();
+    unawaited(data.history.close());
   });
 
   testWidgets(
