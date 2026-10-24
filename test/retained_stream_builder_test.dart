@@ -41,8 +41,8 @@ void main() {
       await tester.pump();
       expect(find.text('Second account data'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
-      await first.close();
-      await second.close();
+      unawaited(first.close());
+      unawaited(second.close());
     },
   );
 }
