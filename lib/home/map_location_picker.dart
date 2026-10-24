@@ -44,8 +44,10 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
 
   int _addressRequestId = 0;
   bool _userInteractedWithMap = false;
+  bool _initialLocationPending = false;
 
   bool get _canConfirm =>
+      (!_initialLocationPending || _userInteractedWithMap) &&
       !_isCameraMoving &&
       !_isResolvingAddress &&
       !_isLocatingUser &&
@@ -63,6 +65,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         initialAddress.isEmpty ? 'Finding this address...' : initialAddress;
 
     if (widget.initialLocationFuture != null) {
+      _initialLocationPending = true;
       unawaited(_applyInitialLocation(widget.initialLocationFuture!));
     }
 
@@ -92,6 +95,8 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
       }
     } catch (error) {
       debugPrint('Unable to center the saved-place map: $error');
+    } finally {
+      if (mounted) setState(() => _initialLocationPending = false);
     }
   }
 
