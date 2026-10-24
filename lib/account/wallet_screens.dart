@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/ride_option.dart';
 import '../services/firestore_service.dart';
+import '../core/widgets/retained_stream_builder.dart';
 import 'account_ui.dart';
 
 class WalletEntryScreen extends StatefulWidget {
@@ -665,8 +666,9 @@ class WalletTransactionsScreen extends StatelessWidget {
     return AlphaPageScaffold(
       title: 'Transactions',
       scrollable: false,
-      child: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: firestoreService.watchWalletTransactions(phoneNumber),
+      child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
+        sourceKey: (phoneNumber, firestoreService),
+        createStream: () => firestoreService.watchWalletTransactions(phoneNumber),
         builder: (
           BuildContext context,
           AsyncSnapshot<List<Map<String, dynamic>>> snapshot,

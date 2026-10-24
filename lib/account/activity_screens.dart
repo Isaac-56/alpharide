@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/ride_option.dart';
 import '../services/firestore_service.dart';
+import '../core/widgets/retained_stream_builder.dart';
 import 'account_ui.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -21,8 +24,9 @@ class NotificationsScreen extends StatelessWidget {
     return AlphaPageScaffold(
       title: 'Notifications',
       scrollable: false,
-      child: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: firestoreService.watchNotifications(phoneNumber),
+      child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
+        sourceKey: (phoneNumber, firestoreService),
+        createStream: () => firestoreService.watchNotifications(phoneNumber),
         builder: (
           BuildContext context,
           AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
@@ -65,10 +69,10 @@ class NotificationsScreen extends StatelessWidget {
                   final String? id = notification['id']?.toString();
 
                   if (id != null && notification['isRead'] != true) {
-                    await firestoreService.markNotificationRead(
-                      phoneNumber,
-                      id,
-                    );
+                    unawaited(firestoreService.markNotificationRead(phoneNumber, id)
+                        .catchError((Object error) {
+                      debugPrint('Unable to mark notification read: $error');
+                    }));
                   }
 
                   if (!context.mounted) return;
@@ -318,8 +322,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: widget.firestoreService.watchOrders(widget.phoneNumber),
+            child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
+              sourceKey: (widget.phoneNumber, widget.firestoreService),
+        createStream: () => widget.firestoreService.watchOrders(widget.phoneNumber),
               builder: (
                 BuildContext context,
                 AsyncSnapshot<List<Map<String, dynamic>>> snapshot,

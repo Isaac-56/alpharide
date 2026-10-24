@@ -12,12 +12,14 @@ class MapLocationPicker extends StatefulWidget {
   final LatLng initialLocation;
   final String initialAddress;
   final bool isPickup;
+  final Future<LatLng>? initialLocationFuture;
 
   const MapLocationPicker({
     super.key,
     required this.initialLocation,
     required this.initialAddress,
     required this.isPickup,
+    this.initialLocationFuture,
   });
 
   @override
@@ -41,6 +43,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
   bool _isConfirming = false;
 
   int _addressRequestId = 0;
+  bool _userInteractedWithMap = false;
 
   bool get _canConfirm =>
       !_isCameraMoving &&
@@ -59,12 +62,36 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     _selectedAddress =
         initialAddress.isEmpty ? 'Finding this address...' : initialAddress;
 
+    if (widget.initialLocationFuture != null) {
+      unawaited(_applyInitialLocation(widget.initialLocationFuture!));
+    }
+
     if (initialAddress.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _resolveAddress(_selectedLocation);
         }
       });
+    }
+  }
+
+  Future<void> _applyInitialLocation(Future<LatLng> pending) async {
+    try {
+      final LatLng location = await pending;
+      // A slow GPS result must never replace a pin the user already chose.
+      if (!mounted || _userInteractedWithMap || _isConfirming) return;
+      _addressRequestId++;
+      _addressDebounce?.cancel();
+      setState(() => _selectedLocation = location);
+      final GoogleMapController? controller = _mapController;
+      if (controller != null) {
+        await controller.moveCamera(CameraUpdate.newLatLng(location));
+      }
+      if (mounted && !_userInteractedWithMap && !_isConfirming) {
+        await _resolveAddress(location);
+      }
+    } catch (error) {
+      debugPrint('Unable to center the saved-place map: $error');
     }
   }
 
@@ -182,6 +209,12 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     GoogleMapController controller,
   ) {
     _mapController = controller;
+    if (widget.initialLocationFuture != null && !_userInteractedWithMap) {
+      unawaited(controller.moveCamera(CameraUpdate.newLatLng(_selectedLocation))
+          .catchError((Object error) {
+        debugPrint('Unable to apply the initial map center: $error');
+      }));
+    }
   }
 
   void _onCameraMove(CameraPosition position) {
@@ -256,6 +289,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
 
   Future<void> _moveToCurrentLocation() async {
     if (_isLocatingUser || _isConfirming) return;
+    _userInteractedWithMap = true;
 
     setState(() {
       _isLocatingUser = true;
@@ -391,9 +425,11 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
       backgroundColor: pageBackground,
       body: Stack(
         children: <Widget>[
-          GoogleMap(
+          Listener(
+            onPointerDown: (_) => _userInteractedWithMap = true,
+            child: GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: widget.initialLocation,
+              target: _selectedLocation,
               zoom: 17,
             ),
             onMapCreated: _onMapCreated,
@@ -406,6 +442,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
             mapToolbarEnabled: false,
             compassEnabled: false,
             buildingsEnabled: true,
+          ),
           ),
 
           // Fixed center marker

@@ -12,6 +12,7 @@ import '../home/map_location_picker.dart';
 import '../models/location_selection.dart';
 import '../services/firestore_service.dart';
 import '../services/session_service.dart';
+import '../core/widgets/retained_stream_builder.dart';
 import 'account_ui.dart';
 
 class ProfileMenuScreen extends StatefulWidget {
@@ -621,8 +622,9 @@ class SavedPlacesScreen extends StatelessWidget {
           ),
         ),
       ),
-      child: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: firestoreService.watchSavedPlaces(phoneNumber),
+      child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
+        sourceKey: (phoneNumber, firestoreService),
+        createStream: () => firestoreService.watchSavedPlaces(phoneNumber),
         builder: (
           BuildContext context,
           AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
@@ -840,16 +842,18 @@ class _AddSavedPlaceScreenState extends State<AddSavedPlaceScreen> {
   }
 
   Future<void> _chooseOnMap() async {
-    final LatLng initialLocation = await _initialLocation();
-    if (!mounted) return;
-
+    // Render the map route immediately; GPS resolves inside the open page.
+    // An existing saved selection does not need another location lookup.
+    final Future<LatLng>? initialLocationFuture =
+        _selection == null ? _initialLocation() : null;
     final LocationSelection? result = await Navigator.push<LocationSelection>(
       context,
       MaterialPageRoute<LocationSelection>(
         builder: (_) => MapLocationPicker(
           initialLocation: _selection == null
-              ? initialLocation
+              ? const LatLng(4.8517, 31.5825)
               : LatLng(_selection!.latitude, _selection!.longitude),
+          initialLocationFuture: initialLocationFuture,
           initialAddress: _selection?.address ?? _addressController.text,
           isPickup: false,
         ),

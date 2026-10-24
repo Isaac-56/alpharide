@@ -6,11 +6,14 @@ import '../models/ride_history.dart';
 import 'account_role_service.dart';
 
 class FirestoreService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  FirestoreService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+      : _firestoreOverride = firestore, _authOverride = auth;
 
-  final CollectionReference<Map<String, dynamic>> _users =
-      FirebaseFirestore.instance.collection('users');
+  final FirebaseFirestore? _firestoreOverride;
+  final FirebaseAuth? _authOverride;
+  FirebaseFirestore get _firestore => _firestoreOverride ?? FirebaseFirestore.instance;
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
+  CollectionReference<Map<String, dynamic>> get _users => _firestore.collection('users');
 
   User _requireUser() {
     final User? user = _auth.currentUser;
