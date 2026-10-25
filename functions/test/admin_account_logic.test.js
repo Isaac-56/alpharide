@@ -14,6 +14,7 @@ function harness(extra = {}) {
   const effects = [];
   let user = { uid, phoneNumber: phone };
   let failCleanup = false;
+  let disableHook;
   const snap = (ref) => ({ exists: records.has(ref.path), data: () => records.get(ref.path), ref });
   const ref = (path) => ({ path, get: async () => snap(ref(path)), delete: async () => records.delete(path), listCollections: async () => {
     const children = new Set([...records.keys()].filter(key => key.startsWith(`${path}/`)).map(key => key.split("/")[2]));
@@ -38,13 +39,13 @@ function harness(extra = {}) {
   };
   const missing = () => Object.assign(new Error("missing"), { code: "auth/user-not-found" });
   const auth = { getUser: async () => { if (!user) throw missing(); return user; },
-    updateUser: async () => { if (!user) throw missing(); effects.push("auth:disable"); },
+    updateUser: async () => { if (!user) throw missing(); effects.push("auth:disable"); await disableHook?.(); },
     revokeRefreshTokens: async () => { if (!user) throw missing(); effects.push("auth:revoke"); },
     deleteUser: async () => { if (!user) throw missing(); user = null; effects.push("auth:delete"); } };
   const storage = { bucket: () => ({ deleteFiles: async ({ prefix }) => effects.push(`storage:${prefix}`),
     file: (path) => ({ delete: async () => effects.push(`storage:${path}`) }) }) };
   const realtimeDb = { ref: (path) => ({ set: async () => effects.push(`rtdb:block:${path}`), remove: async () => effects.push(`rtdb:delete:${path}`) }) };
-  return { records, effects, setUser: value => { user = value; }, fail: value => { failCleanup = value; },
+  return { records, effects, onDisable: value => { disableHook = value; }, setUser: value => { user = value; }, fail: value => { failCleanup = value; },
     remove: createAdminAccountDeleter({ db, auth, storage, realtimeDb, HttpsError, now: () => new Date(0) }) };
 }
 
@@ -127,4 +128,18 @@ test("driver deletion removes selfie and licence directories and preserves settl
   assert.equal(h.records.has("drivers/u1"), false); assert.equal(h.records.has("driver_photo_checks/u1"), false);
   assert.equal(h.records.has("driver_wallets/u1/transactions/t1"), true);
   assert.ok(h.effects.includes("storage:drivers/u1/"));
+});
+
+test("concurrent deletion calls cannot clean the same phone after the first call releases it", async () => {
+  const h = harness();
+  let resume, entered;
+  const blocked = new Promise(resolve => { resume = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  h.onDisable(async () => { entered(); await blocked; });
+  const first = h.remove(request);
+  await started;
+  await assert.rejects(h.remove(request), { code: "aborted" });
+  resume();
+  await first;
+  assert.equal(h.effects.filter(effect => effect === "auth:delete").length, 1);
 });
