@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -129,6 +130,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  String? _uploadedPhotoPath;
+
   Future<String?> _uploadImage() async {
     final File? image = _image;
 
@@ -137,8 +140,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       final Reference reference = FirebaseStorage.instance
           .ref()
-          .child('user_photos')
-          .child('${widget.phoneNumber}.jpg');
+          .child('users/${FirebaseAuth.instance.currentUser!.uid}/profile')
+          .child('${DateTime.now().microsecondsSinceEpoch}.jpg');
 
       final SettableMetadata metadata = SettableMetadata(
         contentType: 'image/jpeg',
@@ -150,6 +153,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         metadata,
       );
 
+      _uploadedPhotoPath = snapshot.ref.fullPath;
       return await snapshot.ref.getDownloadURL();
     } catch (error) {
       debugPrint('Error uploading profile image: $error');
@@ -382,6 +386,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         widget.phoneNumber,
         _nameController.text.trim(),
         photoUrl: photoUrl,
+        photoStoragePath: _uploadedPhotoPath,
         referralCode: _referralCodeController.text.trim(),
       );
 
@@ -925,3 +930,4 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 }
+

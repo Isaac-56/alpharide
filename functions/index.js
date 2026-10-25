@@ -1,6 +1,7 @@
 "use strict";
 
 const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const { getDatabase } = require("firebase-admin/database");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
@@ -699,6 +700,8 @@ exports.customerServiceCreateRide = onCall(
       const auditRef = db.collection("customer_service_audit").doc();
 
       await db.runTransaction(async (transaction) => {
+        const account = await transaction.get(db.collection("account_roles").doc(passengerId));
+        if (account.get("deletionPending") === true) throw new HttpsError("failed-precondition", "This account is being deleted.");
         const activeSnapshot = await transaction.get(activeRideRef);
         if (activeSnapshot.exists) {
           const activeRideId = activeSnapshot.get("rideId");
@@ -1062,6 +1065,8 @@ exports.createRide = onCall(
         .doc(passengerId);
 
       await db.runTransaction(async (transaction) => {
+        const account = await transaction.get(db.collection("account_roles").doc(passengerId));
+        if (account.get("deletionPending") === true) throw new HttpsError("failed-precondition", "This account is being deleted.");
         const activeSnapshot = await transaction.get(activeRideRef);
         if (activeSnapshot.exists) {
           const activeRideId = activeSnapshot.get("rideId");
@@ -1277,7 +1282,7 @@ exports.cancelRide = onCall(
 );
 
 const { createRidePhotoLoader } = require("./ride_photo_logic");
-const loadRidePhoto = createRidePhotoLoader({ db, storage, HttpsError });
+const loadRidePhoto = createRidePhotoLoader({ db, storage, auth: getAuth(), HttpsError });
 for (const [functionName, kind] of [["getAssignedDriverPhoto", "driver"], ["getAssignedPassengerPhoto", "passenger"]]) {
   exports[functionName] = onCall({ region: REGION, timeoutSeconds: 20, memory: "256MiB" }, async (request) => {
     try { return await loadRidePhoto(request, kind); }
@@ -1350,6 +1355,8 @@ exports.acceptRideOffer = onCall(
 
       let competingDriverIds = [];
       await db.runTransaction(async (transaction) => {
+        const account = await transaction.get(db.collection("account_roles").doc(driverId));
+        if (account.get("deletionPending") === true) throw new HttpsError("failed-precondition", "This account is being deleted.");
         const [offerSnapshot, rideSnapshot, profileSnapshot, activeDriverSnapshot, walletSnapshot] =
           await Promise.all([offerRef, rideRef, profileRef, activeDriverRef, walletRef]
             .map((reference) => transaction.get(reference)));
@@ -1625,6 +1632,7 @@ exports.expireRideOffers = onSchedule(
     }
   },
 );
+
 
 
 

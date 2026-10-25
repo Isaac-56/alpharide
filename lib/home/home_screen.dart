@@ -65,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<Position>? _positionStream;
   Position? _lastProcessedPosition;
 
+  StreamSubscription<Map<String, dynamic>?>? _profileSubscription;
   Map<String, dynamic>? userData;
   bool _isLocating = false;
   bool _locationPermissionChecked = false;
@@ -96,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
+    _profileSubscription?.cancel();
     _sheetController.dispose();
     super.dispose();
   }
@@ -119,25 +121,16 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    try {
-      final Map<String, dynamic>? data = await _firestoreService.getUser(
-        phoneNumber,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        userData = data;
-      });
-    } catch (error) {
-      debugPrint(
-        'Failed to load user: $error',
-      );
-
-      if (!mounted) return;
-
-      setState(() {});
-    }
+    await _profileSubscription?.cancel();
+    if (!mounted) return;
+    _profileSubscription = _firestoreService.watchUser(phoneNumber).listen(
+      (Map<String, dynamic>? data) {
+        if (mounted) setState(() => userData = data);
+      },
+      onError: (Object error) {
+        debugPrint('Unable to refresh the profile: $error');
+      },
+    );
   }
 
   Future<void> _checkPermission() async {
@@ -1020,3 +1013,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+

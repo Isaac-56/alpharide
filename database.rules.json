@@ -5,7 +5,7 @@
     "driver_locations": {
       ".read": "auth != null",
       "$driverId": {
-        ".write": "auth != null && auth.uid === $driverId",
+        ".write": "auth != null && auth.uid === $driverId && root.child('account_deletions').child(auth.uid).val() !== true",
         ".validate": "!newData.exists() || (newData.child('isOnline').val() === false && newData.hasChildren(['isOnline', 'updatedAt'])) || newData.hasChildren(['driverId', 'presenceId', 'latitude', 'longitude', 'heading', 'accuracy', 'isOnline', 'vehicleType', 'updatedAt'])",
         "driverId": {
           ".validate": "newData.isString() && newData.val() === $driverId"
@@ -56,3 +56,4 @@
     }
   }
 }
+

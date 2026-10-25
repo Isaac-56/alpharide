@@ -93,3 +93,17 @@ test("preflight still rejects an existing driver found by UID", async () => {
   const h = harness({ "drivers/u1": {} });
   await assert.rejects(h.api.preflightAccountRole(request), e => e.code === "failed-precondition");
 });
+
+
+test("a deleted UID cannot reclaim the phone through an unexpired old ID token", async () => {
+  const h = harness({ "account_roles/u1": { deletionPending: true, deleted: true } });
+  await assert.rejects(h.api.claimAccountRole(request), { code: "failed-precondition" });
+  assert.equal(h.writes.length, 0);
+});
+
+test("a fresh Auth UID can register the released phone while the deleted UID stays blocked", async () => {
+  const h = harness({ "account_roles/u1": { deletionPending: true, deleted: true } });
+  const result = await h.api.claimAccountRole({ ...request, auth: { uid: "new_uid", token: { phone_number: phone } } });
+  assert.equal(result.claimed, true);
+  assert.deepEqual(h.writes.map(write => write.path), ["account_roles/new_uid", `identity_registry/${hash}`]);
+});

@@ -44,6 +44,12 @@ service firebase.storage {
 
     // Keep the existing AlphaRide passenger profile-photo flow working.
     // The filename must match the phone number verified by Firebase Auth.
+    match /users/{userId}/profile/{fileName} {
+      allow read: if (signedIn() && request.auth.uid == userId) || isAdmin();
+      allow create, update: if signedIn() && request.auth.uid == userId && isSafeJpeg();
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
     match /user_photos/{fileName} {
       allow read: if signedIn() || isAdmin();
       allow create, update:
@@ -56,3 +62,4 @@ service firebase.storage {
     }
   }
 }
+

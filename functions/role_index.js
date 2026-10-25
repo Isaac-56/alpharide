@@ -14,4 +14,6 @@ module.exports = {
   ...lifecycleFunctions,
   ...walletFunctions,
   ...adminOpsFunctions,
+  ...require("./admin_account_functions"),
 };
+

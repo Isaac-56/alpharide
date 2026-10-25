@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createRidePhotoLoader, passengerPhotoPath } = require("../ride_photo_logic");
 const bucketName = "alpha-ride-29708.firebasestorage.app";
-function harness({ signer } = {}) {
+function harness({ signer, auth } = {}) {
   const docs = new Map([
     ["rides/r1", { status: "accepted", passengerId: "p1", driverId: "d1", customerPhone: "+211912345678" }],
     ["driver_photo_checks/d1", { status: "approved", driverId: "d1", storagePath: "drivers/d1/documents/photo_checks/face.jpg" }],
@@ -16,7 +16,7 @@ function harness({ signer } = {}) {
     download: async () => { downloaded.push({ path, options }); return [Buffer.from("photo-data")]; },
   }) }) };
   class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } }
-  const load = createRidePhotoLoader({ storage, HttpsError,
+  const load = createRidePhotoLoader({ storage, HttpsError, auth,
     db: { collection: (name) => ({ doc: (id) => ({ get: async () => ({ exists: docs.has(`${name}/${id}`), data: () => docs.get(`${name}/${id}`) }) }) }) },
   });
   return { docs, downloaded, load: (uid, kind) => load({ auth: uid ? { uid } : null, data: { rideId: "r1" } }, kind) };
@@ -66,4 +66,22 @@ test("legacy APKs retain a signed photo URL where signing is available", async (
   assert.ok(image.photoUrl.startsWith("https://"));
   assert.ok(image.expiresAtMillis > Date.now());
   assert.ok(image.imageBase64);
+});
+
+
+test("both matched participants receive only their counterpart's owned photo", async () => {
+  const h = harness();
+  h.docs.set("users/p1", { photoStoragePath: "users/p1/profile/new.jpg", photoUrl: "https://example.com/expired" });
+  await h.load("d1", "passenger");
+  await h.load("p1", "driver");
+  assert.deepEqual(h.downloaded.map(x => x.path), ["users/p1/profile/new.jpg", "drivers/d1/documents/photo_checks/face.jpg"]);
+});
+
+test("legacy rides missing a phone use Firebase Auth rather than an editable profile phone", async () => {
+  const h = harness({ auth: { getUser: async uid => { assert.equal(uid, "p1"); return { phoneNumber: "+211912345678" }; } } });
+  delete h.docs.get("rides/r1").customerPhone;
+  h.docs.get("users/p1").phoneNumber = "+211999999999";
+  assert.ok((await h.load("d1", "passenger")).imageBase64);
+  h.docs.set("users/p1", { photoStoragePath: "user_photos/+211999999999.jpg", phoneNumber: "+211999999999" });
+  assert.equal((await h.load("d1", "passenger")).imageBase64, "");
 });

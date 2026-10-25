@@ -19,6 +19,7 @@ const api = {
   overview: call("adminGetOperationsOverview"),
   drivers: call("adminListDrivers"),
   passengers: call("adminListPassengers"),
+  deleteAccount: httpsCallable(functions, "adminDeleteAccount", { timeout: 120000 }),
   driverReview: call("adminGetDriverReview"),
   driverDocument: httpsCallable(functions, "adminGetDriverDocument", { timeout: 25000 }),
   rides: call("adminListRides"),
@@ -103,10 +104,15 @@ function setBusy(button, busy, label = "Working…") {
   button.disabled = busy; button.dataset.originalText ??= button.textContent; button.textContent = busy ? label : button.dataset.originalText;
 }
 
-function confirmAction({ title, message, confirmLabel = "Confirm" }) {
+function confirmAction({ title, message, confirmLabel = "Confirm", confirmPhone = "" }) {
   if (confirmResolver) confirmResolver(false);
   el.confirmTitle.textContent = title; el.confirmMessage.textContent = message; el.confirmAccept.textContent = confirmLabel; el.dialog.hidden = false;
-  requestAnimationFrame(() => el.confirmAccept.focus());
+  const input = $("#confirm-phone");
+  $("#confirm-phone-label").hidden = !confirmPhone;
+  input.value = "";
+  el.confirmAccept.disabled = Boolean(confirmPhone);
+  input.oninput = () => { el.confirmAccept.disabled = Boolean(confirmPhone) && input.value.replace(/\s+/g, "") !== confirmPhone; };
+  requestAnimationFrame(() => (confirmPhone ? input : el.confirmAccept).focus());
   return new Promise((resolve) => { confirmResolver = resolve; });
 }
 
@@ -738,11 +744,19 @@ function renderPassengers() {
     for (const value of [`${passenger.name} · ${passenger.passengerId}`, passenger.phoneNumber || "Not supplied", dateTime(passenger.createdAtMillis), passenger.photoUploaded ? "Uploaded" : "Not uploaded", passenger.rideId || "—"]) {
       const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
     }
+    const action = document.createElement("td");
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "danger-button";
+    button.textContent = "Delete account";
+    button.disabled = !passenger.phoneNumber;
+    button.addEventListener("click", () => deleteRegisteredAccount({ uid: passenger.passengerId,
+      role: "passenger", phoneNumber: passenger.phoneNumber, name: passenger.name, button }));
+    action.append(button); row.append(action);
     passengerUi.body.append(row);
   }
   passengerUi.count.textContent = `${filtered.length} matching · ${passengers.length} loaded`;
   if (!filtered.length) {
-    const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5;
+    const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6;
     cell.textContent = query ? "No loaded passengers match your search. Load more accounts to search further." : "No passenger accounts found.";
     row.append(cell); passengerUi.body.append(row);
   }
@@ -770,3 +784,26 @@ async function loadPassengers(append = false) {
 passengerUi.refresh.addEventListener("click", () => loadPassengers());
 passengerUi.more.addEventListener("click", () => loadPassengers(true));
 passengerUi.search.addEventListener("input", renderPassengers);
+
+
+async function deleteRegisteredAccount({ uid, role, phoneNumber, name, button }) {
+  if (!phoneNumber) return showToast("Refresh the account to load its complete phone number.", "error");
+  const approved = await confirmAction({ title: `Delete ${role} account?`,
+    message: `Permanently delete ${name || role} (${phoneNumber})? This removes Firebase sign-in, profile, documents and registration links so the number can sign up freshly. Ride and financial history is retained. Active rides and unsettled driver wallets must be resolved first. Type ${phoneNumber} to confirm.`,
+    confirmLabel: "Delete permanently", confirmPhone: phoneNumber });
+  if (!approved) return;
+  setBusy(button, true, "Deleting…");
+  try {
+    await api.deleteAccount({ uid, role, confirmPhone: phoneNumber });
+    driverReviews.delete(uid);
+    showToast("Account deleted. The phone number can register again.");
+    await Promise.all([loadPassengers(), loadDrivers({ preserveSelection: false }), loadOverview()]);
+  } catch (error) { showToast(readableError(error), "error"); }
+  finally { setBusy(button, false); }
+}
+$("#delete-driver-account").addEventListener("click", () => {
+  const driver = selectedDriver();
+  if (driver) void deleteRegisteredAccount({ uid: driver.driverId, role: "driver",
+    phoneNumber: driver.phoneNumber, name: `${driver.firstName || ""} ${driver.lastName || ""}`.trim(),
+    button: $("#delete-driver-account") });
+});

@@ -11,6 +11,7 @@ import '../authentication/auth_flow_navigation.dart';
 import '../home/map_location_picker.dart';
 import '../models/location_selection.dart';
 import '../services/firestore_service.dart';
+import '../core/widgets/account_avatar.dart';
 import '../services/session_service.dart';
 import '../core/widgets/retained_stream_builder.dart';
 import 'account_ui.dart';
@@ -248,14 +249,16 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
     );
   }
 
+  String? _uploadedPhotoPath;
+
   Future<String?> _uploadSelectedPhoto() async {
     final File? image = _selectedImage;
     if (image == null) return _photoUrl;
 
     final Reference reference = FirebaseStorage.instance
         .ref()
-        .child('user_photos')
-        .child('${widget.phoneNumber}.jpg');
+        .child('users/${widget.auth.currentUser!.uid}/profile')
+        .child('${DateTime.now().microsecondsSinceEpoch}.jpg');
 
     final TaskSnapshot upload = await reference.putFile(
       image,
@@ -265,6 +268,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
       ),
     );
 
+    _uploadedPhotoPath = upload.ref.fullPath;
     return upload.ref.getDownloadURL();
   }
 
@@ -282,6 +286,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
         email: _emailController.text,
         emergencyPhone: _emergencyController.text,
         photoUrl: photoUrl,
+        photoStoragePath: _uploadedPhotoPath,
       );
 
       if (!mounted) return;
@@ -416,7 +421,9 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
                           color: AlphaColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: CircleAvatar(
+                        child: _selectedImage == null
+                            ? AccountAvatar(radius: 49, photo: widget.initialUserData?['photoStoragePath']?.toString() ?? _photoUrl ?? '')
+                            : CircleAvatar(
                           foregroundImage: imageProvider,
                           backgroundColor: AlphaColors.surface(context),
                           child: imageProvider == null
@@ -991,3 +998,4 @@ IconData _placeIcon(String label) {
 
   return Icons.place_outlined;
 }
+

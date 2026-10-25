@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/widgets/account_avatar.dart';
+
 import '../account/account_ui.dart';
 import '../account/activity_screens.dart';
 import '../account/feedback_screens.dart';
@@ -39,12 +41,14 @@ class CustomDrawer extends StatelessWidget {
     final String? authenticatedPhone = auth.currentUser?.phoneNumber;
     final String storedPhone =
         userData?['phoneNumber']?.toString().trim() ?? '';
-    final String displayPhone = storedPhone.isNotEmpty
-        ? storedPhone
-        : authenticatedPhone ?? 'Phone unavailable';
-    final String photoUrl = userData?['photoUrl']?.toString().trim() ?? '';
-    final NetworkImage? avatarImage =
-        photoUrl.isEmpty ? null : NetworkImage(photoUrl);
+    final String verifiedPhone = authenticatedPhone?.trim() ?? '';
+    final String displayPhone = verifiedPhone.isNotEmpty
+        ? verifiedPhone
+        : storedPhone.isNotEmpty ? storedPhone : 'Phone unavailable';
+    final String storedPath = userData?['photoStoragePath']?.toString().trim() ?? '';
+    final String photo = storedPath.isNotEmpty
+        ? storedPath
+        : userData?['photoUrl']?.toString().trim() ?? '';
     final double rating =
         double.tryParse(userData?['rating']?.toString() ?? '') ?? 4.90;
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -138,17 +142,7 @@ class CustomDrawer extends StatelessWidget {
                         color: Colors.white,
                         shape: BoxShape.circle,
                       ),
-                      child: CircleAvatar(
-                        foregroundImage: avatarImage,
-                        backgroundColor: const Color(0xFFE9F0E8),
-                        child: avatarImage == null
-                            ? const Icon(
-                                Icons.person_rounded,
-                                size: 34,
-                                color: AlphaColors.ink,
-                              )
-                            : null,
-                      ),
+                      child: AccountAvatar(photo: photo, radius: 30),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -467,3 +461,4 @@ class _MiniComingSoon extends StatelessWidget {
     );
   }
 }
+

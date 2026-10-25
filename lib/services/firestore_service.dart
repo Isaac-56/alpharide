@@ -89,6 +89,7 @@ class FirestoreService {
     String phoneNumber,
     String name, {
     String? photoUrl,
+    String? photoStoragePath,
     String? referralCode,
   }) async {
     try {
@@ -102,6 +103,7 @@ class FirestoreService {
           'phoneNumber': user.phoneNumber ?? phoneNumber,
           'name': name.trim(),
           'photoUrl': photoUrl,
+          if (photoStoragePath != null) 'photoStoragePath': photoStoragePath,
           'referralCode': referralCode?.trim(),
           'createdAt': FieldValue.serverTimestamp(),
         },
@@ -141,6 +143,7 @@ class FirestoreService {
     String? email,
     String? emergencyPhone,
     String? photoUrl,
+    String? photoStoragePath,
   }) async {
     final User user = _requireUser();
 
@@ -152,6 +155,7 @@ class FirestoreService {
         'email': email?.trim(),
         'emergencyPhone': emergencyPhone?.trim(),
         if (photoUrl != null) 'photoUrl': photoUrl,
+        if (photoStoragePath != null) 'photoStoragePath': photoStoragePath,
         'updatedAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),
@@ -321,3 +325,4 @@ class FirestoreService {
     ).toList(growable: false);
   }
 }
+

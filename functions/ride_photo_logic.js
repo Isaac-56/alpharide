@@ -19,7 +19,7 @@ function passengerPhotoPath(profile, ride, bucketName) {
   return path && (path === expected || path.startsWith(ownedPrefix)) ? path : "";
 }
 
-function createRidePhotoLoader({ db, storage, HttpsError }) {
+function createRidePhotoLoader({ db, storage, auth, HttpsError }) {
   return async (request, kind) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in to view this profile photo.");
@@ -38,8 +38,17 @@ function createRidePhotoLoader({ db, storage, HttpsError }) {
       const check = await db.collection("driver_photo_checks").doc(ride.driverId).get();
       path = approvedDriverPhotoStoragePath({ ride, passengerId: uid, photoCheck: check.data() });
     } else {
-      const profile = await db.collection("users").doc(ride.passengerId).get();
-      path = passengerPhotoPath(profile.data(), ride, bucket.name);
+      let profile = await db.collection("users").doc(ride.passengerId).get();
+      let verifiedPhone = ride.customerPhone;
+      if (auth && (!verifiedPhone || !profile.exists)) {
+        try { verifiedPhone = (await auth.getUser(ride.passengerId)).phoneNumber || verifiedPhone; }
+        catch (error) { if (error.code !== "auth/user-not-found") throw error; }
+      }
+      if (!profile.exists && verifiedPhone) {
+        const legacy = await db.collection("users").doc(verifiedPhone).get();
+        if (!legacy.data()?.uid || legacy.data().uid === ride.passengerId) profile = legacy;
+      }
+      path = passengerPhotoPath(profile.data(), { ...ride, customerPhone: verifiedPhone }, bucket.name);
     }
     if (!path || path.includes("..")) return { photoUrl: "", imageBase64: "" };
     try {
@@ -68,3 +77,4 @@ function createRidePhotoLoader({ db, storage, HttpsError }) {
   };
 }
 module.exports = { createRidePhotoLoader, passengerPhotoPath };
+

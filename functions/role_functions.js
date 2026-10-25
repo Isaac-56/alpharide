@@ -170,6 +170,9 @@ async function evaluateAccountRole(request, { claimIfUnassigned }) {
       accountRoleRef, identityRef, passengerRef, legacyPassengerRef, driverRef,
     );
 
+    if (accountRoleSnapshot.data()?.deletionPending === true) {
+      throw new HttpsError("failed-precondition", "This account is being deleted. Sign in again after cleanup completes.");
+    }
     const existingRole = inferExistingRole({
       accountRole: accountRoleSnapshot.data()?.role ?? null,
       identityRole: identitySnapshot.data()?.role ?? null,
@@ -325,4 +328,5 @@ exports.checkAccountRole = roleCallable(false);
 // This is the authoritative, transactional "first completed registration wins"
 // operation used by both apps.
 exports.claimAccountRole = roleCallable(true);
+
 
