@@ -42,3 +42,11 @@ No local route configuration is required:
 .\tool\run_android.ps1
 .\tool\build_android.ps1
 ```
+
+
+## Passenger place search
+
+Autocomplete and place selection also run through Firebase Functions. They use
+`GOOGLE_PLACES_API_KEY`, a separate server-only secret. Set it and deploy the new
+endpoints before rebuilding the passenger APK. Follow [server API key setup](docs/server-api-keys.md).
+The Maps SDK display key remains an Android client key and needs package/certificate restrictions.

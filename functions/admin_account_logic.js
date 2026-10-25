@@ -3,7 +3,7 @@
 const { randomUUID } = require("node:crypto");
 const { hashPhoneNumber, normalizePhoneNumber } = require("./account_role_logic");
 const TERMINAL = new Set(["completed", "cancelled", "expired", "no_driver_found"]);
-const PRIVATE_COLLECTIONS = ["driver_photo_checks", "driver_ride_offers", "user_sessions",
+const PRIVATE_COLLECTIONS = ["passenger_places_limits", "driver_photo_checks", "driver_ride_offers", "user_sessions",
   "driver_sessions", "driver_push_tokens", "passenger_push_tokens", "active_driver_rides", "active_passenger_rides"];
 
 function createAdminAccountDeleter({ db, auth, storage, realtimeDb, HttpsError, now = () => new Date() }) {
@@ -148,3 +148,4 @@ function createAdminAccountDeleter({ db, auth, storage, realtimeDb, HttpsError, 
   };
 }
 module.exports = { createAdminAccountDeleter };
+

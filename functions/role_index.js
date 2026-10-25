@@ -15,5 +15,7 @@ module.exports = {
   ...walletFunctions,
   ...adminOpsFunctions,
   ...require("./admin_account_functions"),
+  ...require("./passenger_places_functions"),
 };
+
 

@@ -50,11 +50,11 @@ function harness(extra = {}) {
 }
 
 test("admin deletion clears login, documents, private subcollections and phone binding, preserving business history", async () => {
-  const h = harness({ "users/u1/notifications/n1": {}, "rides/r1": { passengerId: uid, status: "completed" },
+  const h = harness({ "users/u1/notifications/n1": {}, "passenger_places_limits/u1": { count: 1 }, "rides/r1": { passengerId: uid, status: "completed" },
     "ride_receipts/r1": { passengerId: uid }, "passenger_push_token_owners/t1": { uid },
     "passenger_push_token_owners/t2": { uid: "someone_else" } });
   assert.equal((await h.remove(request)).deleted, true);
-  for (const path of ["users/u1", "users/u1/notifications/n1", `users/${phone}`, `identity_registry/${hash}`, "passenger_push_token_owners/t1"]) assert.equal(h.records.has(path), false, path);
+  for (const path of ["users/u1", "users/u1/notifications/n1", "passenger_places_limits/u1", `users/${phone}`, `identity_registry/${hash}`, "passenger_push_token_owners/t1"]) assert.equal(h.records.has(path), false, path);
   assert.equal(h.records.has("rides/r1"), true);
   assert.equal(h.records.has("ride_receipts/r1"), true);
   assert.equal(h.records.has("passenger_push_token_owners/t2"), true);
