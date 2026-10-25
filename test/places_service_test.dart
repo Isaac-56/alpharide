@@ -8,7 +8,7 @@ void main() {
     final PlacesService service = PlacesService(
       invoke: (String name, Map<String, dynamic> data) async {
         calls.add((name, data));
-        if (name == 'passengerSearchPlaces')
+        if (name == 'passengerSearchPlaces') {
           return <String, Object>{
             'results': <Object>[
               <String, String>{
@@ -18,6 +18,7 @@ void main() {
               },
             ],
           };
+        }
         return <String, Object>{
           'latitude': 4.86,
           'longitude': 31.57,
