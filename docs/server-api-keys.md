@@ -20,6 +20,19 @@ firebase functions:secrets:set GOOGLE_PLACES_API_KEY --project alpha-ride-29708
 4. After installing updated apps on all test devices, remove Places web-service access from the old client key. Keep APIs required by Firebase Authentication and Maps SDK available. Do not delete or rotate the Firebase configuration key as a shortcut. The existing call-centre Places functions still use `GOOGLE_ROUTES_API_KEY`; keep their required server API access until a separate migration.
 5. Check Maps SDK Android restrictions for **com.alpharideapp.passengerapp** and **com.alpharide.driver**, using the certificate that signs the APK being shared. A recipient installing the same APK does not need a new key or certificate registration.
 
+## Existing route key
+
+`GOOGLE_ROUTES_API_KEY` is already read only by the server. If its **value** was ever embedded in an old APK, public configuration or Git history, replace it with a fresh server-only key too: moving a previously exposed value into Secret Manager does not revoke the exposed copy. The existing call-centre endpoints also use this secret for Places, so that key needs **Routes API** and **Places API (New)** access.
+
+Only when rotating that existing route secret, update it in the CLI and redeploy every function bound to it:
+
+```powershell
+firebase functions:secrets:set GOOGLE_ROUTES_API_KEY --project alpha-ride-29708
+firebase deploy --project alpha-ride-29708 --only "functions:calculateRoute,functions:createRide,functions:customerServiceSearchPlaces,functions:customerServiceGetPlace,functions:customerServiceQuoteRide,functions:customerServiceCreateRide"
+```
+
+After updated server keys and APKs are working, remove Routes/Places web-service permissions from the public client key while retaining the Firebase and Maps SDK APIs it still uses. This console configuration cannot be verified by source-code tests.
+
 ## Deploy, then rebuild
 
 Do not export an old APK before deploying these new endpoints and setting their secret.
