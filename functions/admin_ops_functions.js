@@ -791,9 +791,11 @@ exports.adminListPassengers = callable(async (request) => {
       name: text(profile.name) || profileName(profile) || "Passenger",
       phoneNumber: text(profile.phoneNumber),
       createdAtMillis: millis(profile.createdAt),
+      accountDeleting: profile.accountDeleting === true,
       photoUploaded: Boolean(text(profile.photoUrl) || text(profile.photoStoragePath)),
       rideId: locks[index]?.exists ? text(locks[index].get("rideId")) : "",
     };
   });
   return { passengers, nextCursor: snapshot.docs.length > limit ? page.at(-1).id : null };
 }, "Passenger accounts could not be loaded. Try again.");
+

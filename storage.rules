@@ -3,7 +3,9 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null &&
+        (!firestore.exists(/databases/(default)/documents/account_roles/$(request.auth.uid)) ||
+         firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.get('deletionPending', false) != true);
     }
 
     function isAdmin() {

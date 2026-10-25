@@ -43,17 +43,24 @@ class _AccountAvatarState extends State<AccountAvatar> {
   }
 
   Future<Uint8List?> _read() async {
-    final String photo = widget.photo.trim();
-    if (widget.loadBytes != null) return widget.loadBytes!(photo);
-    final Reference ref =
-        photo.startsWith('https://') || photo.startsWith('gs://')
-        ? FirebaseStorage.instance.refFromURL(photo)
-        : FirebaseStorage.instance.ref(photo);
-    return ref.getData(6 * 1024 * 1024);
+    try {
+      final String photo = widget.photo.trim();
+      if (widget.loadBytes != null) return await widget.loadBytes!(photo);
+      final Reference ref =
+          photo.startsWith('https://') || photo.startsWith('gs://')
+          ? FirebaseStorage.instance.refFromURL(photo)
+          : FirebaseStorage.instance.ref(photo);
+      return await ref.getData(6 * 1024 * 1024);
+    } on Object {
+      // A retry may complete before FutureBuilder attaches on the next frame.
+      // Resolve a missing image instead of leaking an unhandled async error.
+      return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    key: ValueKey<String>(widget.photo),
     future: _bytes,
     builder: (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
       final Uint8List? bytes = snapshot.data;
@@ -61,7 +68,12 @@ class _AccountAvatarState extends State<AccountAvatar> {
           ? null
           : ResizeImage.resizeIfNeeded(256, null, MemoryImage(bytes));
       return GestureDetector(
-        onTap: snapshot.hasError ? () => setState(_load) : null,
+        onTap:
+            snapshot.connectionState == ConnectionState.done &&
+                image == null &&
+                widget.photo.isNotEmpty
+            ? () => setState(_load)
+            : null,
         child: CircleAvatar(
           radius: widget.radius,
           foregroundImage: image,

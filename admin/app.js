@@ -360,6 +360,7 @@ async function loadDriverReview(driverId) {
 }
 
 function renderDriverDetail(driver) {
+  $("#delete-driver-account").textContent = driver?.reviewStatus === "deleting" ? "Retry account deletion" : "Delete driver account";
   if (!driver) { el.empty.hidden = false; el.detail.hidden = true; return; }
   const wallet = driver.wallet || {}; el.empty.hidden = true; el.detail.hidden = false;
   el.name.textContent = `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "Unnamed driver";
@@ -747,7 +748,7 @@ function renderPassengers() {
     const action = document.createElement("td");
     const button = document.createElement("button");
     button.type = "button"; button.className = "danger-button";
-    button.textContent = "Delete account";
+    button.textContent = passenger.accountDeleting ? "Retry deletion" : "Delete account";
     button.disabled = !passenger.phoneNumber;
     button.addEventListener("click", () => deleteRegisteredAccount({ uid: passenger.passengerId,
       role: "passenger", phoneNumber: passenger.phoneNumber, name: passenger.name, button }));

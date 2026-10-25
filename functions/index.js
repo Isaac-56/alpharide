@@ -362,17 +362,21 @@ exports.registerDriverPushToken = onCall(
     try {
       const driverId = requireAuthenticatedUser(request);
       const token = validatePushToken(request.data?.token);
-      const profile = await db.collection("drivers").doc(driverId).get();
-      if (!profile.exists || profile.get("reviewStatus") !== "approved") {
-        throw new HttpsError(
-          "failed-precondition",
-          "Driver approval is required before enabling ride notifications.",
-        );
-      }
-      await db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId).set({
-        driverId,
-        token,
-        updatedAt: FieldValue.serverTimestamp(),
+      await db.runTransaction(async (transaction) => {
+        const account = await transaction.get(db.collection("account_roles").doc(driverId));
+        if (account.get("deletionPending") === true) throw new HttpsError("failed-precondition", "This account is being deleted.");
+        const profile = await transaction.get(db.collection("drivers").doc(driverId));
+        if (!profile.exists || profile.get("reviewStatus") !== "approved") {
+          throw new HttpsError(
+            "failed-precondition",
+            "Driver approval is required before enabling ride notifications.",
+          );
+        }
+        transaction.set(db.collection(DRIVER_PUSH_TOKENS_COLLECTION).doc(driverId), {
+          driverId,
+          token,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
       });
       return { registered: true };
     } catch (error) {

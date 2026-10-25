@@ -22,6 +22,8 @@ exports.registerPassengerPushToken = onCall(options, async (request) => {
     .doc(createHash("sha256").update(token).digest("hex"));
   const tokenRef = db.collection("passenger_push_tokens").doc(uid);
   await db.runTransaction(async (tx) => {
+    const account = await tx.get(db.collection("account_roles").doc(uid));
+    if (account.get("deletionPending") === true) throw new HttpsError("failed-precondition", "This account is being deleted.");
     const owner = await tx.get(ownerRef);
     const previousUid = owner.get("uid");
     const previousRef = previousUid && previousUid !== uid
@@ -96,3 +98,4 @@ exports.notifyPassengerRideUpdate = onDocumentUpdated(
       eventId: `ride:${event.params.rideId}:${after.status}`, ...update });
   },
 );
+
