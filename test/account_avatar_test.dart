@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/core/widgets/account_avatar.dart';
+import 'package:passengerapp/core/widgets/account_avatar.dart';
 
 void main() {
   testWidgets(
