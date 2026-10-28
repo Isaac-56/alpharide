@@ -90,8 +90,12 @@ void main() {
     final PlacesService service = PlacesService(
       invoke: (String name, Map<String, dynamic> data) async {
         sessions.add(data['sessionToken'] as String);
-        if (sessions.length == 1)
-          throw FirebaseFunctionsException(code: 'unavailable');
+        if (sessions.length == 1) {
+          throw FirebaseFunctionsException(
+            code: 'unavailable',
+            message: 'Temporary network error',
+          );
+        }
         return <String, Object>{'results': <Object>[]};
       },
     );
