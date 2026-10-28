@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:passengerapp/home/services/places_service.dart';
 
@@ -82,6 +83,51 @@ void main() {
         service.getPlaceDetails('ChIJtestplace'),
         throwsFormatException,
       );
+    },
+  );
+  test('transient search failure retries with the original session', () async {
+    final List<String> sessions = <String>[];
+    final PlacesService service = PlacesService(
+      invoke: (String name, Map<String, dynamic> data) async {
+        sessions.add(data['sessionToken'] as String);
+        if (sessions.length == 1)
+          throw FirebaseFunctionsException(code: 'unavailable');
+        return <String, Object>{'results': <Object>[]};
+      },
+    );
+    expect(await service.searchPlaces('Juba', 4.85, 31.57), isEmpty);
+    expect(sessions.length, 2);
+    expect(sessions[0], sessions[1]);
+  });
+
+  test(
+    'configuration and account failures are actionable and never retried',
+    () async {
+      for (final String code in <String>[
+        'failed-precondition',
+        'permission-denied',
+        'unauthenticated',
+        'resource-exhausted',
+        'not-found',
+      ]) {
+        int attempts = 0;
+        final FirebaseFunctionsException error = FirebaseFunctionsException(
+          code: code,
+          message: 'sensitive upstream details',
+        );
+        final PlacesService service = PlacesService(
+          invoke: (String name, Map<String, dynamic> data) async {
+            attempts++;
+            throw error;
+          },
+        );
+        await expectLater(
+          service.searchPlaces('Juba', 4.85, 31.57),
+          throwsA(same(error)),
+        );
+        expect(attempts, 1);
+        expect(PlacesService.errorMessage(error), isNot(contains('sensitive')));
+      }
     },
   );
 }

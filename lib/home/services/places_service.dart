@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_functions/cloud_functions.dart';
@@ -28,17 +29,51 @@ class PlacesService {
     ).map((int value) => value.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  Future<Object?> _call(String name, Map<String, dynamic> data) async {
+  static String errorMessage(Object error) {
+    if (error is FirebaseFunctionsException) {
+      switch (error.code) {
+        case 'unauthenticated':
+          return 'Your session has expired. Sign in again to search.';
+        case 'permission-denied':
+          return 'Your passenger account could not be verified. Please contact Alpha support.';
+        case 'not-found':
+        case 'failed-precondition':
+          return 'Location search needs an Alpha service update. You can still choose a point on the map.';
+        case 'resource-exhausted':
+          return 'Location search is busy. Wait a moment, or choose a point on the map.';
+        case 'unavailable':
+        case 'deadline-exceeded':
+          return 'Could not reach location search. Check your connection and retry, or choose on the map.';
+      }
+    }
+    return 'This location could not be loaded. Retry or choose a point on the map.';
+  }
+
+  Future<Object?> _invoke(String name, Map<String, dynamic> data) async {
     if (_invokeOverride != null) return _invokeOverride(name, data);
     final FirebaseFunctions functions =
         _functions ?? FirebaseFunctions.instanceFor(region: 'africa-south1');
     final HttpsCallableResult<dynamic> result = await functions
         .httpsCallable(
           name,
-          options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
         )
         .call<dynamic>(data);
     return result.data;
+  }
+
+  Future<Object?> _call(String name, Map<String, dynamic> data) async {
+    try {
+      return await _invoke(name, data);
+    } on FirebaseFunctionsException catch (error) {
+      if (!<String>{'unavailable', 'deadline-exceeded'}.contains(error.code)) {
+        rethrow;
+      }
+      // Keep the same billing session; never retry configuration, account or
+      // quota errors. A single retry covers a cold start or brief interruption.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      return _invoke(name, data);
+    }
   }
 
   Future<List<PredictionModel>> searchPlaces(

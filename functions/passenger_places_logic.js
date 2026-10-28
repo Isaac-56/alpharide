@@ -12,7 +12,7 @@ function validateContext(data, uid) {
   return createHash("sha256").update(`${uid}:${token}`).digest("hex").slice(0, 32);
 }
 
-function createPassengerPlaces({ db, apiKey, HttpsError, fetchImpl = fetch, clock = Date.now }) {
+function createPassengerPlaces({ db, apiKey, HttpsError, fetchImpl = fetch, clock = Date.now, logger = console }) {
   const cache = createTtlCache({ ttlMs: 2 * 60 * 1000, maxEntries: 500, clock });
   function requireUid(request) {
     if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to search for a location.");
@@ -44,13 +44,33 @@ function createPassengerPlaces({ db, apiKey, HttpsError, fetchImpl = fetch, cloc
         headers: { ...options.headers, "X-Goog-Api-Key": key },
         signal: AbortSignal.timeout(10000) });
       if (!response.ok) {
-        // Never forward Google response bodies, credentials or request URLs to clients.
+        // Log only fixed codes, never provider text, URLs, keys or user queries.
+        // This distinguishes API/key/billing setup failures from connectivity.
+        let providerStatus = "UNKNOWN";
+        let reason = "UNKNOWN";
+        try {
+          const body = await response.json();
+          const allowedStatuses = new Set(["PERMISSION_DENIED", "UNAUTHENTICATED", "INVALID_ARGUMENT", "RESOURCE_EXHAUSTED", "NOT_FOUND", "UNAVAILABLE"]);
+          if (allowedStatuses.has(body?.error?.status)) providerStatus = body.error.status;
+          const allowedReasons = new Set(["SERVICE_DISABLED", "BILLING_DISABLED", "API_KEY_INVALID", "API_KEY_SERVICE_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED", "API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_ANDROID_APP_BLOCKED", "API_KEY_IOS_APP_BLOCKED", "RATE_LIMIT_EXCEEDED", "QUOTA_EXCEEDED"]);
+          for (const detail of body?.error?.details || []) {
+            if (allowedReasons.has(detail?.reason)) { reason = detail.reason; break; }
+          }
+        } catch { /* The provider may return a non-JSON error. */ }
+        logger.warn("passenger_places_provider_failure", {
+          operation: url.includes(":autocomplete") ? "autocomplete" : "details",
+          httpStatus: response.status, providerStatus, reason,
+        });
+        if ([400, 401, 403].includes(response.status)) {
+          throw new HttpsError("failed-precondition", "Location search needs server configuration.");
+        }
         throw new HttpsError(response.status === 429 ? "resource-exhausted" : "unavailable",
           "Location search is temporarily unavailable. Try again shortly.");
       }
       return await response.json();
     } catch (error) {
       if (error instanceof HttpsError) throw error;
+      logger.warn("passenger_places_transport_failure", { operation: url.includes(":autocomplete") ? "autocomplete" : "details" });
       throw new HttpsError("unavailable", "Location search is temporarily unavailable. Try again shortly.");
     }
   }
@@ -106,3 +126,4 @@ function createPassengerPlaces({ db, apiKey, HttpsError, fetchImpl = fetch, cloc
   };
 }
 module.exports = { createPassengerPlaces };
+

@@ -9,6 +9,7 @@ const secret = "server-only-test-key";
 function harness() {
   const records = new Map([["account_roles/p1", { role: "passenger" }]]);
   const calls = [];
+  const logs = [];
   let time = 1000, response;
   const snapshot = ref => ({ exists: records.has(ref.path), data: () => records.get(ref.path) });
   const db = { collection: name => ({ doc: uid => ({ path: `${name}/${uid}` }) }),
@@ -21,7 +22,7 @@ function harness() {
         structuredFormat: { mainText: { text: "Juba Market" }, secondaryText: { text: "South Sudan" } } } }],
     } : { id: "ChIJtestplace", formattedAddress: "Juba, South Sudan", location: { latitude: 4.85, longitude: 31.57 } } };
   };
-  return { records, calls, api: createPassengerPlaces({ db, HttpsError, apiKey: () => secret, fetchImpl, clock: () => time }),
+  return { records, calls, logs, api: createPassengerPlaces({ db, HttpsError, apiKey: () => secret, fetchImpl, clock: () => time, logger: { warn: (...args) => logs.push(args) } }),
     advance: value => { time += value; }, respond: value => { response = value; } };
 }
 
@@ -94,7 +95,7 @@ test("upstream failures never leak Google error bodies or the secret", async () 
     const h = harness(); h.respond(failure);
     await assert.rejects(h.api.search(search), error => {
       assert.equal(error.message.includes(secret), false);
-      assert.ok(["unavailable", "resource-exhausted"].includes(error.code)); return true;
+      assert.ok(["failed-precondition", "unavailable", "resource-exhausted"].includes(error.code)); return true;
     });
   }
 });
@@ -102,4 +103,24 @@ test("upstream failures never leak Google error bodies or the secret", async () 
 test("unusable place coordinates do not become a destination", async () => {
   const h = harness(); h.respond({ ok: true, json: async () => ({ formattedAddress: "broken", location: { latitude: 999, longitude: 0 } }) });
   await assert.rejects(h.api.details(details), { code: "invalid-argument" });
+});
+
+
+test("provider configuration errors expose a safe code and allowlisted diagnostics only", async () => {
+  const h = harness();
+  h.respond({ ok: false, status: 403, json: async () => ({ error: {
+    status: "PERMISSION_DENIED", message: `secret ${secret}`, details: [{ reason: "API_KEY_SERVICE_BLOCKED", metadata: { key: secret } }],
+  } }) });
+  await assert.rejects(h.api.search(search), { code: "failed-precondition" });
+  assert.deepEqual(h.logs, [["passenger_places_provider_failure", {
+    operation: "autocomplete", httpStatus: 403, providerStatus: "PERMISSION_DENIED", reason: "API_KEY_SERVICE_BLOCKED",
+  }]]);
+  assert.equal(JSON.stringify(h.logs).includes(secret), false);
+});
+
+test("untrusted provider status and reason cannot enter diagnostics", async () => {
+  const h = harness();
+  h.respond({ ok: false, status: 503, json: async () => ({ error: { status: secret, details: [{ reason: secret }] } }) });
+  await assert.rejects(h.api.search(search), { code: "unavailable" });
+  assert.equal(JSON.stringify(h.logs).includes(secret), false);
 });

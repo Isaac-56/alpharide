@@ -106,10 +106,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
     _search(query, requestId);
   }
 
-  Future<void> _search(
-    String query,
-    int requestId,
-  ) async {
+  Future<void> _search(String query, int requestId) async {
     if (!mounted || query.isEmpty || requestId != _searchRequestId) {
       return;
     }
@@ -149,14 +146,12 @@ class _DestinationSearchState extends State<DestinationSearch> {
       setState(() {
         _predictions.clear();
         _isSearching = false;
-        _errorMessage = 'Unable to search locations. Please try again.';
+        _errorMessage = PlacesService.errorMessage(error);
       });
     }
   }
 
-  Future<void> _selectPrediction(
-    PredictionModel prediction,
-  ) async {
+  Future<void> _selectPrediction(PredictionModel prediction) async {
     if (_isResolvingPlace || _isOpeningMap) return;
 
     _searchDebounce?.cancel();
@@ -207,7 +202,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
 
       setState(() {
         _resolvingPlaceId = null;
-        _errorMessage = 'Unable to open this location. Please try again.';
+        _errorMessage = PlacesService.errorMessage(error);
       });
     }
   }
@@ -233,10 +228,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
         context,
         MaterialPageRoute<LocationSelection>(
           builder: (_) => MapLocationPicker(
-            initialLocation: LatLng(
-              widget.latitude,
-              widget.longitude,
-            ),
+            initialLocation: LatLng(widget.latitude, widget.longitude),
             initialAddress: widget.initialAddress,
             isPickup: widget.isPickup,
           ),
@@ -311,11 +303,13 @@ class _DestinationSearchState extends State<DestinationSearch> {
 
   @override
   Widget build(BuildContext context) {
-    final String fieldLabel =
-        widget.isPickup ? 'Search pickup location' : 'Where are you going?';
+    final String fieldLabel = widget.isPickup
+        ? 'Search pickup location'
+        : 'Where are you going?';
 
-    final String mapButtonLabel =
-        widget.isPickup ? 'Set pickup point on map' : 'Set destination on map';
+    final String mapButtonLabel = widget.isPickup
+        ? 'Set pickup point on map'
+        : 'Set destination on map';
 
     final bool hasQuery = _searchController.text.trim().isNotEmpty;
     final Color pageBackground = AlphaColors.background(context);
@@ -415,7 +409,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                                   style: TextStyle(
                                     color: textColor,
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                                 const SizedBox(height: 23),
@@ -462,9 +456,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                                 onPressed: _isResolvingPlace || _isOpeningMap
                                     ? null
                                     : _clearSearch,
-                                icon: const Icon(
-                                  Icons.close_rounded,
-                                ),
+                                icon: const Icon(Icons.close_rounded),
                               )
                             : null,
                         filled: true,
@@ -489,10 +481,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                           borderRadius: BorderRadius.circular(
                             AlphaSpacing.controlRadius,
                           ),
-                          borderSide: BorderSide(
-                            color: textColor,
-                            width: 1.4,
-                          ),
+                          borderSide: BorderSide(color: textColor, width: 1.4),
                         ),
                       ),
                       onChanged: _onSearchChanged,
@@ -511,9 +500,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                           disabledForegroundColor: secondaryTextColor,
                           side: BorderSide(color: borderColor),
                           alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 17,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 17),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
                               AlphaSpacing.controlRadius,
@@ -527,9 +514,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                               height: 34,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: primaryColor.withValues(
-                                  alpha: 0.14,
-                                ),
+                                color: primaryColor.withValues(alpha: 0.14),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: _isOpeningMap
@@ -640,9 +625,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       child: !_isSearching
                           ? const SizedBox.shrink()
                           : Padding(
-                              key: ValueKey<String>(
-                                'search-progress',
-                              ),
+                              key: ValueKey<String>('search-progress'),
                               padding: EdgeInsets.only(top: 18),
                               child: LinearProgressIndicator(
                                 color: primaryColor,
@@ -657,9 +640,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: errorColor.withValues(
-                            alpha: 0.08,
-                          ),
+                          color: errorColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
@@ -682,6 +663,12 @@ class _DestinationSearchState extends State<DestinationSearch> {
                                 ),
                               ),
                             ),
+                            IconButton(
+                              tooltip: 'Retry location search',
+                              onPressed: () =>
+                                  _submitSearch(_searchController.text),
+                              icon: const Icon(Icons.refresh_rounded, size: 20),
+                            ),
                           ],
                         ),
                       ),
@@ -693,12 +680,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
             ),
             if (_predictions.isNotEmpty)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
-                  24,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 sliver: SliverList.separated(
                   itemCount: _predictions.length,
                   separatorBuilder: (_, __) => Divider(
@@ -707,10 +689,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
                     endIndent: 12,
                     color: borderColor,
                   ),
-                  itemBuilder: (
-                    BuildContext context,
-                    int index,
-                  ) {
+                  itemBuilder: (BuildContext context, int index) {
                     final PredictionModel prediction = _predictions[index];
 
                     return _SearchResultTile(
@@ -784,10 +763,7 @@ class _SearchResultTile extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 13,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -796,8 +772,9 @@ class _SearchResultTile extends StatelessWidget {
                 height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _DestinationSearchState.primaryColor
-                      .withValues(alpha: 0.12),
+                  color: _DestinationSearchState.primaryColor.withValues(
+                    alpha: 0.12,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

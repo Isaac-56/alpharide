@@ -44,33 +44,36 @@ abstract final class AlphaTheme {
 
   static ThemeData _build(Brightness brightness) {
     final bool dark = brightness == Brightness.dark;
-    final Color canvas =
-        dark ? AlphaColors.darkCanvas : AlphaColors.lightCanvas;
-    final Color surface =
-        dark ? AlphaColors.darkSurface : AlphaColors.lightSurface;
+    final Color canvas = dark
+        ? AlphaColors.darkCanvas
+        : AlphaColors.lightCanvas;
+    final Color surface = dark
+        ? AlphaColors.darkSurface
+        : AlphaColors.lightSurface;
     final Color softSurface = dark
         ? AlphaColors.darkSoftSurface
         : AlphaColors.lightSoftSurface;
-    final Color border =
-        dark ? AlphaColors.darkBorder : AlphaColors.lightBorder;
+    final Color border = dark
+        ? AlphaColors.darkBorder
+        : AlphaColors.lightBorder;
     final Color ink = dark ? const Color(0xFFF7FAF7) : AlphaColors.ink;
-    final Color muted =
-        dark ? const Color(0xFFADB6AD) : AlphaColors.lightMuted;
-    final ColorScheme scheme = ColorScheme.fromSeed(
-      seedColor: AlphaColors.primary,
-      brightness: brightness,
-      primary: AlphaColors.primary,
-      onPrimary: AlphaColors.ink,
-      surface: surface,
-      onSurface: ink,
-      error: AlphaColors.danger,
-    ).copyWith(
-      surfaceContainerLowest: surface,
-      surfaceContainerLow: softSurface,
-      surfaceContainer: softSurface,
-      outline: border,
-      outlineVariant: border,
-    );
+    final Color muted = dark ? const Color(0xFFADB6AD) : AlphaColors.lightMuted;
+    final ColorScheme scheme =
+        ColorScheme.fromSeed(
+          seedColor: AlphaColors.primary,
+          brightness: brightness,
+          primary: AlphaColors.primary,
+          onPrimary: AlphaColors.ink,
+          surface: surface,
+          onSurface: ink,
+          error: AlphaColors.danger,
+        ).copyWith(
+          surfaceContainerLowest: surface,
+          surfaceContainerLow: softSurface,
+          surfaceContainer: softSurface,
+          outline: border,
+          outlineVariant: border,
+        );
     final TextTheme base = ThemeData(
       useMaterial3: true,
       brightness: brightness,
@@ -93,23 +96,23 @@ abstract final class AlphaTheme {
         headlineLarge: base.headlineLarge?.copyWith(
           color: ink,
           fontSize: 30,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
           letterSpacing: -0.7,
         ),
         headlineMedium: base.headlineMedium?.copyWith(
           color: ink,
           fontSize: 24,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
         titleLarge: base.titleLarge?.copyWith(
           color: ink,
           fontSize: 20,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
         titleMedium: base.titleMedium?.copyWith(
           color: ink,
           fontSize: 16,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
         ),
         bodyLarge: base.bodyLarge?.copyWith(color: ink, height: 1.45),
         bodyMedium: base.bodyMedium?.copyWith(color: muted, height: 1.42),
@@ -160,10 +163,7 @@ abstract final class AlphaTheme {
         ),
         hintStyle: TextStyle(color: muted),
         labelStyle: TextStyle(color: muted),
-        floatingLabelStyle: TextStyle(
-          color: ink,
-          fontWeight: FontWeight.w700,
-        ),
+        floatingLabelStyle: TextStyle(color: ink, fontWeight: FontWeight.w500),
         prefixIconColor: muted,
         suffixIconColor: muted,
         border: OutlineInputBorder(
@@ -188,7 +188,7 @@ abstract final class AlphaTheme {
           disabledForegroundColor: muted,
           elevation: 0,
           shape: controlShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -222,9 +222,8 @@ abstract final class AlphaTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith<Color>(
-          (Set<WidgetState> states) => states.contains(WidgetState.selected)
-              ? AlphaColors.ink
-              : muted,
+          (Set<WidgetState> states) =>
+              states.contains(WidgetState.selected) ? AlphaColors.ink : muted,
         ),
         trackColor: WidgetStateProperty.resolveWith<Color>(
           (Set<WidgetState> states) => states.contains(WidgetState.selected)
@@ -236,8 +235,10 @@ abstract final class AlphaTheme {
         behavior: SnackBarBehavior.floating,
         backgroundColor: dark ? const Color(0xFFF4F7F4) : AlphaColors.ink,
         contentTextStyle: TextStyle(
+          fontSize: 14,
+          height: 1.4,
           color: dark ? AlphaColors.ink : Colors.white,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
