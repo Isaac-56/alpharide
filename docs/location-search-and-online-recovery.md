@@ -11,6 +11,7 @@ repository. Do not create a new secret version unless changing the actual key.
 
 ```powershell
 & {
+    $ErrorActionPreference = "Stop"
     Set-Location "C:\Projects\Alpha"
     git -c gc.auto=0 -c maintenance.auto=false pull --ff-only
     if ($LASTEXITCODE -ne 0) { throw "Passenger pull failed." }
@@ -26,12 +27,19 @@ repository. Do not create a new secret version unless changing the actual key.
     if ($LASTEXITCODE -ne 0) { throw "Driver pull failed." }
     flutter build apk --profile
     if ($LASTEXITCODE -ne 0) { throw "Driver build failed." }
+
+    $apkFolder = Join-Path ([Environment]::GetFolderPath("Desktop")) "Alpha-APKs"
+    New-Item -ItemType Directory -Force -Path $apkFolder | Out-Null
+    Copy-Item "C:\Projects\Alpha\build\app\outputs\flutter-apk\app-profile.apk" (Join-Path $apkFolder "Alpha-Ride.apk") -Force
+    Copy-Item "C:\Projects\alpha_plus\build\app\outputs\flutter-apk\app-profile.apk" (Join-Path $apkFolder "Alpha-Plus.apk") -Force
+    Invoke-Item $apkFolder
 }
 ```
 
 Install both newly built `build\app\outputs\flutter-apk\app-profile.apk` files.
 Building does not update installed apps. Preserve the existing signing keys and
-local driver Maps SDK key configuration.
+local driver Maps SDK key configuration. The script exports both APKs to
+Desktop → Alpha-APKs. To share a test APK in WhatsApp, attach it as a Document.
 
 ## Places diagnostics
 
@@ -73,6 +81,13 @@ heartbeat recovery republish without requiring an off/on toggle. Explicitly
 going offline cancels the intent before waiting for network cleanup. Delayed
 older responses and ownership-checked cleanup cannot reactivate that attempt or
 delete a newer presence. The availability cache is scoped to the driver UID.
+
+If startup still fails after installing the updated driver APK, inspect its
+server preflight separately (do not confuse it with Places search):
+
+```powershell
+firebase functions:log --project alpha-ride-29708 --only "prepareDriverAvailability"
+```
 
 Wallet eligibility is unchanged: a low positive balance is a warning, while an
 empty or suspended wallet must still prevent work. These are not network errors.
