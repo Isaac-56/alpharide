@@ -29,3 +29,15 @@ label{display:grid;gap:7px;color:#344139;font-size:13px;font-weight:750}input,se
 
 [data-page="commission-collected"] .panel { padding:22px; margin-bottom:20px; }
 [data-page="commission-collected"] .table-scroll { overflow-x:auto; max-width:100%; margin-top:16px; }
+.account-detail { margin-top:22px; padding:24px; display:grid; gap:22px; scroll-margin-top:20px; }
+.account-detail .panel-heading { align-items:start; gap:16px; }
+.account-detail dl dd { overflow-wrap:anywhere; }
+.account-detail .document-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.account-danger-zone { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px; margin-top:22px; border:1px solid #f1c4bf; border-radius:14px; background:#fff8f7; }
+.account-danger-zone h3 { margin:0 0 6px; font-size:16px; font-weight:600; }
+.account-danger-zone p { margin:0; max-width:560px; }
+.account-danger-zone button { flex-shrink:0; font-weight:600; }
+.directory-detail-link { color:#19713c; font-size:12px; font-weight:500; margin-top:5px; }
+#driver-detail { scroll-margin-top:20px; }
+@media(max-width:700px) { .account-detail { padding:16px; } .account-detail .document-grid { grid-template-columns:1fr; } .account-danger-zone { flex-direction:column; align-items:stretch; } }
+

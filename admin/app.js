@@ -19,6 +19,8 @@ const api = {
   overview: call("adminGetOperationsOverview"),
   drivers: call("adminListDrivers"),
   passengers: call("adminListPassengers"),
+  passengerDetails: call("adminGetPassengerDetails"),
+  passengerPhoto: call("adminGetPassengerPhoto"),
   deleteAccount: httpsCallable(functions, "adminDeleteAccount", { timeout: 120000 }),
   driverReview: call("adminGetDriverReview"),
   driverDocument: httpsCallable(functions, "adminGetDriverDocument", { timeout: 25000 }),
@@ -69,6 +71,10 @@ let drivers = [];
 let passengers = [];
 let passengerCursor = null;
 let passengerRequestId = 0;
+let passengerDetailRequestId = 0;
+let passengerPhotoRequestId = 0;
+let currentPassenger = null;
+let passengerDetailTrigger = null;
 const passengerUi = { search: $("#passenger-search"), count: $("#passenger-count"), body: $("#passengers-body"), more: $("#passenger-load-more"), refresh: $("#refresh-passengers") };
 let rides = [];
 let receipts = [];
@@ -138,6 +144,7 @@ function closeRideCancellation(result) {
 }
 
 function navigate(view) {
+  if (view !== "passengers") closePassengerDetail(false);
   $$("[data-page]").forEach((page) => page.classList.toggle("active", page.dataset.page === view));
   $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -208,7 +215,8 @@ function renderDriverList() {
     const button = document.createElement("button"); button.type = "button"; button.className = "driver-item"; if (driver.driverId === selectedDriverId) button.classList.add("selected");
     const top = document.createElement("span"); top.className = "driver-item-top"; const name = document.createElement("strong"); name.textContent = `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || "Unnamed driver"; const status = document.createElement("em"); status.textContent = driver.reviewStatus || "pending"; status.dataset.status = driver.reviewStatus || "pending"; top.append(name, status);
     const details = document.createElement("span"); details.textContent = `${driver.phoneNumber || "No phone"} · ${money(driver.wallet?.balance)} SSP`;
-    button.append(top, details); button.addEventListener("click", () => selectDriver(driver.driverId)); el.driverList.append(button);
+    const action = document.createElement("span"); action.className = "directory-detail-link"; action.textContent = "View details →";
+    button.append(top, details, action); button.addEventListener("click", () => selectDriver(driver.driverId)); el.driverList.append(button);
   }
   if (!filtered.length) { const message = document.createElement("p"); message.className = "empty-list muted"; message.textContent = "No drivers match these filters."; el.driverList.append(message); }
 }
@@ -227,6 +235,8 @@ async function selectDriver(driverId) {
   selectedDriverId = driverId;
   renderDriverList();
   renderDriverDetail(selectedDriver());
+  el.detail.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.name.focus({ preventScroll: true });
   await Promise.all([loadLedger(driverId), loadDriverReview(driverId)]);
 }
 
@@ -314,10 +324,14 @@ function renderDriverReview(review) {
   }
   const identity = review.identity || {}; const registration = review.registration || {};
   detailRows(el.identityDetails, [
+    ["Account ID", review.driverId],
     ["Full name", `${identity.firstName || ""} ${identity.lastName || ""}`.trim()],
     ["Phone", identity.phoneNumber],
     ["Firebase OTP", identity.phoneVerified ? "Verified" : "Not verified"],
     ["Submitted", dateTime(review.onboardingCompletedAtMillis)],
+    ["Registered", dateTime(review.createdAtMillis)],
+    ["Last updated", dateTime(review.updatedAtMillis)],
+    ["Last reviewed", dateTime(review.reviewedAtMillis)],
   ]);
   detailRows(el.vehicleDetails, [
     ["Service", registration.serviceType], ["Vehicle type", registration.vehicleType],
@@ -684,6 +698,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (!el.rideCancelDialog.hidden) closeRideCancellation(null);
   else if (!el.dialog.hidden) closeDialog(false);
+  else if (!$("#passenger-detail").hidden) closePassengerDetail();
 });
 el.refreshOverview.addEventListener("click", loadOverview); el.refreshDrivers.addEventListener("click", () => loadDrivers()); el.driverSearch.addEventListener("input", renderDriverList); el.driverFilter.addEventListener("change", renderDriverList);
 el.refreshRides.addEventListener("click", loadRides); el.rideSearch.addEventListener("input", renderRides); el.rideFilter.addEventListener("change", renderRides); el.refreshActivity.addEventListener("click", loadActivity);
@@ -717,6 +732,12 @@ setInterval(() => {
 }, 15000);
 
 onAuthStateChanged(auth, async (user) => {
+  closePassengerDetail(false);
+  documentRenderId++;
+  for (const prefix of ["licence-front", "licence-back", "identity-photo"]) {
+    resetDocumentPreview($(`#${prefix}-link`), $(`#${prefix}-image`), $(`#${prefix}-status`), $(`#${prefix}-placeholder`), "Select a driver");
+  }
+  drivers = []; selectedDriverId = null; driverReviews.clear(); renderDriverList(); renderDriverDetail(null);
   passengerRequestId++; passengers = []; passengerCursor = null;
   passengerUi.body.replaceChildren(); passengerUi.count.textContent = ''; passengerUi.more.hidden = true;
   if (!user) { el.loginView.hidden = false; el.adminView.hidden = true; el.password.value = ""; return; }
@@ -736,6 +757,94 @@ $("#commission-start").value = `${commissionToday.slice(0, 7)}-01`;
 $("#commission-end").value = commissionToday;
 
 
+const passengerPhotoElements = () => ({ link: $("#passenger-photo-link"), image: $("#passenger-photo-image"),
+  status: $("#passenger-photo-status"), placeholder: $("#passenger-photo-placeholder") });
+
+function closePassengerDetail(restoreFocus = true) {
+  passengerDetailRequestId++; passengerPhotoRequestId++; currentPassenger = null;
+  $("#passenger-detail").hidden = true;
+  const { link, image, status, placeholder } = passengerPhotoElements();
+  resetDocumentPreview(link, image, status, placeholder, "Select a passenger");
+  detailRows($("#passenger-identity-details"), []);
+  detailRows($("#passenger-registration-details"), []);
+  if (restoreFocus && passengerDetailTrigger?.isConnected) passengerDetailTrigger.focus();
+  passengerDetailTrigger = null;
+}
+
+async function loadPassengerPhoto(passenger, detailRequestId) {
+  const photoRequestId = ++passengerPhotoRequestId;
+  const { link, image, status, placeholder } = passengerPhotoElements();
+  const isCurrent = () => photoRequestId === passengerPhotoRequestId && detailRequestId === passengerDetailRequestId && auth.currentUser;
+  $("#retry-passenger-photo").hidden = true;
+  resetDocumentPreview(link, image, status, placeholder, passenger.photoUploaded ? "Loading secure image…" : "Not uploaded");
+  if (!passenger.photoUploaded) return;
+  try {
+    const { data } = await api.passengerPhoto({ passengerId: passenger.passengerId });
+    if (!isCurrent()) return;
+    if (typeof data?.base64 !== "string" || !["image/jpeg", "image/png"].includes(data.contentType)) throw new Error("The photo response is invalid. Try again.");
+    const bytes = Uint8Array.from(atob(data.base64), (character) => character.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: data.contentType }));
+    link.dataset.objectUrl = url;
+    image.onload = () => { if (isCurrent()) { link.hidden = false; placeholder.hidden = true; status.textContent = "Uploaded — open full size"; } };
+    image.onerror = () => {
+      if (!isCurrent()) return;
+      resetDocumentPreview(link, image, status, placeholder, "The profile photo could not be displayed.");
+      $("#retry-passenger-photo").hidden = false;
+    };
+    link.href = url; image.src = url;
+  } catch (error) {
+    if (!isCurrent()) return;
+    resetDocumentPreview(link, image, status, placeholder, "Image unavailable");
+    placeholder.textContent = readableError(error); $("#retry-passenger-photo").hidden = false;
+  }
+}
+
+async function openPassengerDetail(passengerId, trigger = passengerDetailTrigger) {
+  closePassengerDetail(false);
+  passengerDetailTrigger = trigger;
+  const requestId = passengerDetailRequestId;
+  $("#passenger-detail").dataset.passengerId = passengerId;
+  $("#passenger-detail").hidden = false;
+  $("#passenger-detail-title").textContent = "Passenger account";
+  $("#passenger-detail-status").textContent = "Loading account details…";
+  $("#retry-passenger-detail").hidden = true; $("#retry-passenger-photo").hidden = true;
+  $("#delete-passenger-account").disabled = true;
+  detailRows($("#passenger-identity-details"), [["Status", "Loading…"]]);
+  detailRows($("#passenger-registration-details"), [["Status", "Loading…"]]);
+  $("#passenger-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("#passenger-detail-title").focus({ preventScroll: true });
+  try {
+    const { data } = await api.passengerDetails({ passengerId });
+    if (requestId !== passengerDetailRequestId || !auth.currentUser) return;
+    currentPassenger = data;
+    $("#passenger-detail-title").textContent = data.name;
+    $("#passenger-detail-status").textContent = data.accountDeleting ? "Deletion incomplete — review and retry below." : "Registered passenger";
+    detailRows($("#passenger-identity-details"), [["Name", data.name], ["Phone", data.phoneNumber],
+      ["Firebase OTP", data.phoneVerified ? "Verified" : "Not verified"], ["Email", data.email], ["Emergency contact", data.emergencyPhone]]);
+    detailRows($("#passenger-registration-details"), [["Account ID", data.passengerId], ["Sign-in account", data.authStatus],
+      ["Registered", dateTime(data.createdAtMillis)], ["Profile updated", dateTime(data.updatedAtMillis)],
+      ["Last sign-in", dateTime(data.lastSignInAtMillis)], ["Referral code", data.referralCode], ["Ride reference", data.rideId]]);
+    const button = $("#delete-passenger-account"); button.disabled = !data.phoneNumber;
+    button.textContent = data.accountDeleting ? "Retry account deletion" : "Delete passenger account";
+    void loadPassengerPhoto(data, requestId);
+  } catch (error) {
+    if (requestId !== passengerDetailRequestId || !auth.currentUser) return;
+    $("#passenger-detail-status").textContent = readableError(error);
+    $("#retry-passenger-detail").hidden = false;
+    detailRows($("#passenger-identity-details"), [["Status", "Details unavailable"]]);
+    detailRows($("#passenger-registration-details"), []);
+  }
+}
+
+$("#close-passenger-detail").addEventListener("click", () => closePassengerDetail());
+$("#retry-passenger-detail").addEventListener("click", () => openPassengerDetail($("#passenger-detail").dataset.passengerId));
+$("#retry-passenger-photo").addEventListener("click", () => { if (currentPassenger) void loadPassengerPhoto(currentPassenger, passengerDetailRequestId); });
+$("#delete-passenger-account").addEventListener("click", () => {
+  if (!currentPassenger) return;
+  void deleteRegisteredAccount({ uid: currentPassenger.passengerId, role: "passenger", phoneNumber: currentPassenger.phoneNumber,
+    name: currentPassenger.name, button: $("#delete-passenger-account") });
+});
+
 function renderPassengers() {
   const query = passengerUi.search.value.trim().toLowerCase();
   const filtered = passengers.filter((p) => `${p.name} ${p.phoneNumber} ${p.passengerId}`.toLowerCase().includes(query));
@@ -747,11 +856,9 @@ function renderPassengers() {
     }
     const action = document.createElement("td");
     const button = document.createElement("button");
-    button.type = "button"; button.className = "danger-button";
-    button.textContent = passenger.accountDeleting ? "Retry deletion" : "Delete account";
-    button.disabled = !passenger.phoneNumber;
-    button.addEventListener("click", () => deleteRegisteredAccount({ uid: passenger.passengerId,
-      role: "passenger", phoneNumber: passenger.phoneNumber, name: passenger.name, button }));
+    button.type = "button"; button.className = "secondary";
+    button.textContent = "View details";
+    button.addEventListener("click", () => openPassengerDetail(passenger.passengerId, button));
     action.append(button); row.append(action);
     passengerUi.body.append(row);
   }
@@ -796,6 +903,7 @@ async function deleteRegisteredAccount({ uid, role, phoneNumber, name, button })
   setBusy(button, true, "Deleting…");
   try {
     await api.deleteAccount({ uid, role, confirmPhone: phoneNumber });
+    if (role === "passenger") closePassengerDetail(false);
     driverReviews.delete(uid);
     showToast("Account deleted. The phone number can register again.");
     await Promise.all([loadPassengers(), loadDrivers({ preserveSelection: false }), loadOverview()]);
@@ -808,3 +916,4 @@ $("#delete-driver-account").addEventListener("click", () => {
     phoneNumber: driver.phoneNumber, name: `${driver.firstName || ""} ${driver.lastName || ""}`.trim(),
     button: $("#delete-driver-account") });
 });
+

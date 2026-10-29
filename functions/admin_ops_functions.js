@@ -31,6 +31,11 @@ const ACTIVE_RIDE_STATUSES = [
 ];
 const db = getFirestore();
 const realtimeDb = getDatabase();
+const { createAdminPassengerReader } = require("./admin_passenger_detail_logic");
+const passengerReader = createAdminPassengerReader({ requireAdmin, db, HttpsError,
+  auth: require("firebase-admin/auth").getAuth(), storage: require("firebase-admin/storage").getStorage() });
+exports.adminGetPassengerDetails = callable(passengerReader.detail, "Passenger details could not be loaded. Try again.");
+exports.adminGetPassengerPhoto = callable(passengerReader.photo, "The passenger photo could not be loaded. Try again.");
 const { FINANCE_CATEGORIES, commissionFilters, commissionQueryTotals } = require("./commission_logic");
 
 function requireAdmin(request) {
@@ -798,4 +803,5 @@ exports.adminListPassengers = callable(async (request) => {
   });
   return { passengers, nextCursor: snapshot.docs.length > limit ? page.at(-1).id : null };
 }, "Passenger accounts could not be loaded. Try again.");
+
 
