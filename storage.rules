@@ -12,7 +12,7 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return signedIn() && request.auth.token.admin == true;
+      return signedIn() && request.auth.token.get('admin', false) == true;
     }
 
     function ownsDriverFiles(driverId) {
@@ -49,7 +49,7 @@ service firebase.storage {
     match /drivers/{driverId}/documents/photo_checks/{fileName} {
       allow read: if ownsDriverFiles(driverId) || isAdmin();
       allow create:
-          if ownsDriverFiles(driverId) && isSafeJpeg();
+          if resource == null && ownsDriverFiles(driverId) && isSafeJpeg();
       allow update: if false;
       allow delete: if ownsDriverFiles(driverId) && driverNeedsReview(driverId);
     }
