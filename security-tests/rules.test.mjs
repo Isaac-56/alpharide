@@ -67,3 +67,15 @@ test('deleted accounts cannot read their previous private data or republish pres
   await assertFails(get(ref(driver().database(), 'driver_locations/driver')));
   await assertFails(update(ref(driver().database(), 'driver_locations/driver'), { updatedAt: Date.now() }));
 });
+
+test('legitimate document resubmission works after returning the profile to review', async () => {
+  await seed();
+  await assertSucceeds(updateDoc(doc(driver().firestore(), 'drivers/driver'), { reviewStatus: 'pending' }));
+  const bytes = new Uint8Array([255, 216, 255, 217]);
+  await assertSucceeds(uploadBytes(storageRef(driver().storage(), 'drivers/driver/documents/driver_licence/front.jpg'), bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(storageRef(driver().storage(), 'drivers/driver/documents/photo_checks/new-selfie.jpg'), bytes, { contentType: 'image/jpeg' }));
+});
+test('anonymous Firebase identities cannot read private data even with a matching UID', async () => {
+  await seed(); const unverified = env.authenticatedContext('driver');
+  await assertFails(getDoc(doc(unverified.firestore(), 'driver_wallets/driver')));
+});

@@ -1,9 +1,14 @@
 {
   "name": "alpha-security-rules-tests",
   "private": true,
-  "scripts": { "test": "node --test rules.test.mjs" },
+  "scripts": {
+    "test": "node --test rules.test.mjs"
+  },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
     "firebase": "^12.4.0"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.7"
   }
 }

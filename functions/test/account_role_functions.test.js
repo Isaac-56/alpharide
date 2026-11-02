@@ -109,3 +109,14 @@ test("a fresh Auth UID can register the released phone while the deleted UID sta
   assert.deepEqual(h.writes.map(write => write.path), ["account_roles/new_uid", `identity_registry/${hash}`]);
 });
 
+
+test("unauthenticated preflight cannot enumerate registration or account roles", async () => {
+  const h = harness({ "drivers/u1": { phoneNumber: phone } });
+  const result = await h.api.preflightAccountRole({ data: { role: "passenger", phoneNumber: phone } });
+  assert.equal(result.eligible, true); assert.equal(result.registered, undefined); assert.equal(h.reads.length, 0);
+});
+test("a verified account cannot preflight somebody else's phone registration", async () => {
+  const h = harness({ "drivers/u1": { phoneNumber: phone } });
+  const result = await h.api.preflightAccountRole({ ...request, auth: { uid: "other", token: { phone_number: "+211933333333" } } });
+  assert.equal(result.eligible, true); assert.equal(result.registered, undefined); assert.equal(h.reads.length, 0);
+});

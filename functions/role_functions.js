@@ -61,6 +61,9 @@ function authenticatedIdentity(request) {
 async function evaluateAccountRolePreflight(request) {
   const desiredRole = normalizeAccountRole(request.data?.role);
   const phoneNumber = normalizePhoneNumber(request.data?.phoneNumber);
+  // Do not expose registration existence or account role to callers who have
+  // not proved ownership of this phone. Post-OTP role claims remain canonical.
+  if (request.auth?.token?.phone_number !== phoneNumber) return { eligible: true };
   const phoneHash = hashPhoneNumber(phoneNumber);
 
   // Firebase Authentication is the canonical phone-to-UID directory. Older
