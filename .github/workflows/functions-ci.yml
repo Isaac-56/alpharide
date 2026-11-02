@@ -6,10 +6,16 @@ on:
     paths:
       - 'functions/**'
       - '.github/workflows/functions-ci.yml'
+      - 'security-tests/**'
+      - '*rules*'
+      - 'firebase.security-tests.json'
   pull_request:
     paths:
       - 'functions/**'
       - '.github/workflows/functions-ci.yml'
+      - 'security-tests/**'
+      - '*rules*'
+      - 'firebase.security-tests.json'
 
 permissions:
   contents: read
@@ -35,3 +41,20 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm test
+
+
+  test-security-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install rule-test dependencies
+        run: npm --prefix security-tests ci --ignore-scripts
+      - name: Verify database and storage authorization in emulators
+        run: npx --yes firebase-tools@15.34.0 emulators:exec --project demo-alpha-security --config firebase.security-tests.json --only firestore,database,storage "npm --prefix security-tests test"

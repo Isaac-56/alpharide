@@ -3,9 +3,9 @@
     ".read": false,
     ".write": false,
     "driver_locations": {
-      ".read": "auth != null",
+      ".read": false,
       "$driverId": {
-        ".write": "auth != null && auth.uid === $driverId && root.child('account_deletions').child(auth.uid).val() !== true",
+        ".write": "auth != null && auth.uid === $driverId && root.child('account_deletions').child(auth.uid).val() !== true && root.child('driver_location_access').child(auth.uid).val() === true && (!newData.exists() || newData.child('activeRideId').val() === data.child('activeRideId').val())",
         ".validate": "!newData.exists() || (newData.child('isOnline').val() === false && newData.hasChildren(['isOnline', 'updatedAt'])) || newData.hasChildren(['driverId', 'presenceId', 'latitude', 'longitude', 'heading', 'accuracy', 'isOnline', 'vehicleType', 'updatedAt'])",
         "driverId": {
           ".validate": "newData.isString() && newData.val() === $driverId"
@@ -32,7 +32,7 @@
           ".validate": "newData.isString() && (newData.val() === 'standard' || newData.val() === 'boda' || newData.val() === 'rickshaw' || newData.val() === 'comfort' || newData.val() === 'premium')"
         },
         "updatedAt": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() <= now + 30000 && newData.val() >= now - 120000"
         },
         "online": {
           ".validate": "newData.isBoolean()"
@@ -41,14 +41,15 @@
           ".validate": "newData.isString() && (newData.val() === 'standard' || newData.val() === 'boda' || newData.val() === 'rickshaw' || newData.val() === 'comfort' || newData.val() === 'premium')"
         },
         "lastUpdated": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() <= now + 30000 && newData.val() >= now - 120000"
         },
         "activeRideId": {
           ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
         },
         "$other": {
           ".validate": false
-        }
+        },
+        ".read": "auth != null && (auth.uid === $driverId || auth.token.admin === true) && root.child('account_deletions').child(auth.uid).val() !== true"
       },
       ".indexOn": [
         "latitude"
@@ -56,4 +57,3 @@
     }
   }
 }
-

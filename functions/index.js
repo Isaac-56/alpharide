@@ -17,7 +17,8 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onTaskDispatched } = require("firebase-functions/v2/tasks");
 const { getFunctions } = require("firebase-admin/functions");
 const { createDispatchQueue } = require("./dispatch_queue");
-const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 
 const {
   ACCEPTANCE_PICKUP_RADIUS_METERS,
@@ -1040,6 +1041,11 @@ exports.createRide = onCall(
   async (request) => {
     try {
       const passengerId = requireAuthenticatedUser(request);
+      await require("./secure_callable").requestSecurity().limit(passengerId, "create_ride", 8, 60000);
+      const role = await db.collection("account_roles").doc(passengerId).get();
+      if (role.get("role") !== "passenger" || role.get("deletionPending") === true) {
+        throw new HttpsError("permission-denied", "Complete passenger registration before requesting a ride.");
+      }
       const input = validateCreateRideInput(request.data);
       const customerPhone = typeof request.auth?.token?.phone_number === "string"
         ? request.auth.token.phone_number.trim()
@@ -1636,6 +1642,7 @@ exports.expireRideOffers = onSchedule(
     }
   },
 );
+
 
 
 

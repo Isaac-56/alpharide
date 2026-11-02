@@ -16,6 +16,8 @@ module.exports = {
   ...adminOpsFunctions,
   ...require("./admin_account_functions"),
   ...require("./passenger_places_functions"),
+  ...require("./passenger_locations_functions"),
 };
+
 
 

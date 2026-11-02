@@ -6,7 +6,8 @@ const {
   getFirestore,
 } = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
-const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 
 const {
   hashPhoneNumber,
@@ -328,5 +329,6 @@ exports.checkAccountRole = roleCallable(false);
 // This is the authoritative, transactional "first completed registration wins"
 // operation used by both apps.
 exports.claimAccountRole = roleCallable(true);
+
 
 

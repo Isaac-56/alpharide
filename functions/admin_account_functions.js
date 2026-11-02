@@ -4,7 +4,8 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 const { createAdminAccountDeleter } = require("./admin_account_logic");
 const removeAccount = createAdminAccountDeleter({ db: getFirestore(), auth: getAuth(),
   storage: getStorage(), realtimeDb: getDatabase(), HttpsError });
@@ -16,3 +17,4 @@ exports.adminDeleteAccount = onCall({ region: "africa-south1", timeoutSeconds: 1
     throw new HttpsError("internal", "Deletion did not finish. Retry the same account to safely complete cleanup.");
   }
 });
+

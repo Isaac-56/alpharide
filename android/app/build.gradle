@@ -7,6 +7,16 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def alphaSigning = new Properties()
+def alphaSigningFile = rootProject.file("key.properties")
+if (alphaSigningFile.exists()) {
+    alphaSigningFile.withInputStream { alphaSigning.load(it) }
+}
+def alphaCiBuild = System.getenv("CI") == "true"
+if (gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") } && !alphaSigningFile.exists() && !alphaCiBuild) {
+    throw new GradleException("Release signing is missing. Configure android/key.properties with the existing production keystore. Debug/profile builds remain available for testing.")
+}
+
 android {
     namespace = "com.alpharideapp.passengerapp"
 
@@ -32,9 +42,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (alphaSigningFile.exists()) {
+            release {
+                keyAlias alphaSigning['keyAlias']
+                keyPassword alphaSigning['keyPassword']
+                storeFile file(alphaSigning['storeFile'])
+                storePassword alphaSigning['storePassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            signingConfig = alphaSigningFile.exists() ? signingConfigs.release : null
+            debuggable false
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
@@ -49,3 +71,4 @@ flutter {
 dependencies {
     implementation platform("com.google.firebase:firebase-bom:32.2.0")
 }
+

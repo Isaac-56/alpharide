@@ -54,3 +54,11 @@ android/.kotlin/
 # Firebase Functions
 functions/node_modules/
 functions/.runtimeconfig.json
+
+# Private deployment configuration and local test dependencies
+functions/.env*
+!functions/.env.example
+functions/.secret.local
+security-tests/node_modules/
+android/secrets.properties
+

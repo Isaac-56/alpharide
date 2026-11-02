@@ -36,6 +36,7 @@ function harness(records = {}, lookup = async () => ({ uid: "u1" })) {
       if (name === "firebase-admin/auth") return { getAuth: () => ({ getUserByPhoneNumber: lookup }) };
       if (name === "firebase-admin/firestore") return { getFirestore: () => db, FieldValue: { serverTimestamp: () => "now" } };
       if (name === "firebase-functions") return { logger: { error() {} } };
+      if (name === "./secure_callable") return { onCall: (_, fn) => fn };
       if (name === "firebase-functions/v2/https") return { HttpsError, onCall: (_, handler) => handler };
       if (name === "./account_role_logic") return logic;
       throw Error(`Unexpected dependency ${name}`);
@@ -107,3 +108,4 @@ test("a fresh Auth UID can register the released phone while the deleted UID sta
   assert.equal(result.claimed, true);
   assert.deepEqual(h.writes.map(write => write.path), ["account_roles/new_uid", `identity_registry/${hash}`]);
 });
+

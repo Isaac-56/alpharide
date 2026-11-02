@@ -4,6 +4,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
       return request.auth != null &&
+        (request.auth.token.get('phone_number', '').size() > 0 ||
+         request.auth.token.get('admin', false) == true ||
+         request.auth.token.get('customerService', false) == true) &&
         (!exists(/databases/$(database)/documents/account_roles/$(request.auth.uid)) ||
          get(/databases/$(database)/documents/account_roles/$(request.auth.uid)).data.get('deletionPending', false) != true);
     }
@@ -59,16 +62,19 @@ service cloud.firestore {
     }
 
     match /drivers/{driverId} {
-      allow read, delete:
+      allow read:
           if ownsDriverProfile(driverId);
+      allow delete: if false;
 
       allow create:
           if ownsDriverProfile(driverId) &&
              hasAccountRole('driver') &&
+             request.resource.data.keys().hasOnly(['uid', 'phoneNumber', 'firstName', 'lastName', 'onboardingCompleted', 'reviewStatus', 'createdAt', 'updatedAt', 'registration', 'documents', 'onboardingCompletedAt']) &&
              hasSafeDriverFields(driverId);
 
       allow update:
           if ownsDriverProfile(driverId) &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'phoneNumber', 'firstName', 'lastName', 'onboardingCompleted', 'reviewStatus', 'updatedAt', 'registration', 'documents', 'onboardingCompletedAt']) &&
              hasSafeDriverFields(driverId);
     }
 
@@ -176,7 +182,12 @@ service cloud.firestore {
     match /app_feedback/{feedbackId} {
       allow create:
           if signedIn() &&
-             request.resource.data.userId == request.auth.uid;
+             request.resource.data.userId == request.auth.uid &&
+             request.resource.data.keys().hasOnly(['userId', 'phoneNumber', 'topic', 'message', 'platform', 'status', 'createdAt']) &&
+             request.resource.data.phoneNumber == request.auth.token.phone_number &&
+             request.resource.data.topic is string && request.resource.data.topic.size() <= 80 &&
+             request.resource.data.message is string && request.resource.data.message.size() <= 2000 &&
+             request.resource.data.status == 'new' && request.resource.data.createdAt == request.time;
 
       allow read, update, delete: if false;
     }
@@ -186,4 +197,5 @@ service cloud.firestore {
     }
   }
 }
+
 

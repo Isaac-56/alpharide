@@ -66,14 +66,14 @@ function resolveTrackedRideProgress({
   const segment = haversineDistanceMeters(previous, next);
   // Ignore GPS drift and physically implausible jumps. The generous speed cap
   // still covers emergency driving while preventing a forged fare increase.
-  const maximumPlausibleSegment = Math.max(250, elapsedSeconds * 60 + 100);
+  const maximumPlausibleSegment = Math.min(50000, elapsedSeconds * 60 + Math.min(100, elapsedSeconds * 5));
   const acceptedSegment =
     segment >= MIN_TRACKED_MOVEMENT_METERS &&
     segment <= maximumPlausibleSegment
       ? segment
       : 0;
   return Object.freeze({
-    point: next,
+    point: segment > maximumPlausibleSegment ? previous : next,
     trackedDistanceMeters: Math.min(
       MAX_TRACKED_DISTANCE_METERS,
       Math.round(currentDistance + acceptedSegment),
@@ -274,3 +274,4 @@ module.exports = {
   resolveWaitingInterval,
   validateDriverRideTransition,
 };
+

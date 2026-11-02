@@ -1,3 +1,4 @@
+import { configureAdminAppCheck } from "../app-attestation.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, getIdTokenResult, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
@@ -12,6 +13,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+configureAdminAppCheck(app);
 const auth = getAuth(app);
 const functions = getFunctions(app, "africa-south1");
 const call = (name) => httpsCallable(functions, name);
@@ -496,3 +498,4 @@ onAuthStateChanged(auth, async (user) => {
     setError(el.loginError, readableError(error));
   }
 });
+

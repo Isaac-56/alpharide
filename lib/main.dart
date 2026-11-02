@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'services/app_attestation.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +22,7 @@ Future<void> main() async {
 
   final Future<void> themeInitialization = AppThemeController.initialize();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initializeAppAttestation();
   await themeInitialization;
 
   runApp(const MyApp());

@@ -7,7 +7,8 @@ const {
 } = require("firebase-admin/firestore");
 const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
-const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
@@ -283,6 +284,7 @@ exports.prepareDriverAvailability = onCall(
       }
 
       const activeRideId = await prepareDriverActiveRide(driverId);
+      await realtimeDb.ref(`driver_location_access/${driverId}`).set(true);
       return { driverId, vehicleType, activeRideId };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -1014,3 +1016,4 @@ exports.releaseFinishedDriverPresence = onDocumentDeleted(
     await syncDriverPresenceRide(event.params.driverId, rideId, true);
   },
 );
+

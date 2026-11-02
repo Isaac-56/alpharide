@@ -7,7 +7,8 @@ const {
 } = require("firebase-admin/firestore");
 const { getDatabase } = require("firebase-admin/database");
 const { logger } = require("firebase-functions");
-const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 const {
   PLATFORM_COMMISSION_BPS,
   normalizeCommissionBps,
@@ -803,5 +804,6 @@ exports.adminListPassengers = callable(async (request) => {
   });
   return { passengers, nextCursor: snapshot.docs.length > limit ? page.at(-1).id : null };
 }, "Passenger accounts could not be loaded. Try again.");
+
 
 

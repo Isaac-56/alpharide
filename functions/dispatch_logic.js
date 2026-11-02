@@ -342,7 +342,7 @@ function validateRideId(value) {
     throw new TypeError("rideId must be a string");
   }
   const normalized = value.trim();
-  if (!normalized || normalized.length > 160) {
+  if (!normalized || normalized.length > 160 || normalized.includes("/")) {
     throw new RangeError("A valid ride ID is required.");
   }
   return normalized;
@@ -368,4 +368,5 @@ module.exports = {
   selectPresenceCandidates,
   validateRideId,
 };
+
 

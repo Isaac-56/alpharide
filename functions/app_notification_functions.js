@@ -3,7 +3,8 @@
 const { createHash } = require("node:crypto");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { logger } = require("firebase-functions");
 const { buildUpdateMessage, passengerRideUpdate, validatePushToken } = require("./notification_logic");
@@ -98,4 +99,5 @@ exports.notifyPassengerRideUpdate = onDocumentUpdated(
       eventId: `ride:${event.params.rideId}:${after.status}`, ...update });
   },
 );
+
 

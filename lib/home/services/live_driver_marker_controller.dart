@@ -49,11 +49,7 @@ class LiveDriverMarkerPolicy {
     return ((value % 360) + 360) % 360;
   }
 
-  static double interpolatedHeading(
-    double start,
-    double end,
-    double progress,
-  ) {
+  static double interpolatedHeading(double start, double end, double progress) {
     final double difference = ((end - start + 540) % 360) - 180;
     return normalizedHeading(start + (difference * progress));
   }
@@ -85,8 +81,8 @@ class LiveDriverMarkerController extends ChangeNotifier {
     required LatLng center,
     this.radiusKilometers = 12,
     DriverLocationService? locationService,
-  })  : _center = center,
-        _locationService = locationService ?? DriverLocationService();
+  }) : _center = center,
+       _locationService = locationService ?? DriverLocationService();
 
   Set<Marker> get markers {
     final BitmapDescriptor? standardIcon = _markerIcons['standard'];
@@ -125,15 +121,22 @@ class LiveDriverMarkerController extends ChangeNotifier {
     if (_started || _disposed) return;
     _started = true;
 
-    _subscription = _locationService.watchOnlineDrivers().listen(
-      (List<DriverLocationModel> drivers) {
-        _latestDrivers = drivers;
-        _applyLocations(drivers);
-      },
-      onError: (Object error) {
-        debugPrint('Live driver location stream failed: $error');
-      },
-    );
+    _subscription = _locationService
+        .watchOnlineDrivers(
+          latitude: () => _center.latitude,
+          longitude: () => _center.longitude,
+          assignedDriverId: () => _driverIdFilter,
+          isActive: () => !_disposed,
+        )
+        .listen(
+          (List<DriverLocationModel> drivers) {
+            _latestDrivers = drivers;
+            _applyLocations(drivers);
+          },
+          onError: (Object error) {
+            debugPrint('Live driver location stream failed: $error');
+          },
+        );
 
     await _loadMarkerIcons();
   }
@@ -152,25 +155,27 @@ class LiveDriverMarkerController extends ChangeNotifier {
     if (_driverIdFilter == nextFilter) return;
 
     _driverIdFilter = nextFilter;
+    _latestDrivers = const <DriverLocationModel>[];
     _applyLocations(_latestDrivers);
   }
 
   Future<void> _loadMarkerIcons() async {
     await Future.wait(
-      LiveDriverMarkerPolicy.markerAssets.entries.map(
-        (MapEntry<String, String> entry) async {
-          try {
-            _markerIcons[entry.key] = await _loadMarkerIcon(entry.value);
-          } catch (error) {
-            debugPrint(
-              'Unable to load the ${entry.key} top-view driver marker: $error',
-            );
-          }
-        },
-      ),
+      LiveDriverMarkerPolicy.markerAssets.entries.map((
+        MapEntry<String, String> entry,
+      ) async {
+        try {
+          _markerIcons[entry.key] = await _loadMarkerIcon(entry.value);
+        } catch (error) {
+          debugPrint(
+            'Unable to load the ${entry.key} top-view driver marker: $error',
+          );
+        }
+      }),
     );
 
-    final BitmapDescriptor standardIcon = _markerIcons['standard'] ??
+    final BitmapDescriptor standardIcon =
+        _markerIcons['standard'] ??
         BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
     _markerIcons['standard'] = standardIcon;
     _markerIcons.putIfAbsent('boda', () => standardIcon);
@@ -197,10 +202,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
       }
 
       return BitmapDescriptor.bytes(
-        bytes.buffer.asUint8List(
-          bytes.offsetInBytes,
-          bytes.lengthInBytes,
-        ),
+        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
       );
     } finally {
       frame.image.dispose();
@@ -211,26 +213,26 @@ class LiveDriverMarkerController extends ChangeNotifier {
   void _applyLocations(List<DriverLocationModel> locations) {
     if (_disposed || _markerIcons.isEmpty) return;
 
-    final List<DriverLocationModel> visibleDrivers = locations.where(
-      (DriverLocationModel driver) {
-        final String? filter = _driverIdFilter;
-        if (filter != null) {
-          return driver.driverId == filter;
-        }
+    final List<DriverLocationModel> visibleDrivers = locations
+        .where((DriverLocationModel driver) {
+          final String? filter = _driverIdFilter;
+          if (filter != null) {
+            return driver.driverId == filter;
+          }
 
-        final double distanceMeters = Geolocator.distanceBetween(
-          _center.latitude,
-          _center.longitude,
-          driver.latitude,
-          driver.longitude,
-        );
+          final double distanceMeters = Geolocator.distanceBetween(
+            _center.latitude,
+            _center.longitude,
+            driver.latitude,
+            driver.longitude,
+          );
 
-        return LiveDriverMarkerPolicy.isAvailableToNearbyPassengers(
-              driver.activeRideId,
-            ) &&
-            distanceMeters <= radiusKilometers * 1000;
-      },
-    ).toList(growable: false);
+          return LiveDriverMarkerPolicy.isAvailableToNearbyPassengers(
+                driver.activeRideId,
+              ) &&
+              distanceMeters <= radiusKilometers * 1000;
+        })
+        .toList(growable: false);
 
     final Set<String> incomingIds = visibleDrivers
         .map((DriverLocationModel driver) => driver.driverId)
@@ -253,10 +255,7 @@ class LiveDriverMarkerController extends ChangeNotifier {
     }
 
     for (final DriverLocationModel driver in visibleDrivers) {
-      final LatLng destination = LatLng(
-        driver.latitude,
-        driver.longitude,
-      );
+      final LatLng destination = LatLng(driver.latitude, driver.longitude);
       final _VisualDriver? current = _visualDrivers[driver.driverId];
 
       if (current == null) {
@@ -286,8 +285,9 @@ class LiveDriverMarkerController extends ChangeNotifier {
         continue;
       }
 
-      final String vehicleType =
-          LiveDriverMarkerPolicy.normalizedVehicleType(driver.vehicleType);
+      final String vehicleType = LiveDriverMarkerPolicy.normalizedVehicleType(
+        driver.vehicleType,
+      );
       final double targetHeading = LiveDriverMarkerPolicy.normalizedHeading(
         driver.heading ??
             (_samePoint(current.position, destination)
@@ -329,58 +329,51 @@ class LiveDriverMarkerController extends ChangeNotifier {
 
     final Stopwatch stopwatch = Stopwatch()..start();
 
-    _movementTimer = Timer.periodic(
-      frameDuration,
-      (Timer timer) {
-        if (_disposed) {
-          timer.cancel();
-          return;
-        }
+    _movementTimer = Timer.periodic(frameDuration, (Timer timer) {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
 
-        final double rawProgress =
-            stopwatch.elapsedMilliseconds / movementDuration.inMilliseconds;
-        final double progress = rawProgress.clamp(0.0, 1.0).toDouble();
-        final double eased = Curves.easeInOutCubic.transform(progress);
+      final double rawProgress =
+          stopwatch.elapsedMilliseconds / movementDuration.inMilliseconds;
+      final double progress = rawProgress.clamp(0.0, 1.0).toDouble();
+      final double eased = Curves.easeInOutCubic.transform(progress);
 
-        for (final _VisualDriver driver in _visualDrivers.values) {
-          driver
-            ..position = LatLng(
-              _lerp(
-                driver.startPosition.latitude,
-                driver.targetPosition.latitude,
-                eased,
-              ),
-              _lerp(
-                driver.startPosition.longitude,
-                driver.targetPosition.longitude,
-                eased,
-              ),
-            )
-            ..heading = LiveDriverMarkerPolicy.interpolatedHeading(
-              driver.startHeading,
-              driver.targetHeading,
+      for (final _VisualDriver driver in _visualDrivers.values) {
+        driver
+          ..position = LatLng(
+            _lerp(
+              driver.startPosition.latitude,
+              driver.targetPosition.latitude,
               eased,
-            )
-            ..alpha = _lerp(
-              driver.startAlpha,
-              driver.targetAlpha,
+            ),
+            _lerp(
+              driver.startPosition.longitude,
+              driver.targetPosition.longitude,
               eased,
-            );
-        }
+            ),
+          )
+          ..heading = LiveDriverMarkerPolicy.interpolatedHeading(
+            driver.startHeading,
+            driver.targetHeading,
+            eased,
+          )
+          ..alpha = _lerp(driver.startAlpha, driver.targetAlpha, eased);
+      }
 
+      _notifySafely();
+
+      if (progress >= 1) {
+        _visualDrivers.removeWhere(
+          (String driverId, _VisualDriver driver) =>
+              driver.removeWhenInvisible && driver.alpha <= 0.001,
+        );
         _notifySafely();
-
-        if (progress >= 1) {
-          _visualDrivers.removeWhere(
-            (String driverId, _VisualDriver driver) =>
-                driver.removeWhenInvisible && driver.alpha <= 0.001,
-          );
-          _notifySafely();
-          stopwatch.stop();
-          timer.cancel();
-        }
-      },
-    );
+        stopwatch.stop();
+        timer.cancel();
+      }
+    });
   }
 
   void _notifySafely() {
@@ -410,7 +403,8 @@ class LiveDriverMarkerController extends ChangeNotifier {
         (end.longitude - start.longitude) * math.pi / 180;
 
     final double y = math.sin(longitudeDifference) * math.cos(endLatitude);
-    final double x = math.cos(startLatitude) * math.sin(endLatitude) -
+    final double x =
+        math.cos(startLatitude) * math.sin(endLatitude) -
         math.sin(startLatitude) *
             math.cos(endLatitude) *
             math.cos(longitudeDifference);

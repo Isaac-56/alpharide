@@ -233,6 +233,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.9.3+5"
+  firebase_app_check:
+    dependency: "direct main"
+    description:
+      name: firebase_app_check
+      sha256: "b610075bcdad524cde6b21ff29e28463eb3cccd1e8c8abdee3a8e3dcff270177"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.5+1"
+  firebase_app_check_platform_interface:
+    dependency: transitive
+    description:
+      name: firebase_app_check_platform_interface
+      sha256: "58f981d6589808f82a17988ff05c71251985178db29acfc75c8462bbe0bd27cf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.1+1"
+  firebase_app_check_web:
+    dependency: transitive
+    description:
+      name: firebase_app_check_web
+      sha256: "da9f5780c8db082448cb20231b9605f393862b640f8eff48c4b315efea548cf7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.5+1"
   firebase_auth:
     dependency: "direct main"
     description:
@@ -1232,3 +1256,4 @@ packages:
 sdks:
   dart: ">=3.12.0 <4.0.0"
   flutter: ">=3.44.0"
+

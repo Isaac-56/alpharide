@@ -4,6 +4,9 @@ service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() {
       return request.auth != null &&
+        (request.auth.token.get('phone_number', '').size() > 0 ||
+         request.auth.token.get('admin', false) == true ||
+         request.auth.token.get('customerService', false) == true) &&
         (!firestore.exists(/databases/(default)/documents/account_roles/$(request.auth.uid)) ||
          firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.get('deletionPending', false) != true);
     }
@@ -22,6 +25,11 @@ service firebase.storage {
           fileName == request.auth.token.phone_number + '.jpg';
     }
 
+    function driverNeedsReview(driverId) {
+      return !firestore.exists(/databases/(default)/documents/drivers/$(driverId)) ||
+          firestore.get(/databases/(default)/documents/drivers/$(driverId)).data.get('reviewStatus', 'draft') != 'approved';
+    }
+
     function isSafeJpeg() {
       return request.resource != null &&
           request.resource.size < 10 * 1024 * 1024 &&
@@ -33,15 +41,17 @@ service firebase.storage {
       allow create, update:
           if ownsDriverFiles(driverId) &&
              fileName in ['front.jpg', 'back.jpg'] &&
+             driverNeedsReview(driverId) &&
              isSafeJpeg();
-      allow delete: if ownsDriverFiles(driverId);
+      allow delete: if ownsDriverFiles(driverId) && driverNeedsReview(driverId);
     }
 
     match /drivers/{driverId}/documents/photo_checks/{fileName} {
       allow read: if ownsDriverFiles(driverId) || isAdmin();
-      allow create, update:
+      allow create:
           if ownsDriverFiles(driverId) && isSafeJpeg();
-      allow delete: if ownsDriverFiles(driverId);
+      allow update: if false;
+      allow delete: if ownsDriverFiles(driverId) && driverNeedsReview(driverId);
     }
 
     // Keep the existing AlphaRide passenger profile-photo flow working.
@@ -53,7 +63,7 @@ service firebase.storage {
     }
 
     match /user_photos/{fileName} {
-      allow read: if signedIn() || isAdmin();
+      allow read: if ownsPassengerPhoto(fileName) || isAdmin();
       allow create, update:
           if ownsPassengerPhoto(fileName) && isSafeJpeg();
       allow delete: if ownsPassengerPhoto(fileName);
@@ -64,4 +74,5 @@ service firebase.storage {
     }
   }
 }
+
 

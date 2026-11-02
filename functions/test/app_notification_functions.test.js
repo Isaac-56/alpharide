@@ -24,7 +24,8 @@ function harness() {
   const requireMock = (name) => {
     if (name === "firebase-admin/firestore") return { getFirestore: () => db, FieldValue: { serverTimestamp: () => "now" } };
     if (name === "firebase-admin/messaging") return { getMessaging: () => ({ send: async (msg) => sent.push(msg) }) };
-    if (name === "firebase-functions/v2/https") return { HttpsError, onCall: (_, fn) => fn };
+    if (name === "./secure_callable") return { onCall: (_, fn) => fn };
+      if (name === "firebase-functions/v2/https") return { HttpsError, onCall: (_, fn) => fn };
     if (name === "firebase-functions/v2/firestore") return { onDocumentCreated: (_, fn) => fn, onDocumentUpdated: (_, fn) => fn };
     if (name === "firebase-functions") return { logger: { warn: () => {} } };
     if (name === "./notification_logic") return require("../notification_logic");
@@ -78,3 +79,4 @@ test("fresh news alerts but historical unread inbox migration does not", async (
   assert.equal(h.sent.length, 1);
   assert.equal(h.sent[0].android.notification.channelId, "alpha_updates_luxe_v2");
 });
+

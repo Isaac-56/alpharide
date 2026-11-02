@@ -8,7 +8,8 @@ const {
   getFirestore,
 } = require("firebase-admin/firestore");
 const { logger } = require("firebase-functions");
-const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { HttpsError } = require("firebase-functions/v2/https");
+const { onCall } = require("./secure_callable");
 
 const { normalizePhoneNumber } = require("./account_role_logic");
 const { PLATFORM_COMMISSION_BPS } = require("./accounting_logic");
@@ -718,3 +719,4 @@ exports.adminGetDriverDocument = callable(
   createAdminDocumentLoader({ requireAdmin, db, storage: getStorage(), HttpsError }),
   "The driver document could not be loaded. Try again.",
 );
+
