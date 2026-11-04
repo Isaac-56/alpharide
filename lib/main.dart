@@ -4,6 +4,7 @@ import 'services/app_attestation.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'authentication/login_screen.dart';
@@ -21,7 +22,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final Future<void> themeInitialization = AppThemeController.initialize();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(
+    options: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+        ? null
+        : DefaultFirebaseOptions.currentPlatform,
+  );
   await initializeAppAttestation();
   await themeInitialization;
 

@@ -62,3 +62,6 @@ functions/.secret.local
 security-tests/node_modules/
 android/secrets.properties
 
+# Local iOS configuration
+/ios/Flutter/LocalSecrets.xcconfig
+/ios/Runner/GoogleService-Info.plist
