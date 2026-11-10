@@ -533,7 +533,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   ),
                 ),
                 Text(
-                  'Are you sure?',
+                  'Cancel this ride?',
                   style: TextStyle(
                     color: textColor,
                     fontSize: 30,
@@ -552,10 +552,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
-                  height: 56,
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(sheetContext),
                     style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 56),
                       backgroundColor: primaryColor,
                       foregroundColor: const Color(0xFF071007),
                       elevation: 0,
@@ -564,7 +564,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                       ),
                     ),
                     child: const Text(
-                      'Wait for driver',
+                      'Keep looking',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -1443,10 +1443,10 @@ class RideCompletionReceipt extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 56,
                 child: ElevatedButton(
                   onPressed: onDone,
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 56),
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.black,
                     elevation: 0,
