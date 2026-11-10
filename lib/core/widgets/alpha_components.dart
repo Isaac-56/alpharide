@@ -35,45 +35,51 @@ class AlphaFlowHeader extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: <Widget>[
-      if (leading != null) ...<Widget>[
-        leading!,
-        const SizedBox(width: 14),
+  Widget build(BuildContext context) {
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          title,
+          style: compact
+              ? Theme.of(context).textTheme.titleLarge
+              : Theme.of(context).textTheme.headlineMedium,
+        ),
+        if (subtitle != null) ...<Widget>[
+          const SizedBox(height: 4),
+          Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
+        ],
       ],
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool stackTrailing =
+            trailing != null &&
+            (constraints.maxWidth < 400 ||
+                MediaQuery.textScalerOf(context).scale(16) > 20);
+        final row = Row(
           children: <Widget>[
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: (compact
-                      ? Theme.of(context).textTheme.titleLarge
-                      : Theme.of(context).textTheme.headlineMedium)
-                  ?.copyWith(letterSpacing: -0.45),
-            ),
-            if (subtitle != null) ...<Widget>[
-              const SizedBox(height: 3),
-              Text(
-                subtitle!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+            if (leading != null) ...<Widget>[
+              leading!,
+              const SizedBox(width: 12),
+            ],
+            Expanded(child: text),
+            if (trailing != null && !stackTrailing) ...<Widget>[
+              const SizedBox(width: 12),
+              trailing!,
             ],
           ],
-        ),
-      ),
-      if (trailing != null) ...<Widget>[
-        const SizedBox(width: 12),
-        trailing!,
-      ],
-    ],
-  );
+        );
+        if (!stackTrailing) return row;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[row, const SizedBox(height: 8), trailing!],
+        );
+      },
+    );
+  }
 }
 
 class AlphaSurfaceCard extends StatelessWidget {
@@ -140,7 +146,7 @@ class AlphaMetricChip extends StatelessWidget {
           style: TextStyle(
             color: context.alphaInk,
             fontSize: 13,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -220,9 +226,8 @@ class AlphaFlowProgress extends StatelessWidget {
         if (label != null) ...<Widget>[
           Text(
             label!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
         ],
@@ -265,7 +270,7 @@ class AlphaStatusPill extends StatelessWidget {
           style: TextStyle(
             color: context.alphaInk,
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],

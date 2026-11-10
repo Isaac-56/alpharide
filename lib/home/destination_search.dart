@@ -490,12 +490,12 @@ class _DestinationSearchState extends State<DestinationSearch> {
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      height: 56,
                       child: OutlinedButton(
                         onPressed: _isResolvingPlace || _isOpeningMap
                             ? null
                             : _openMapPicker,
                         style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 56),
                           foregroundColor: textColor,
                           disabledForegroundColor: secondaryTextColor,
                           side: BorderSide(color: borderColor),
@@ -554,12 +554,12 @@ class _DestinationSearchState extends State<DestinationSearch> {
                       const SizedBox(height: 10),
                       SizedBox(
                         width: double.infinity,
-                        height: 56,
                         child: OutlinedButton(
                           onPressed: _isResolvingPlace || _isOpeningMap
                               ? null
                               : _useCurrentLocation,
                           style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 56),
                             foregroundColor: textColor,
                             disabledForegroundColor: secondaryTextColor,
                             side: BorderSide(color: borderColor),

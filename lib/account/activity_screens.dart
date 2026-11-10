@@ -27,61 +27,67 @@ class NotificationsScreen extends StatelessWidget {
       child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
         sourceKey: (phoneNumber, firestoreService),
         createStream: () => firestoreService.watchNotifications(phoneNumber),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AlphaColors.primary),
-            );
-          }
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: AlphaColors.primary),
+                );
+              }
 
-          if (snapshot.hasError) {
-            return const AlphaEmptyState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Notifications are unavailable',
-              message: 'Check your connection and open this page again.',
-            );
-          }
+              if (snapshot.hasError) {
+                return const AlphaEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Notifications are unavailable',
+                  message: 'Check your connection and open this page again.',
+                );
+              }
 
-          final List<Map<String, dynamic>> notifications =
-              snapshot.data ?? <Map<String, dynamic>>[];
+              final List<Map<String, dynamic>> notifications =
+                  snapshot.data ?? <Map<String, dynamic>>[];
 
-          if (notifications.isEmpty) {
-            return const AlphaEmptyState(
-              icon: Icons.notifications_none_rounded,
-              title: 'You are all caught up',
-              message:
-                  'Ride updates, account notices, and important AlphaRide news will appear here.',
-            );
-          }
+              if (notifications.isEmpty) {
+                return const AlphaEmptyState(
+                  icon: Icons.notifications_none_rounded,
+                  title: 'You are all caught up',
+                  message: 'Ride updates, account notices, and important AlphaRide news will appear here.',
+                );
+              }
 
-          return ListView.separated(
-            itemCount: notifications.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (BuildContext context, int index) {
-              final Map<String, dynamic> notification = notifications[index];
+              return ListView.separated(
+                itemCount: notifications.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (BuildContext context, int index) {
+                  final Map<String, dynamic> notification =
+                      notifications[index];
 
-              return _NotificationCard(
-                data: notification,
-                onTap: () async {
-                  final String? id = notification['id']?.toString();
+                  return _NotificationCard(
+                    data: notification,
+                    onTap: () async {
+                      final String? id = notification['id']?.toString();
 
-                  if (id != null && notification['isRead'] != true) {
-                    unawaited(firestoreService.markNotificationRead(phoneNumber, id)
-                        .catchError((Object error) {
-                      debugPrint('Unable to mark notification read: $error');
-                    }));
-                  }
+                      if (id != null && notification['isRead'] != true) {
+                        unawaited(
+                          firestoreService
+                              .markNotificationRead(phoneNumber, id)
+                              .catchError((Object error) {
+                                debugPrint(
+                                  'Unable to mark notification read: $error',
+                                );
+                              }),
+                        );
+                      }
 
-                  if (!context.mounted) return;
-                  _showNotification(context, notification);
+                      if (!context.mounted) return;
+                      _showNotification(context, notification);
+                    },
+                  );
                 },
               );
             },
-          );
-        },
       ),
     );
   }
@@ -125,7 +131,7 @@ class NotificationsScreen extends StatelessWidget {
                   style: TextStyle(
                     color: AlphaColors.text(sheetContext),
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: -0.4,
                   ),
                 ),
@@ -157,10 +163,7 @@ class _NotificationCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final VoidCallback onTap;
 
-  const _NotificationCard({
-    required this.data,
-    required this.onTap,
-  });
+  const _NotificationCard({required this.data, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -213,8 +216,9 @@ class _NotificationCard extends StatelessWidget {
                             style: TextStyle(
                               color: AlphaColors.text(context),
                               fontSize: 15.5,
-                              fontWeight:
-                                  unread ? FontWeight.w800 : FontWeight.w700,
+                              fontWeight: unread
+                                  ? FontWeight.w600
+                                  : FontWeight.w700,
                             ),
                           ),
                         ),
@@ -290,89 +294,94 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
             height: 42,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              children: _OrderFilter.values.map(
-                (_OrderFilter filter) {
-                  final bool selected = _filter == filter;
+              children: _OrderFilter.values
+                  .map((_OrderFilter filter) {
+                    final bool selected = _filter == filter;
 
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 9),
-                    child: ChoiceChip(
-                      selected: selected,
-                      label: Text(filter.label),
-                      onSelected: (_) => setState(() => _filter = filter),
-                      selectedColor: AlphaColors.primary,
-                      backgroundColor: AlphaColors.surface(context),
-                      side: BorderSide(
-                        color: selected
-                            ? AlphaColors.primary
-                            : AlphaColors.border(context),
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 9),
+                      child: ChoiceChip(
+                        selected: selected,
+                        label: Text(filter.label),
+                        onSelected: (_) => setState(() => _filter = filter),
+                        selectedColor: AlphaColors.primary,
+                        backgroundColor: AlphaColors.surface(context),
+                        side: BorderSide(
+                          color: selected
+                              ? AlphaColors.primary
+                              : AlphaColors.border(context),
+                        ),
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? AlphaColors.ink
+                              : AlphaColors.text(context),
+                          fontWeight: FontWeight.w700,
+                        ),
+                        showCheckmark: false,
                       ),
-                      labelStyle: TextStyle(
-                        color: selected
-                            ? AlphaColors.ink
-                            : AlphaColors.text(context),
-                        fontWeight: FontWeight.w700,
-                      ),
-                      showCheckmark: false,
-                    ),
-                  );
-                },
-              ).toList(growable: false),
+                    );
+                  })
+                  .toList(growable: false),
             ),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
               sourceKey: (widget.phoneNumber, widget.firestoreService),
-        createStream: () => widget.firestoreService.watchOrders(widget.phoneNumber),
-              builder: (
-                BuildContext context,
-                AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
-              ) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: AlphaColors.primary,
-                    ),
-                  );
-                }
+              createStream: () =>
+                  widget.firestoreService.watchOrders(widget.phoneNumber),
+              builder:
+                  (
+                    BuildContext context,
+                    AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
+                  ) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: AlphaColors.primary,
+                        ),
+                      );
+                    }
 
-                if (snapshot.hasError) {
-                  return const AlphaEmptyState(
-                    icon: Icons.cloud_off_outlined,
-                    title: 'Order history is unavailable',
-                    message: 'Check your connection and open this page again.',
-                  );
-                }
+                    if (snapshot.hasError) {
+                      return const AlphaEmptyState(
+                        icon: Icons.cloud_off_outlined,
+                        title: 'Order history is unavailable',
+                        message:
+                            'Check your connection and open this page again.',
+                      );
+                    }
 
-                final List<Map<String, dynamic>> allOrders =
-                    snapshot.data ?? <Map<String, dynamic>>[];
-                final List<Map<String, dynamic>> visibleOrders = allOrders
-                    .where((Map<String, dynamic> order) => _filter.matches(
-                          order['status']?.toString() ?? '',
-                        ))
-                    .toList(growable: false);
+                    final List<Map<String, dynamic>> allOrders =
+                        snapshot.data ?? <Map<String, dynamic>>[];
+                    final List<Map<String, dynamic>> visibleOrders = allOrders
+                        .where(
+                          (Map<String, dynamic> order) => _filter.matches(
+                            order['status']?.toString() ?? '',
+                          ),
+                        )
+                        .toList(growable: false);
 
-                if (visibleOrders.isEmpty) {
-                  return AlphaEmptyState(
-                    icon: Icons.route_outlined,
-                    title: _filter == _OrderFilter.all
-                        ? 'No rides yet'
-                        : 'No ${_filter.label.toLowerCase()} rides',
-                    message: _filter == _OrderFilter.all
-                        ? 'Completed and cancelled AlphaRide trips will appear here.'
-                        : 'Trips matching this filter will appear here.',
-                  );
-                }
+                    if (visibleOrders.isEmpty) {
+                      return AlphaEmptyState(
+                        icon: Icons.route_outlined,
+                        title: _filter == _OrderFilter.all
+                            ? 'No rides yet'
+                            : 'No ${_filter.label.toLowerCase()} rides',
+                        message: _filter == _OrderFilter.all
+                            ? 'Completed and cancelled AlphaRide trips will appear here.'
+                            : 'Trips matching this filter will appear here.',
+                      );
+                    }
 
-                return ListView.separated(
-                  itemCount: visibleOrders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 14),
-                  itemBuilder: (BuildContext context, int index) {
-                    return _OrderCard(order: visibleOrders[index]);
+                    return ListView.separated(
+                      itemCount: visibleOrders.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 14),
+                      itemBuilder: (BuildContext context, int index) {
+                        return _OrderCard(order: visibleOrders[index]);
+                      },
+                    );
                   },
-                );
-              },
             ),
           ),
         ],
@@ -470,7 +479,7 @@ class _OrderCard extends StatelessWidget {
                                   ? AlphaColors.danger
                                   : AlphaColors.text(context),
                               fontSize: 16,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           if (createdAt != null) ...<Widget>[
@@ -492,7 +501,7 @@ class _OrderCard extends StatelessWidget {
                         style: TextStyle(
                           color: AlphaColors.text(context),
                           fontSize: 14,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                   ],
@@ -500,7 +509,8 @@ class _OrderCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 _AddressLine(
                   label: 'A',
-                  address: order['pickupAddress']?.toString() ??
+                  address:
+                      order['pickupAddress']?.toString() ??
                       'Pickup location unavailable',
                   highlighted: false,
                 ),
@@ -514,7 +524,8 @@ class _OrderCard extends StatelessWidget {
                 ),
                 _AddressLine(
                   label: 'B',
-                  address: order['destinationAddress']?.toString() ??
+                  address:
+                      order['destinationAddress']?.toString() ??
                       'Destination unavailable',
                   highlighted: true,
                 ),
@@ -531,10 +542,7 @@ class _RoutePreviewPainter extends CustomPainter {
   final Color background;
   final Color road;
 
-  const _RoutePreviewPainter({
-    required this.background,
-    required this.road,
-  });
+  const _RoutePreviewPainter({required this.background, required this.road});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -613,10 +621,7 @@ class _MapPoint extends StatelessWidget {
   final String label;
   final bool highlighted;
 
-  const _MapPoint({
-    required this.label,
-    required this.highlighted,
-  });
+  const _MapPoint({required this.label, required this.highlighted});
 
   @override
   Widget build(BuildContext context) {
@@ -627,7 +632,7 @@ class _MapPoint extends StatelessWidget {
         label,
         style: const TextStyle(
           color: AlphaColors.ink,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -682,10 +687,10 @@ class InviteFriendsScreen extends StatelessWidget {
         ShareParams(
           title: 'AlphaRide South Sudan',
           subject: 'Ride with AlphaRide',
-          text:
-              'Try AlphaRide for simple, reliable rides across South Sudan. AlphaRide passenger app is launching soon.',
-          sharePositionOrigin:
-              box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+          text: 'Try AlphaRide for simple, reliable rides across South Sudan. AlphaRide passenger app is launching soon.',
+          sharePositionOrigin: box == null
+              ? null
+              : box.localToGlobal(Offset.zero) & box.size,
         ),
       );
     } catch (error) {
@@ -732,8 +737,9 @@ class InviteFriendsScreen extends StatelessWidget {
                             width: 120,
                             height: 120,
                             decoration: BoxDecoration(
-                              color:
-                                  AlphaColors.primary.withValues(alpha: 0.12),
+                              color: AlphaColors.primary.withValues(
+                                alpha: 0.12,
+                              ),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -751,7 +757,7 @@ class InviteFriendsScreen extends StatelessWidget {
                         style: TextStyle(
                           color: AlphaColors.text(context),
                           fontSize: 22,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -770,19 +776,19 @@ class InviteFriendsScreen extends StatelessWidget {
                 ),
                 SizedBox(
                   width: double.infinity,
-                  height: 58,
                   child: ElevatedButton.icon(
                     onPressed: () => _share(buttonContext),
                     icon: const Icon(Icons.share_rounded),
                     label: const Text('Share AlphaRide'),
                     style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 58),
                       backgroundColor: AlphaColors.primary,
                       foregroundColor: AlphaColors.ink,
                       elevation: 0,
                       shape: const RoundedRectangleBorder(),
                       textStyle: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -833,8 +839,8 @@ String _fullDate(DateTime date) {
   final int hour = date.hour == 0
       ? 12
       : date.hour > 12
-          ? date.hour - 12
-          : date.hour;
+      ? date.hour - 12
+      : date.hour;
   final String minute = date.minute.toString().padLeft(2, '0');
   final String period = date.hour >= 12 ? 'PM' : 'AM';
 

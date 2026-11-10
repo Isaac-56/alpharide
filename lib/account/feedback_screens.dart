@@ -169,7 +169,7 @@ class _FeedbackDetailScreenState extends State<FeedbackDetailScreen> {
               style: const TextStyle(
                 color: AlphaColors.primary,
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -240,7 +240,7 @@ class FeedbackThankYouScreen extends StatelessWidget {
                 style: TextStyle(
                   color: AlphaColors.text(context),
                   fontSize: 30,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: -0.7,
                 ),
               ),

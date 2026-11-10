@@ -622,10 +622,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         // Continue button — unchanged
                         SizedBox(
                           width: double.infinity,
-                          height: 56,
                           child: ElevatedButton(
                             onPressed: _loading ? null : _sendOTP,
                             style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 56),
                               backgroundColor: primaryColor,
                               foregroundColor: Colors.black,
                               disabledBackgroundColor: primaryColor.withValues(

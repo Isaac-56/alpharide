@@ -260,7 +260,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   String get _statusLabel => switch (_rideStatus) {
     'requested' => 'Request sent',
-    'offered' => 'Contacting drivers',
+    'offered' => 'Sending requests to nearby drivers',
     'accepted' => 'Driver assigned',
     'driver_arriving' => 'Driver on the way',
     'arrived' => 'Driver arrived',
@@ -523,7 +523,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                         ? () => Navigator.pop(sheetContext, true)
                         : null,
                     child: Text(
-                      'Cancel order',
+                      'Cancel ride',
                       style: TextStyle(
                         color: textColor,
                         fontSize: 15,
@@ -533,11 +533,11 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   ),
                 ),
                 Text(
-                  'Are you sure?',
+                  'Cancel this ride?',
                   style: TextStyle(
                     color: textColor,
                     fontSize: 30,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -552,10 +552,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
-                  height: 56,
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(sheetContext),
                     style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 56),
                       backgroundColor: primaryColor,
                       foregroundColor: const Color(0xFF071007),
                       elevation: 0,
@@ -564,10 +564,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                       ),
                     ),
                     child: const Text(
-                      'Wait for driver',
+                      'Keep looking',
                       style: TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -813,7 +813,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                     foregroundColor: textColor,
                   ),
                   child: Text(
-                    _isCancelling ? 'Cancelling...' : 'Cancel order',
+                    _isCancelling ? 'Cancelling...' : 'Cancel ride',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -903,7 +903,7 @@ class _AssignedDriverCard extends StatelessWidget {
           style: TextStyle(
             color: textColor,
             fontSize: 21,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -1023,7 +1023,7 @@ class _AssignedDriverCard extends StatelessWidget {
                             style: TextStyle(
                               color: textColor,
                               fontSize: 17,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: -0.2,
                             ),
                           ),
@@ -1043,7 +1043,7 @@ class _AssignedDriverCard extends StatelessWidget {
                             style: TextStyle(
                               color: primaryColor,
                               fontSize: 9.5,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -1078,7 +1078,7 @@ class _AssignedDriverCard extends StatelessWidget {
                           style: TextStyle(
                             color: textColor,
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: 0.45,
                           ),
                         ),
@@ -1126,7 +1126,7 @@ class _AssignedDriverCard extends StatelessWidget {
                           style: TextStyle(
                             color: textColor,
                             fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -1220,7 +1220,7 @@ class _PassengerWaitingCard extends StatelessWidget {
                       'Customer-requested waiting • ${_clock(totalSeconds)}',
                       style: TextStyle(
                         color: AlphaColors.text(context),
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -1284,7 +1284,7 @@ class _ReceiptRow extends StatelessWidget {
             textAlign: TextAlign.right,
             style: TextStyle(
               color: AlphaColors.text(context),
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -1382,7 +1382,7 @@ class RideCompletionReceipt extends StatelessWidget {
                         style: TextStyle(
                           color: textColor,
                           fontSize: 27,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1443,10 +1443,10 @@ class RideCompletionReceipt extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 56,
                 child: ElevatedButton(
                   onPressed: onDone,
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 56),
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.black,
                     elevation: 0,
@@ -1456,7 +1456,7 @@ class RideCompletionReceipt extends StatelessWidget {
                   ),
                   child: const Text(
                     'Done',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

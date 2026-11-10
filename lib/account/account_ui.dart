@@ -44,10 +44,7 @@ class AlphaPageScaffold extends StatelessWidget {
             padding: padding,
             child: constrainedChild,
           )
-        : Padding(
-            padding: padding,
-            child: constrainedChild,
-          );
+        : Padding(padding: padding, child: constrainedChild);
 
     return Scaffold(
       backgroundColor: AlphaColors.background(context),
@@ -85,19 +82,13 @@ class AlphaBackButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool closeIcon;
 
-  const AlphaBackButton({
-    super.key,
-    this.onPressed,
-    this.closeIcon = false,
-  });
+  const AlphaBackButton({super.key, this.onPressed, this.closeIcon = false});
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AlphaColors.surface(context),
-      shape: CircleBorder(
-        side: BorderSide(color: AlphaColors.border(context)),
-      ),
+      shape: CircleBorder(side: BorderSide(color: AlphaColors.border(context))),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed ?? () => Navigator.maybePop(context),
@@ -231,11 +222,7 @@ class AlphaMenuTile extends StatelessWidget {
           ),
         ),
         if (showDivider)
-          Divider(
-            height: 1,
-            indent: 60,
-            color: AlphaColors.border(context),
-          ),
+          Divider(height: 1, indent: 60, color: AlphaColors.border(context)),
       ],
     );
   }
@@ -244,10 +231,7 @@ class AlphaMenuTile extends StatelessWidget {
 class AlphaComingSoonBadge extends StatelessWidget {
   final bool compact;
 
-  const AlphaComingSoonBadge({
-    super.key,
-    this.compact = false,
-  });
+  const AlphaComingSoonBadge({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -259,16 +243,14 @@ class AlphaComingSoonBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: AlphaColors.primary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(
-          color: AlphaColors.primary.withValues(alpha: 0.32),
-        ),
+        border: Border.all(color: AlphaColors.primary.withValues(alpha: 0.32)),
       ),
       child: const Text(
         'Coming soon',
         style: TextStyle(
           color: AlphaColors.primary,
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -314,7 +296,7 @@ class AlphaEmptyState extends StatelessWidget {
               style: TextStyle(
                 color: AlphaColors.text(context),
                 fontSize: 20,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
                 letterSpacing: -0.3,
               ),
             ),
@@ -357,7 +339,6 @@ class AlphaPrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 56,
       child: ElevatedButton.icon(
         onPressed: loading ? null : onPressed,
         icon: loading
@@ -370,10 +351,11 @@ class AlphaPrimaryButton extends StatelessWidget {
                 ),
               )
             : icon == null
-                ? const SizedBox.shrink()
-                : Icon(icon, size: 21),
+            ? const SizedBox.shrink()
+            : Icon(icon, size: 21),
         label: Text(label),
         style: ElevatedButton.styleFrom(
+          minimumSize: const Size(0, 56),
           elevation: 0,
           backgroundColor: AlphaColors.primary,
           foregroundColor: AlphaColors.ink,
@@ -382,10 +364,7 @@ class AlphaPrimaryButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(17),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
     );

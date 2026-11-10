@@ -893,7 +893,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(
                               color: mapControlIconColor,
                               fontSize: 15,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: -0.2,
                             ),
                           ),

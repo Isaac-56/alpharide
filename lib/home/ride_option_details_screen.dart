@@ -51,7 +51,7 @@ class RideOptionDetailsScreen extends StatelessWidget {
                           style: TextStyle(
                             color: textColor,
                             fontSize: 30,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: -0.7,
                           ),
                         ),
@@ -115,7 +115,7 @@ class RideOptionDetailsScreen extends StatelessWidget {
                     style: TextStyle(
                       color: textColor,
                       fontSize: 23,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       letterSpacing: -0.4,
                     ),
                   ),

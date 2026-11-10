@@ -93,9 +93,19 @@ abstract final class AlphaTheme {
       fontFamily: 'Roboto',
       splashFactory: InkRipple.splashFactory,
       textTheme: base.copyWith(
+        bodySmall: base.bodySmall?.copyWith(
+          color: muted,
+          fontSize: 12,
+          height: 1.35,
+        ),
+        labelMedium: base.labelMedium?.copyWith(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.1,
+        ),
         headlineLarge: base.headlineLarge?.copyWith(
           color: ink,
-          fontSize: 30,
+          fontSize: 28,
           fontWeight: FontWeight.w600,
           letterSpacing: -0.7,
         ),
@@ -116,7 +126,6 @@ abstract final class AlphaTheme {
         ),
         bodyLarge: base.bodyLarge?.copyWith(color: ink, height: 1.45),
         bodyMedium: base.bodyMedium?.copyWith(color: muted, height: 1.42),
-        bodySmall: base.bodySmall?.copyWith(color: muted),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: canvas,

@@ -850,12 +850,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const SizedBox(height: 28),
                       SizedBox(
                         width: double.infinity,
-                        height: 56,
                         child: ElevatedButton(
                           onPressed: _isLoading || _isSelectingImage
                               ? null
                               : _register,
                           style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(0, 56),
                             backgroundColor: primaryColor,
                             foregroundColor: Colors.black,
                             disabledBackgroundColor:
