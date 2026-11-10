@@ -73,10 +73,7 @@ class _WalletEntryScreenState extends State<WalletEntryScreen> {
 class WalletIntroScreen extends StatelessWidget {
   final VoidCallback onContinue;
 
-  const WalletIntroScreen({
-    super.key,
-    required this.onContinue,
-  });
+  const WalletIntroScreen({super.key, required this.onContinue});
 
   @override
   Widget build(BuildContext context) {
@@ -150,10 +147,10 @@ class WalletIntroScreen extends StatelessWidget {
               const Spacer(),
               SizedBox(
                 width: double.infinity,
-                height: 56,
                 child: ElevatedButton(
                   onPressed: onContinue,
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 56),
                     backgroundColor: AlphaColors.ink,
                     foregroundColor: Colors.white,
                     elevation: 0,
@@ -163,10 +160,7 @@ class WalletIntroScreen extends StatelessWidget {
                   ),
                   child: const Text(
                     'Explore wallet',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -217,11 +211,7 @@ class _WalletShieldIllustration extends StatelessWidget {
             child: CircleAvatar(
               radius: 19,
               backgroundColor: AlphaColors.primary,
-              child: Icon(
-                Icons.lock_rounded,
-                color: AlphaColors.ink,
-                size: 20,
-              ),
+              child: Icon(Icons.lock_rounded, color: AlphaColors.ink, size: 20),
             ),
           ),
         ],
@@ -247,9 +237,7 @@ class WalletScreen extends StatelessWidget {
       action: TextButton(
         onPressed: () => Navigator.push<void>(
           context,
-          MaterialPageRoute<void>(
-            builder: (_) => const AboutWalletScreen(),
-          ),
+          MaterialPageRoute<void>(builder: (_) => const AboutWalletScreen()),
         ),
         child: const Text(
           'About wallet',
@@ -569,23 +557,19 @@ class AboutWalletScreen extends StatelessWidget {
         children: <Widget>[
           _WalletQuestion(
             question: 'What is AlphaRide Wallet?',
-            answer:
-                'AlphaRide Wallet is a planned digital balance for passenger payments in South Sudan. Until it launches, every AlphaRide trip remains cash-only.',
+            answer: 'AlphaRide Wallet is a planned digital balance for passenger payments in South Sudan. Until it launches, every AlphaRide trip remains cash-only.',
           ),
           _WalletQuestion(
             question: 'Can I top up now?',
-            answer:
-                'Not yet. Top-ups, cards, and Wallet payments stay disabled while secure payment partners and customer protections are finalized.',
+            answer: 'Not yet. Top-ups, cards, and Wallet payments stay disabled while secure payment partners and customer protections are finalized.',
           ),
           _WalletQuestion(
             question: 'What currency will it use?',
-            answer:
-                'Wallet balances, transactions, and ride payments will be shown in South Sudanese pounds (SSP).',
+            answer: 'Wallet balances, transactions, and ride payments will be shown in South Sudanese pounds (SSP).',
           ),
           _WalletQuestion(
             question: 'Will my Wallet balance expire?',
-            answer:
-                'Final Wallet terms will be published before launch. AlphaRide will clearly explain balance, refund, and expiry rules before customers can add money.',
+            answer: 'Final Wallet terms will be published before launch. AlphaRide will clearly explain balance, refund, and expiry rules before customers can add money.',
             showDivider: false,
           ),
         ],
@@ -668,45 +652,46 @@ class WalletTransactionsScreen extends StatelessWidget {
       scrollable: false,
       child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
         sourceKey: (phoneNumber, firestoreService),
-        createStream: () => firestoreService.watchWalletTransactions(phoneNumber),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AlphaColors.primary),
-            );
-          }
+        createStream: () =>
+            firestoreService.watchWalletTransactions(phoneNumber),
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: AlphaColors.primary),
+                );
+              }
 
-          if (snapshot.hasError) {
-            return const AlphaEmptyState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Transactions are unavailable',
-              message: 'Check your connection and try this page again.',
-            );
-          }
+              if (snapshot.hasError) {
+                return const AlphaEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Transactions are unavailable',
+                  message: 'Check your connection and try this page again.',
+                );
+              }
 
-          final List<Map<String, dynamic>> transactions =
-              snapshot.data ?? <Map<String, dynamic>>[];
+              final List<Map<String, dynamic>> transactions =
+                  snapshot.data ?? <Map<String, dynamic>>[];
 
-          if (transactions.isEmpty) {
-            return const AlphaEmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: 'No transactions yet',
-              message:
-                  'Your Wallet history will appear here after digital payments launch.',
-            );
-          }
+              if (transactions.isEmpty) {
+                return const AlphaEmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No transactions yet',
+                  message: 'Your Wallet history will appear here after digital payments launch.',
+                );
+              }
 
-          return ListView.separated(
-            itemCount: transactions.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (BuildContext context, int index) {
-              return _TransactionTile(data: transactions[index]);
+              return ListView.separated(
+                itemCount: transactions.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (BuildContext context, int index) {
+                  return _TransactionTile(data: transactions[index]);
+                },
+              );
             },
-          );
-        },
       ),
     );
   }
