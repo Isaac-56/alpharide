@@ -10,9 +10,9 @@ const PRESENCE_FRESH_MS = 90 * 1000;
 const DISPATCH_RADIUS_METERS = 12 * 1000;
 const ACCEPTANCE_PICKUP_RADIUS_METERS = 15 * 1000;
 const PRESENCE_CANDIDATE_SCAN_LIMIT = 25;
-const MAX_DRIVER_OFFERS = 5;
+const MAX_DRIVER_OFFERS = 1;
 const OFFER_WINDOW_MS = 30 * 1000;
-const DISPATCH_ALGORITHM_VERSION = 3;
+const DISPATCH_ALGORITHM_VERSION = 4;
 
 function normalizeVehicleType(value) {
   return normalizeVehicleClass(value);

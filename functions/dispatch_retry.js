@@ -164,6 +164,7 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
         }
         const currentLocks = await Promise.all(verified.map((candidate) => tx.get(db.collection("active_driver_rides").doc(candidate.driverId))));
         offered = verified.filter((_, index) => !currentLocks[index].exists).slice(0, MAX_DRIVER_OFFERS);
+        const previousOffers = await Promise.all(previousIds.map((id) => tx.get(offerRef(id, rideId))));
         const commitMs = clock();
         if (commitMs >= claim.deadline) {
           // Leave recovery due; the next attempt atomically expires the search.
@@ -172,7 +173,8 @@ function createDispatchEngine({ db, realtimeDb, Timestamp, FieldValue, sendPush,
           return current.get("status");
         }
         const expiry = Timestamp.fromMillis(Math.min(claim.deadline, commitMs + (offered.length ? OFFER_WINDOW_MS : NO_CANDIDATE_RETRY_MS)));
-        for (const driverId of previousIds) {
+        for (const [index, driverId] of previousIds.entries()) {
+          if (previousOffers[index].get("status") !== "pending") continue;
           tx.set(offerRef(driverId, rideId), { status: "expired", respondedAt: FieldValue.serverTimestamp() }, { merge: true });
         }
         const round = (Number(current.get("dispatchRound")) || 0) + 1;
