@@ -537,7 +537,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                   style: TextStyle(
                     color: textColor,
                     fontSize: 30,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -567,7 +567,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                       'Wait for driver',
                       style: TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -903,7 +903,7 @@ class _AssignedDriverCard extends StatelessWidget {
           style: TextStyle(
             color: textColor,
             fontSize: 21,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -1023,7 +1023,7 @@ class _AssignedDriverCard extends StatelessWidget {
                             style: TextStyle(
                               color: textColor,
                               fontSize: 17,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: -0.2,
                             ),
                           ),
@@ -1043,7 +1043,7 @@ class _AssignedDriverCard extends StatelessWidget {
                             style: TextStyle(
                               color: primaryColor,
                               fontSize: 9.5,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -1078,7 +1078,7 @@ class _AssignedDriverCard extends StatelessWidget {
                           style: TextStyle(
                             color: textColor,
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: 0.45,
                           ),
                         ),
@@ -1126,7 +1126,7 @@ class _AssignedDriverCard extends StatelessWidget {
                           style: TextStyle(
                             color: textColor,
                             fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -1220,7 +1220,7 @@ class _PassengerWaitingCard extends StatelessWidget {
                       'Customer-requested waiting • ${_clock(totalSeconds)}',
                       style: TextStyle(
                         color: AlphaColors.text(context),
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -1284,7 +1284,7 @@ class _ReceiptRow extends StatelessWidget {
             textAlign: TextAlign.right,
             style: TextStyle(
               color: AlphaColors.text(context),
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -1382,7 +1382,7 @@ class RideCompletionReceipt extends StatelessWidget {
                         style: TextStyle(
                           color: textColor,
                           fontSize: 27,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1456,7 +1456,7 @@ class RideCompletionReceipt extends StatelessWidget {
                   ),
                   child: const Text(
                     'Done',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

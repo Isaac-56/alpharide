@@ -322,7 +322,7 @@ class _LegalCard extends StatelessWidget {
                 style: TextStyle(
                   color: AlphaColors.text(context),
                   fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],

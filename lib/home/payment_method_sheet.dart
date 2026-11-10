@@ -15,9 +15,7 @@ Future<PaymentMethod?> showPaymentMethodSheet({
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (BuildContext context) {
-      return _PaymentMethodSheet(
-        initialMethod: selectedMethod,
-      );
+      return _PaymentMethodSheet(initialMethod: selectedMethod);
     },
   );
 }
@@ -25,9 +23,7 @@ Future<PaymentMethod?> showPaymentMethodSheet({
 class _PaymentMethodSheet extends StatefulWidget {
   final PaymentMethod initialMethod;
 
-  const _PaymentMethodSheet({
-    required this.initialMethod,
-  });
+  const _PaymentMethodSheet({required this.initialMethod});
 
   @override
   State<_PaymentMethodSheet> createState() => _PaymentMethodSheetState();
@@ -58,70 +54,69 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
             top: Radius.circular(AlphaSpacing.sheetRadius),
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const AlphaSheetHandle(),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Payment method',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(
-                      context,
-                      PaymentMethod.cash,
-                    );
-                  },
-                  child: const Text(
-                    'Done',
-                    style: TextStyle(
-                      color: _primaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AlphaSheetHandle(),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Payment method',
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, PaymentMethod.cash);
+                    },
+                    child: const Text(
+                      'Done',
+                      style: TextStyle(
+                        color: _primaryColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
 
-            // Cash — currently available
-            _paymentTile(
-              method: PaymentMethod.cash,
-              icon: Icons.payments_rounded,
-              title: 'Cash',
-              subtitle: 'Pay the driver after your ride',
-              enabled: true,
-            ),
-            const SizedBox(height: 12),
+              // Cash — currently available
+              _paymentTile(
+                method: PaymentMethod.cash,
+                icon: Icons.payments_rounded,
+                title: 'Cash',
+                subtitle: 'Pay the driver after your ride',
+                enabled: true,
+              ),
+              const SizedBox(height: 12),
 
-            // Card — coming soon
-            _paymentTile(
-              method: PaymentMethod.card,
-              icon: Icons.credit_card_rounded,
-              title: 'Card',
-              subtitle: 'Debit and credit card payments',
-              enabled: false,
-              comingSoon: true,
-            ),
-            const SizedBox(height: 12),
+              // Card — coming soon
+              _paymentTile(
+                method: PaymentMethod.card,
+                icon: Icons.credit_card_rounded,
+                title: 'Card',
+                subtitle: 'Debit and credit card payments',
+                enabled: false,
+                comingSoon: true,
+              ),
+              const SizedBox(height: 12),
 
-            // Wallet — coming soon
-            _paymentTile(
-              method: PaymentMethod.wallet,
-              icon: Icons.account_balance_wallet_rounded,
-              title: 'Wallet',
-              subtitle: 'Pay using your AlphaRide balance',
-              enabled: false,
-              comingSoon: true,
-            ),
-          ],
+              // Wallet — coming soon
+              _paymentTile(
+                method: PaymentMethod.wallet,
+                icon: Icons.account_balance_wallet_rounded,
+                title: 'Wallet',
+                subtitle: 'Pay using your AlphaRide balance',
+                enabled: false,
+                comingSoon: true,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -179,8 +174,8 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                   color: selected
                       ? _primaryColor
                       : enabled
-                          ? textColor
-                          : mutedColor.withValues(alpha: 0.55),
+                      ? textColor
+                      : mutedColor.withValues(alpha: 0.55),
                 ),
               ),
               const SizedBox(width: 14),
@@ -222,9 +217,7 @@ class _PaymentMethodSheetState extends State<_PaymentMethodSheet> {
                   decoration: BoxDecoration(
                     color: AlphaColors.border(context).withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                      color: AlphaColors.border(context),
-                    ),
+                    border: Border.all(color: AlphaColors.border(context)),
                   ),
                   child: Text(
                     'Coming soon',

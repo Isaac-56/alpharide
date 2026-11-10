@@ -268,7 +268,7 @@ class AlphaComingSoonBadge extends StatelessWidget {
         style: TextStyle(
           color: AlphaColors.primary,
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -314,7 +314,7 @@ class AlphaEmptyState extends StatelessWidget {
               style: TextStyle(
                 color: AlphaColors.text(context),
                 fontSize: 20,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
                 letterSpacing: -0.3,
               ),
             ),
@@ -384,7 +384,7 @@ class AlphaPrimaryButton extends StatelessWidget {
           ),
           textStyle: const TextStyle(
             fontSize: 16,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

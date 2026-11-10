@@ -219,7 +219,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
                     style: TextStyle(
                       color: AlphaColors.text(sheetContext),
                       fontSize: 21,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -399,7 +399,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
           'Save',
           style: TextStyle(
             color: AlphaColors.primary,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -559,7 +559,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
                 'Delete my account',
                 style: TextStyle(
                   color: AlphaColors.danger,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               trailing: _deleting
@@ -584,7 +584,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
                 'Log out',
                 style: TextStyle(
                   color: AlphaColors.text(context),
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -625,7 +625,7 @@ class SavedPlacesScreen extends StatelessWidget {
           'Add a place',
           style: TextStyle(
             color: AlphaColors.primary,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -735,7 +735,7 @@ class SavedPlacesScreen extends StatelessWidget {
                               style: TextStyle(
                                 color: AlphaColors.text(context),
                                 fontSize: 16,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -967,7 +967,7 @@ class _AddSavedPlaceScreenState extends State<AddSavedPlaceScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
             ),

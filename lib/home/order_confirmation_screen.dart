@@ -602,7 +602,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                   style: TextStyle(
                     color: textColor,
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -610,10 +610,10 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              height: 58,
               child: ElevatedButton(
                 onPressed: _isSubmittingRide ? null : _confirmOrder,
                 style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 58),
                   backgroundColor: primaryColor,
                   foregroundColor: const Color(0xFF071007),
                   elevation: 0,
@@ -630,24 +630,14 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                           color: Color(0xFF071007),
                         ),
                       )
-                    : Row(
+                    : Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 10,
+                        runSpacing: 4,
                         children: [
-                          Expanded(
-                            child: Text(
-                              _isLiveBooking ? 'Confirm order' : 'Coming soon',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '~ ${widget.ride.estimatedFareLabel}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+                          Text(_isLiveBooking ? 'Confirm ride' : 'Coming soon'),
+                          Text('~ ${widget.ride.estimatedFareLabel}'),
                         ],
                       ),
               ),
@@ -681,7 +671,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
             style: TextStyle(
               color: labelTextColor,
               fontSize: 12,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

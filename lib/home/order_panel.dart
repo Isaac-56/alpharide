@@ -135,14 +135,12 @@ class _OrderPanelState extends State<OrderPanel> {
     return '$distance km • $minutes min';
   }
 
-  Future<void> _handleRideTap(
-    RideOption ride,
-  ) async {
+  Future<void> _handleRideTap(RideOption ride) async {
     if (_isInteractionLocked) return;
     if (ride.id == 'ev' || ride.id == 'corporate') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${ride.name} is coming soon.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${ride.name} is coming soon.')));
       return;
     }
 
@@ -161,15 +159,11 @@ class _OrderPanelState extends State<OrderPanel> {
       await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => RideOptionDetailsScreen(
-            ride: _pricedRide(ride),
-          ),
+          builder: (_) => RideOptionDetailsScreen(ride: _pricedRide(ride)),
         ),
       );
     } catch (error) {
-      debugPrint(
-        'Unable to open ride details: $error',
-      );
+      debugPrint('Unable to open ride details: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -198,9 +192,7 @@ class _OrderPanelState extends State<OrderPanel> {
         _paymentMethod = result;
       });
     } catch (error) {
-      debugPrint(
-        'Unable to open payment methods: $error',
-      );
+      debugPrint('Unable to open payment methods: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -210,9 +202,7 @@ class _OrderPanelState extends State<OrderPanel> {
     }
   }
 
-  void _handleLocationTap(
-    VoidCallback callback,
-  ) {
+  void _handleLocationTap(VoidCallback callback) {
     if (_isInteractionLocked) return;
 
     setState(() {
@@ -222,20 +212,15 @@ class _OrderPanelState extends State<OrderPanel> {
     try {
       callback();
     } catch (error) {
-      debugPrint(
-        'Unable to open location selection: $error',
-      );
+      debugPrint('Unable to open location selection: $error');
     } finally {
-      Future<void>.delayed(
-        const Duration(milliseconds: 180),
-        () {
-          if (!mounted) return;
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (!mounted) return;
 
-          setState(() {
-            _isOpeningLocation = false;
-          });
-        },
-      );
+        setState(() {
+          _isOpeningLocation = false;
+        });
+      });
     }
   }
 
@@ -273,25 +258,17 @@ class _OrderPanelState extends State<OrderPanel> {
     });
 
     try {
-      widget.onConfirmRide(
-        _pricedRide(selectedRide),
-        _paymentMethod,
-      );
+      widget.onConfirmRide(_pricedRide(selectedRide), _paymentMethod);
     } catch (error) {
-      debugPrint(
-        'Unable to confirm ride: $error',
-      );
+      debugPrint('Unable to confirm ride: $error');
     } finally {
-      Future<void>.delayed(
-        const Duration(milliseconds: 180),
-        () {
-          if (!mounted) return;
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (!mounted) return;
 
-          setState(() {
-            _isConfirmingRide = false;
-          });
-        },
-      );
+        setState(() {
+          _isConfirmingRide = false;
+        });
+      });
     }
   }
 
@@ -348,37 +325,25 @@ class _OrderPanelState extends State<OrderPanel> {
       curve: Curves.easeOut,
       color: backgroundColor,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          0,
-          10,
-          0,
-          10,
-        ),
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             const AlphaSheetHandle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                16,
-                16,
-                16,
-                12,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               child: Text(
                 'Order a ride',
                 style: TextStyle(
                   color: textColor,
                   fontSize: 23,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: -0.45,
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _routeCard(),
             ),
             if (routeSummary != null) ...<Widget>[
@@ -388,11 +353,7 @@ class _OrderPanelState extends State<OrderPanel> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: <Widget>[
-                    Icon(
-                      Icons.route_rounded,
-                      size: 15,
-                      color: mutedColor,
-                    ),
+                    Icon(Icons.route_rounded, size: 15, color: mutedColor),
                     const SizedBox(width: 5),
                     Text(
                       routeSummary,
@@ -408,9 +369,7 @@ class _OrderPanelState extends State<OrderPanel> {
             ],
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: <Widget>[
                   Expanded(
@@ -438,9 +397,7 @@ class _OrderPanelState extends State<OrderPanel> {
             SizedBox(
               height: 100,
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics(),
@@ -449,10 +406,7 @@ class _OrderPanelState extends State<OrderPanel> {
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 itemCount: RideOption.options.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (
-                  BuildContext context,
-                  int index,
-                ) {
+                itemBuilder: (BuildContext context, int index) {
                   final RideOption ride = RideOption.options[index];
 
                   return _rideCard(ride);
@@ -461,9 +415,7 @@ class _OrderPanelState extends State<OrderPanel> {
             ),
             const SizedBox(height: 12),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _actionTile(
                 icon: _paymentIcon,
                 label: 'Payment • $_paymentLabel',
@@ -473,23 +425,24 @@ class _OrderPanelState extends State<OrderPanel> {
             ),
             const SizedBox(height: 14),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SizedBox(
                 width: double.infinity,
-                height: 56,
                 child: ElevatedButton(
                   onPressed: _isInteractionLocked ? null : _confirmRide,
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 56),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     backgroundColor: primaryColor,
                     foregroundColor: const Color(0xFF071007),
                     disabledBackgroundColor: primaryColor.withValues(
                       alpha: 0.52,
                     ),
-                    disabledForegroundColor: const Color(0xFF071007).withValues(
-                      alpha: 0.62,
-                    ),
+                    disabledForegroundColor: const Color(0xFF071007)
+                        .withValues(alpha: 0.62),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(
@@ -498,14 +451,10 @@ class _OrderPanelState extends State<OrderPanel> {
                     ),
                   ),
                   child: AnimatedSwitcher(
-                    duration: const Duration(
-                      milliseconds: 160,
-                    ),
+                    duration: const Duration(milliseconds: 160),
                     child: _isConfirmingRide
                         ? const SizedBox(
-                            key: ValueKey<String>(
-                              'confirming-ride',
-                            ),
+                            key: ValueKey<String>('confirming-ride'),
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
@@ -513,37 +462,20 @@ class _OrderPanelState extends State<OrderPanel> {
                               color: Color(0xFF071007),
                             ),
                           )
-                        : Row(
-                            key: const ValueKey<String>(
-                              'confirm-ride',
-                            ),
+                        : Wrap(
+                            key: const ValueKey<String>('confirm-ride'),
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 10,
+                            runSpacing: 4,
                             children: <Widget>[
-                              Expanded(
-                                child: Text(
-                                  _primaryActionLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.end,
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
+                              Text(
+                                _primaryActionLabel,
+                                textAlign: TextAlign.center,
                               ),
-                              const SizedBox(width: 12),
-                              Flexible(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    _selectedFareLabel,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
+                              Text(
+                                _selectedFareLabel,
+                                textAlign: TextAlign.center,
                               ),
                             ],
                           ),
@@ -554,23 +486,17 @@ class _OrderPanelState extends State<OrderPanel> {
             const SizedBox(height: 7),
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   !_hasRouteEstimate
                       ? widget.isCalculatingFare
-                          ? 'Calculating the road distance and fare. Tap the button above to cancel.'
-                          : widget.fareCalculationError ??
-                              'Select pickup and destination to calculate your fare.'
+                            ? 'Calculating the road distance and fare. Tap the button above to cancel.'
+                            : widget.fareCalculationError ?? 'Select pickup and destination to calculate your fare.'
                       : _selectedRide == null
-                          ? 'Choose one of the ride options above before continuing.'
-                          : 'Distance fare shown. Customer waiting has 2 free minutes, then ${_selectedRide!.waitingPerMinuteLabel}.',
+                      ? 'Choose one of the ride options above before continuing.'
+                      : 'Distance fare shown. Customer waiting has 2 free minutes, then ${_selectedRide!.waitingPerMinuteLabel}.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: mutedColor,
-                    fontSize: 11.5,
-                  ),
+                  style: TextStyle(color: mutedColor, fontSize: 11.5),
                 ),
               ),
             ),
@@ -597,7 +523,7 @@ class _OrderPanelState extends State<OrderPanel> {
             style: TextStyle(
               color: textColor,
               fontSize: 24,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               letterSpacing: -0.7,
             ),
           ),
@@ -645,7 +571,7 @@ class _OrderPanelState extends State<OrderPanel> {
                               style: TextStyle(
                                 color: textColor,
                                 fontSize: 16,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                                 letterSpacing: -0.2,
                               ),
                             ),
@@ -737,7 +663,7 @@ class _OrderPanelState extends State<OrderPanel> {
                   style: TextStyle(
                     color: textColor,
                     fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -755,9 +681,7 @@ class _OrderPanelState extends State<OrderPanel> {
       decoration: BoxDecoration(
         color: surfaceColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: dividerColor,
-        ),
+        border: Border.all(color: dividerColor),
       ),
       child: Column(
         children: <Widget>[
@@ -768,15 +692,9 @@ class _OrderPanelState extends State<OrderPanel> {
                 : widget.pickupAddress,
             markerLabel: 'A',
             markerColor: Colors.white,
-            onTap: () => _handleLocationTap(
-              widget.onPickupTap,
-            ),
+            onTap: () => _handleLocationTap(widget.onPickupTap),
           ),
-          Divider(
-            height: 1,
-            indent: 62,
-            color: dividerColor,
-          ),
+          Divider(height: 1, indent: 62, color: dividerColor),
           _routeRow(
             label: 'Destination',
             address: widget.destinationAddress.trim().isEmpty
@@ -784,9 +702,7 @@ class _OrderPanelState extends State<OrderPanel> {
                 : widget.destinationAddress,
             markerLabel: 'B',
             markerColor: primaryColor,
-            onTap: () => _handleLocationTap(
-              widget.onDestinationTap,
-            ),
+            onTap: () => _handleLocationTap(widget.onDestinationTap),
           ),
         ],
       ),
@@ -806,10 +722,7 @@ class _OrderPanelState extends State<OrderPanel> {
         onTap: _isInteractionLocked ? null : onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: <Widget>[
               Container(
@@ -820,9 +733,7 @@ class _OrderPanelState extends State<OrderPanel> {
                   color: markerColor,
                   shape: BoxShape.circle,
                   border: markerColor == Colors.white
-                      ? Border.all(
-                          color: dividerColor,
-                        )
+                      ? Border.all(color: dividerColor)
                       : null,
                 ),
                 child: Text(
@@ -830,7 +741,7 @@ class _OrderPanelState extends State<OrderPanel> {
                   style: const TextStyle(
                     color: Color(0xFF111311),
                     fontSize: 13,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -861,10 +772,7 @@ class _OrderPanelState extends State<OrderPanel> {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: mutedColor,
-              ),
+              Icon(Icons.chevron_right_rounded, color: mutedColor),
             ],
           ),
         ),
@@ -877,8 +785,9 @@ class _OrderPanelState extends State<OrderPanel> {
 
     final bool corporate = ride.isCorporate;
 
-    final Color corporateGold =
-        _isDarkMode ? corporateGoldDark : corporateGoldLight;
+    final Color corporateGold = _isDarkMode
+        ? corporateGoldDark
+        : corporateGoldLight;
 
     final Color accentColor = corporate ? corporateGold : primaryColor;
 
@@ -901,10 +810,8 @@ class _OrderPanelState extends State<OrderPanel> {
             color: selected
                 ? accentColor
                 : corporate
-                    ? accentColor.withValues(
-                        alpha: 0.92,
-                      )
-                    : dividerColor,
+                ? accentColor.withValues(alpha: 0.92)
+                : dividerColor,
             width: selected || corporate ? 2 : 1,
           ),
           boxShadow: selected
@@ -922,28 +829,21 @@ class _OrderPanelState extends State<OrderPanel> {
         child: Material(
           color: selected
               ? Color.alphaBlend(
-                  accentColor.withValues(
-                    alpha: corporate ? 0.18 : 0.075,
-                  ),
+                  accentColor.withValues(alpha: corporate ? 0.18 : 0.075),
                   backgroundColor,
                 )
               : corporate
-                  ? Color.alphaBlend(
-                      accentColor.withValues(
-                        alpha: 0.10,
-                      ),
-                      surfaceColor,
-                    )
-                  : surfaceColor,
+              ? Color.alphaBlend(
+                  accentColor.withValues(alpha: 0.10),
+                  surfaceColor,
+                )
+              : surfaceColor,
           borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: _isInteractionLocked ? null : () => _handleRideTap(ride),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 9,
-                vertical: 7,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
               child: Row(
                 children: <Widget>[
                   SizedBox(
@@ -961,17 +861,18 @@ class _OrderPanelState extends State<OrderPanel> {
                               filterQuality: FilterQuality.low,
                               gaplessPlayback: true,
                               excludeFromSemantics: true,
-                              errorBuilder: (
-                                BuildContext context,
-                                Object error,
-                                StackTrace? stackTrace,
-                              ) {
-                                return Icon(
-                                  Icons.directions_car_filled_rounded,
-                                  color: mutedColor,
-                                  size: 42,
-                                );
-                              },
+                              errorBuilder:
+                                  (
+                                    BuildContext context,
+                                    Object error,
+                                    StackTrace? stackTrace,
+                                  ) {
+                                    return Icon(
+                                      Icons.directions_car_filled_rounded,
+                                      color: mutedColor,
+                                      size: 42,
+                                    );
+                                  },
                             ),
                           ),
                         ),
@@ -991,7 +892,6 @@ class _OrderPanelState extends State<OrderPanel> {
                               ),
                             ),
                           )
-
                         // Electric vehicle badge
                         else if (ride.isElectric)
                           const Positioned(
@@ -1013,9 +913,7 @@ class _OrderPanelState extends State<OrderPanel> {
                   const SizedBox(width: 7),
                   Expanded(
                     child: AnimatedSwitcher(
-                      duration: const Duration(
-                        milliseconds: 150,
-                      ),
+                      duration: const Duration(milliseconds: 150),
                       child: openingThisRide
                           ? Center(
                               key: const ValueKey<String>(
@@ -1031,26 +929,22 @@ class _OrderPanelState extends State<OrderPanel> {
                               ),
                             )
                           : Column(
-                              key: ValueKey<String>(
-                                'ride-${ride.id}',
-                              ),
+                              key: ValueKey<String>('ride-${ride.id}'),
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: <Widget>[
                                 Text(
-                                  ride.name.replaceFirst(
-                                    'Alpha ',
-                                    '',
-                                  ),
+                                  ride.name.replaceFirst('Alpha ', ''),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.end,
                                   style: TextStyle(
-                                    color:
-                                        corporate ? corporateGold : textColor,
+                                    color: corporate
+                                        ? corporateGold
+                                        : textColor,
                                     fontSize: 12,
                                     fontWeight: corporate
-                                        ? FontWeight.w900
+                                        ? FontWeight.w600
                                         : FontWeight.w700,
                                   ),
                                 ),
@@ -1073,7 +967,7 @@ class _OrderPanelState extends State<OrderPanel> {
                                           ? accentColor
                                           : textColor,
                                       fontSize: 15,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
@@ -1103,21 +997,14 @@ class _OrderPanelState extends State<OrderPanel> {
       child: InkWell(
         onTap: _isInteractionLocked ? null : onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 15,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
           child: Row(
             children: <Widget>[
               AnimatedSwitcher(
-                duration: const Duration(
-                  milliseconds: 150,
-                ),
+                duration: const Duration(milliseconds: 150),
                 child: loading
                     ? const SizedBox(
-                        key: ValueKey<String>(
-                          'payment-loading',
-                        ),
+                        key: ValueKey<String>('payment-loading'),
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
@@ -1135,9 +1022,7 @@ class _OrderPanelState extends State<OrderPanel> {
               const SizedBox(width: 10),
               Expanded(
                 child: AnimatedSwitcher(
-                  duration: const Duration(
-                    milliseconds: 170,
-                  ),
+                  duration: const Duration(milliseconds: 170),
                   child: Text(
                     label,
                     key: ValueKey<String>(label),

@@ -158,7 +158,7 @@ class CustomDrawer extends StatelessWidget {
                               color: AlphaColors.ink,
                               fontSize: 19,
                               height: 1.2,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: -0.4,
                             ),
                           ),
@@ -200,7 +200,7 @@ class CustomDrawer extends StatelessWidget {
                             style: const TextStyle(
                               color: AlphaColors.ink,
                               fontSize: 12.5,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -454,7 +454,7 @@ class _MiniComingSoon extends StatelessWidget {
         style: TextStyle(
           color: AlphaColors.primary,
           fontSize: 9.5,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
           letterSpacing: 0.3,
         ),
       ),

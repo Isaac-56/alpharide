@@ -125,7 +125,7 @@ class NotificationsScreen extends StatelessWidget {
                   style: TextStyle(
                     color: AlphaColors.text(sheetContext),
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: -0.4,
                   ),
                 ),
@@ -214,7 +214,7 @@ class _NotificationCard extends StatelessWidget {
                               color: AlphaColors.text(context),
                               fontSize: 15.5,
                               fontWeight:
-                                  unread ? FontWeight.w800 : FontWeight.w700,
+                                  unread ? FontWeight.w600 : FontWeight.w700,
                             ),
                           ),
                         ),
@@ -470,7 +470,7 @@ class _OrderCard extends StatelessWidget {
                                   ? AlphaColors.danger
                                   : AlphaColors.text(context),
                               fontSize: 16,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           if (createdAt != null) ...<Widget>[
@@ -492,7 +492,7 @@ class _OrderCard extends StatelessWidget {
                         style: TextStyle(
                           color: AlphaColors.text(context),
                           fontSize: 14,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                   ],
@@ -627,7 +627,7 @@ class _MapPoint extends StatelessWidget {
         label,
         style: const TextStyle(
           color: AlphaColors.ink,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -751,7 +751,7 @@ class InviteFriendsScreen extends StatelessWidget {
                         style: TextStyle(
                           color: AlphaColors.text(context),
                           fontSize: 22,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -782,7 +782,7 @@ class InviteFriendsScreen extends StatelessWidget {
                       shape: const RoundedRectangleBorder(),
                       textStyle: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),

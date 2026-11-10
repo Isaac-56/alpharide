@@ -199,7 +199,7 @@ class _AnimatedBrandName extends StatelessWidget {
                   color: Colors.black,
                   fontSize: 27,
                   height: 1,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: 0.2,
                 ),
               ),

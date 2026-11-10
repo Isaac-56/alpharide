@@ -115,7 +115,7 @@ class WalletIntroScreen extends StatelessWidget {
                       style: TextStyle(
                         color: AlphaColors.primary,
                         fontSize: 11,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -130,7 +130,7 @@ class WalletIntroScreen extends StatelessWidget {
                   color: AlphaColors.ink,
                   fontSize: 30,
                   height: 1.12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: -0.8,
                 ),
               ),
@@ -165,7 +165,7 @@ class WalletIntroScreen extends StatelessWidget {
                     'Explore wallet',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -255,7 +255,7 @@ class WalletScreen extends StatelessWidget {
           'About wallet',
           style: TextStyle(
             color: AlphaColors.primary,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -300,7 +300,7 @@ class WalletScreen extends StatelessWidget {
                   style: TextStyle(
                     color: AlphaColors.text(context),
                     fontSize: 34,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: -0.8,
                   ),
                 ),
@@ -329,7 +329,7 @@ class WalletScreen extends StatelessWidget {
                           style: TextStyle(
                             color: AlphaColors.muted(context),
                             fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -530,7 +530,7 @@ class _WalletPaymentTile extends StatelessWidget {
                   style: TextStyle(
                     color: textColor,
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -626,7 +626,7 @@ class _WalletQuestion extends StatelessWidget {
                   style: TextStyle(
                     color: AlphaColors.text(context),
                     fontSize: 17,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -751,7 +751,7 @@ class _TransactionTile extends StatelessWidget {
                   style: TextStyle(
                     color: AlphaColors.text(context),
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -772,7 +772,7 @@ class _TransactionTile extends StatelessWidget {
             style: TextStyle(
               color: credit ? AlphaColors.primary : AlphaColors.text(context),
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
