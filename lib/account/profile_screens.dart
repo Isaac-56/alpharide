@@ -177,11 +177,7 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
       setState(() => _selectedImage = File(picked.path));
     } catch (error) {
       if (!mounted) return;
-      showAlphaMessage(
-        context,
-        'Unable to select this photo.',
-        error: true,
-      );
+      showAlphaMessage(context, 'Unable to select this photo.', error: true);
     }
   }
 
@@ -388,8 +384,8 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
     final ImageProvider? imageProvider = _selectedImage != null
         ? FileImage(_selectedImage!)
         : (_photoUrl?.trim().isNotEmpty ?? false)
-            ? NetworkImage(_photoUrl!.trim())
-            : null;
+        ? NetworkImage(_photoUrl!.trim())
+        : null;
 
     return AlphaPageScaffold(
       title: 'Personal information',
@@ -422,18 +418,25 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: _selectedImage == null
-                            ? AccountAvatar(radius: 49, photo: widget.initialUserData?['photoStoragePath']?.toString() ?? _photoUrl ?? '')
+                            ? AccountAvatar(
+                                radius: 49,
+                                photo:
+                                    widget.initialUserData?['photoStoragePath']
+                                        ?.toString() ??
+                                    _photoUrl ??
+                                    '',
+                              )
                             : CircleAvatar(
-                          foregroundImage: imageProvider,
-                          backgroundColor: AlphaColors.surface(context),
-                          child: imageProvider == null
-                              ? Icon(
-                                  Icons.person_rounded,
-                                  color: AlphaColors.text(context),
-                                  size: 48,
-                                )
-                              : null,
-                        ),
+                                foregroundImage: imageProvider,
+                                backgroundColor: AlphaColors.surface(context),
+                                child: imageProvider == null
+                                    ? Icon(
+                                        Icons.person_rounded,
+                                        color: AlphaColors.text(context),
+                                        size: 48,
+                                      )
+                                    : null,
+                              ),
                       ),
                       Positioned(
                         right: 0,
@@ -489,20 +492,21 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
               initialValue: widget.phoneNumber,
               readOnly: true,
               style: TextStyle(color: AlphaColors.text(context)),
-              decoration: alphaInputDecoration(
-                context,
-                label: 'Phone number',
-                prefixIcon: Icons.phone_outlined,
-              ).copyWith(
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Image.asset(
-                    'assets/images/south_sudan_flag.png',
-                    width: 30,
-                    fit: BoxFit.contain,
+              decoration:
+                  alphaInputDecoration(
+                    context,
+                    label: 'Phone number',
+                    prefixIcon: Icons.phone_outlined,
+                  ).copyWith(
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Image.asset(
+                        'assets/images/south_sudan_flag.png',
+                        width: 30,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
-                ),
-              ),
             ),
             const SizedBox(height: 14),
             TextFormField(
@@ -632,134 +636,139 @@ class SavedPlacesScreen extends StatelessWidget {
       child: RetainedStreamBuilder<List<Map<String, dynamic>>>(
         sourceKey: (phoneNumber, firestoreService),
         createStream: () => firestoreService.watchSavedPlaces(phoneNumber),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AlphaColors.primary),
-            );
-          }
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: AlphaColors.primary),
+                );
+              }
 
-          if (snapshot.hasError) {
-            return const AlphaEmptyState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Saved places are unavailable',
-              message: 'Check your connection and open this page again.',
-            );
-          }
+              if (snapshot.hasError) {
+                return const AlphaEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Saved places are unavailable',
+                  message: 'Check your connection and open this page again.',
+                );
+              }
 
-          final List<Map<String, dynamic>> places =
-              snapshot.data ?? <Map<String, dynamic>>[];
+              final List<Map<String, dynamic>> places =
+                  snapshot.data ?? <Map<String, dynamic>>[];
 
-          if (places.isEmpty) {
-            return AlphaEmptyState(
-              icon: Icons.bookmark_add_outlined,
-              title: 'Save your favorite places',
-              message:
-                  'Add home, work, or another place to choose it faster when ordering a ride.',
-              action: SizedBox(
-                width: 190,
-                child: AlphaPrimaryButton(
-                  label: 'Add a place',
-                  icon: Icons.add_location_alt_rounded,
-                  onPressed: () => Navigator.push<void>(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => AddSavedPlaceScreen(
-                        phoneNumber: phoneNumber,
-                        firestoreService: firestoreService,
+              if (places.isEmpty) {
+                return AlphaEmptyState(
+                  icon: Icons.bookmark_add_outlined,
+                  title: 'Save your favorite places',
+                  message: 'Add home, work, or another place to choose it faster when ordering a ride.',
+                  action: SizedBox(
+                    width: 190,
+                    child: AlphaPrimaryButton(
+                      label: 'Add a place',
+                      icon: Icons.add_location_alt_rounded,
+                      onPressed: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => AddSavedPlaceScreen(
+                            phoneNumber: phoneNumber,
+                            firestoreService: firestoreService,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            );
-          }
+                );
+              }
 
-          return ListView.separated(
-            itemCount: places.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (BuildContext context, int index) {
-              final Map<String, dynamic> place = places[index];
+              return ListView.separated(
+                itemCount: places.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (BuildContext context, int index) {
+                  final Map<String, dynamic> place = places[index];
 
-              return Dismissible(
-                key: ValueKey<String>(place['id']?.toString() ?? '$index'),
-                direction: DismissDirection.endToStart,
-                confirmDismiss: (_) => _confirmDelete(context),
-                onDismissed: (_) {
-                  firestoreService.deleteSavedPlace(
-                    phoneNumber,
-                    place['id'].toString(),
+                  return Dismissible(
+                    key: ValueKey<String>(place['id']?.toString() ?? '$index'),
+                    direction: DismissDirection.endToStart,
+                    confirmDismiss: (_) => _confirmDelete(context),
+                    onDismissed: (_) {
+                      firestoreService.deleteSavedPlace(
+                        phoneNumber,
+                        place['id'].toString(),
+                      );
+                    },
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 22),
+                      decoration: BoxDecoration(
+                        color: AlphaColors.danger,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(
+                        Icons.delete_rounded,
+                        color: Colors.white,
+                      ),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AlphaColors.surface(context),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AlphaColors.border(context)),
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          Container(
+                            width: 46,
+                            height: 46,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: AlphaColors.primary.withValues(
+                                alpha: 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Icon(
+                              _placeIcon(place['label']?.toString() ?? ''),
+                              color: AlphaColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 13),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  place['label']?.toString() ?? 'Saved place',
+                                  style: TextStyle(
+                                    color: AlphaColors.text(context),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  place['address']?.toString() ??
+                                      'Address unavailable',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AlphaColors.muted(context),
+                                    fontSize: 12.5,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 },
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 22),
-                  decoration: BoxDecoration(
-                    color: AlphaColors.danger,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(Icons.delete_rounded, color: Colors.white),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AlphaColors.surface(context),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AlphaColors.border(context)),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 46,
-                        height: 46,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AlphaColors.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          _placeIcon(place['label']?.toString() ?? ''),
-                          color: AlphaColors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 13),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              place['label']?.toString() ?? 'Saved place',
-                              style: TextStyle(
-                                color: AlphaColors.text(context),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              place['address']?.toString() ??
-                                  'Address unavailable',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AlphaColors.muted(context),
-                                fontSize: 12.5,
-                                height: 1.35,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               );
             },
-          );
-        },
       ),
     );
   }
@@ -769,9 +778,7 @@ class SavedPlacesScreen extends StatelessWidget {
           context: context,
           builder: (BuildContext dialogContext) => AlertDialog(
             title: const Text('Remove this saved place?'),
-            content: const Text(
-              'You can add it again later.',
-            ),
+            content: const Text('You can add it again later.'),
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -851,8 +858,9 @@ class _AddSavedPlaceScreenState extends State<AddSavedPlaceScreen> {
   Future<void> _chooseOnMap() async {
     // Render the map route immediately; GPS resolves inside the open page.
     // An existing saved selection does not need another location lookup.
-    final Future<LatLng>? initialLocationFuture =
-        _selection == null ? _initialLocation() : null;
+    final Future<LatLng>? initialLocationFuture = _selection == null
+        ? _initialLocation()
+        : null;
     final LocationSelection? result = await Navigator.push<LocationSelection>(
       context,
       MaterialPageRoute<LocationSelection>(
@@ -954,7 +962,6 @@ class _AddSavedPlaceScreenState extends State<AddSavedPlaceScreen> {
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              height: 54,
               child: OutlinedButton.icon(
                 onPressed: _chooseOnMap,
                 icon: const Icon(Icons.map_outlined),
@@ -962,6 +969,7 @@ class _AddSavedPlaceScreenState extends State<AddSavedPlaceScreen> {
                   _selection == null ? 'Set point on map' : 'Change map point',
                 ),
                 style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 54),
                   foregroundColor: AlphaColors.text(context),
                   side: const BorderSide(color: AlphaColors.primary),
                   shape: RoundedRectangleBorder(
@@ -998,4 +1006,3 @@ IconData _placeIcon(String label) {
 
   return Icons.place_outlined;
 }
-
