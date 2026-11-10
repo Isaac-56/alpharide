@@ -260,7 +260,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
   String get _statusLabel => switch (_rideStatus) {
     'requested' => 'Request sent',
-    'offered' => 'Contacting drivers',
+    'offered' => 'Sending requests to nearby drivers',
     'accepted' => 'Driver assigned',
     'driver_arriving' => 'Driver on the way',
     'arrived' => 'Driver arrived',
@@ -523,7 +523,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                         ? () => Navigator.pop(sheetContext, true)
                         : null,
                     child: Text(
-                      'Cancel order',
+                      'Cancel ride',
                       style: TextStyle(
                         color: textColor,
                         fontSize: 15,
@@ -813,7 +813,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                     foregroundColor: textColor,
                   ),
                   child: Text(
-                    _isCancelling ? 'Cancelling...' : 'Cancel order',
+                    _isCancelling ? 'Cancelling...' : 'Cancel ride',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

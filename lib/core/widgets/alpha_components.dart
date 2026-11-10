@@ -38,10 +38,7 @@ class AlphaFlowHeader extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.center,
     children: <Widget>[
-      if (leading != null) ...<Widget>[
-        leading!,
-        const SizedBox(width: 14),
-      ],
+      if (leading != null) ...<Widget>[leading!, const SizedBox(width: 14)],
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,10 +48,11 @@ class AlphaFlowHeader extends StatelessWidget {
               title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: (compact
-                      ? Theme.of(context).textTheme.titleLarge
-                      : Theme.of(context).textTheme.headlineMedium)
-                  ?.copyWith(letterSpacing: -0.45),
+              style:
+                  (compact
+                          ? Theme.of(context).textTheme.titleLarge
+                          : Theme.of(context).textTheme.headlineMedium)
+                      ?.copyWith(letterSpacing: -0.45),
             ),
             if (subtitle != null) ...<Widget>[
               const SizedBox(height: 3),
@@ -68,10 +66,7 @@ class AlphaFlowHeader extends StatelessWidget {
           ],
         ),
       ),
-      if (trailing != null) ...<Widget>[
-        const SizedBox(width: 12),
-        trailing!,
-      ],
+      if (trailing != null) ...<Widget>[const SizedBox(width: 12), trailing!],
     ],
   );
 }
@@ -140,7 +135,7 @@ class AlphaMetricChip extends StatelessWidget {
           style: TextStyle(
             color: context.alphaInk,
             fontSize: 13,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -220,9 +215,8 @@ class AlphaFlowProgress extends StatelessWidget {
         if (label != null) ...<Widget>[
           Text(
             label!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
         ],
@@ -265,7 +259,7 @@ class AlphaStatusPill extends StatelessWidget {
           style: TextStyle(
             color: context.alphaInk,
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
