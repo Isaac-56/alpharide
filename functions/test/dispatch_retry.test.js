@@ -99,22 +99,25 @@ function harness(count = 1) {
   };
 }
 
-test("nearest Boda wave continues to the next eligible drivers after timeout", async () => {
+test("only the nearest Boda receives an offer until timeout", async () => {
   const h = harness(8);
   assert.equal(await h.dispatch(), "offered");
-  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver0", "driver1", "driver2", "driver3", "driver4"]);
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver0"]);
+  assert.equal(await h.dispatch(), "offered");
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.docs.has("driver_ride_offers/driver1/offers/ride"), false);
   h.advance(30001);
   assert.equal(await h.dispatch(), "offered");
-  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver5", "driver6", "driver7"]);
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver1"]);
   assert.equal(h.docs.get("driver_ride_offers/driver0/offers/ride").status, "expired");
   assert.equal(h.wroteBeforeRead(), false);
 });
 
-test("wallet filtering happens before the five-driver wave limit", async () => {
+test("wallet filtering happens before selecting a single driver", async () => {
   const h = harness(8);
   for (let i = 0; i < 5; i++) h.docs.set(`driver_wallets/driver${i}`, { balance: 0 });
   await h.dispatch();
-  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver5", "driver6", "driver7"]);
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver5"]);
   assert.equal(h.docs.get("rides/ride").dispatchExclusionCounts.wallet, 5);
 });
 
@@ -158,7 +161,7 @@ test("legacy rejected drivers wait for cooldown instead of receiving an immediat
   const h = harness(3);
   h.docs.get("rides/ride").rejectedDriverIds = ["driver0"];
   await h.dispatch();
-  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver1", "driver2"]);
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver1"]);
 });
 
 test("unapproved, busy and wrong-vehicle drivers cannot receive Boda offers", async () => {
@@ -280,7 +283,7 @@ test("an idle online driver receives a later request without toggling presence",
 test("nearby fleet growth does not force a lock read for every driver", async () => {
   const h = harness(250);
   assert.equal(await h.dispatch(), "offered");
-  assert.equal(h.sent[0].candidates.length, 5);
+  assert.equal(h.sent[0].candidates.length, 1);
   assert.ok(h.reads() < 110, `Expected bounded nearest-driver reads, got ${h.reads()}`);
 });
 
@@ -310,11 +313,11 @@ test("unseen drivers are reached before recycling the nearest timed-out drivers"
   await h.dispatch();
   h.advance(30001);
   await h.dispatch();
-  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver10", "driver11", "driver0", "driver1", "driver2"]);
+  assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver2"]);
   assert.equal(h.sent[2].dispatchRound, h.docs.get("rides/ride").dispatchRound);
 });
 
-test("decline keeps other live offers and allows the declining driver back after cooldown", async () => {
+test("decline hands off immediately and allows the declining driver back after cooldown", async () => {
   const h = harness(2);
   await h.dispatch();
   await h.reject("driver0", 1);
@@ -335,9 +338,13 @@ test("decline keeps other live offers and allows the declining driver back after
 test("last rejection immediately continues search to the next eligible driver", async () => {
   const h = harness(6);
   await h.dispatch();
-  for (let i = 0; i < 5; i++) await h.reject(`driver${i}`, 1);
+  for (let i = 0; i < 5; i++) {
+    assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, [`driver${i}`]);
+    await h.reject(`driver${i}`, i + 1);
+  }
   assert.deepEqual(h.docs.get("rides/ride").offeredDriverIds, ["driver5"]);
-  assert.equal(h.sent.length, 2);
+  assert.equal(h.sent.length, 6);
+  assert.ok(h.sent.every((push) => push.candidates.length === 1));
 });
 
 test("delayed decline from an older offer cannot dismiss the renewed round", async () => {

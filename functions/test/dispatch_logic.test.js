@@ -300,7 +300,7 @@ test("dispatch skips unapproved and busy drivers before applying offer limit", (
       busyDriverIds: ["driver-6"],
       requiredVehicleType: "standard",
     }).map((candidate) => candidate.driverId),
-    ["driver-7", "driver-8"],
+    ["driver-7"],
   );
 });
 
