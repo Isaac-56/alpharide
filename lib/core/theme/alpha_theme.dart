@@ -126,7 +126,6 @@ abstract final class AlphaTheme {
         ),
         bodyLarge: base.bodyLarge?.copyWith(color: ink, height: 1.45),
         bodyMedium: base.bodyMedium?.copyWith(color: muted, height: 1.42),
-        bodySmall: base.bodySmall?.copyWith(color: muted),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: canvas,
