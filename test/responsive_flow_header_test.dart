@@ -11,7 +11,7 @@ void main() {
           home: Scaffold(
             body: MediaQuery(
               data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-              child: const Center(
+              child: const SingleChildScrollView(
                 child: SizedBox(
                   width: 280,
                   child: AlphaFlowHeader(
