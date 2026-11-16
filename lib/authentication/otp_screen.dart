@@ -1,3 +1,4 @@
+import '../services/whatsapp_auth_service.dart';
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -218,25 +219,25 @@ class _OTPScreenState extends State<OTPScreen>
     });
 
     try {
-      final PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId,
-        smsCode: _otp,
-      );
+      final customToken = await WhatsAppAuthService()
+          .verifyCode(_verificationId, _otp);
 
       SessionService.instance.beginSignIn();
 
       try {
         final UserCredential result =
-            await _auth.signInWithCredential(credential);
+            await _auth.signInWithCustomToken(customToken);
         final User? user = result.user;
 
         if (user == null) {
           throw StateError('Firebase did not return a signed-in user.');
         }
 
+        await user.getIdToken(true);
         await SessionService.instance.activateSession(user);
       } catch (_) {
         SessionService.instance.cancelSignIn();
+        await _auth.signOut();
         rethrow;
       }
 
@@ -289,106 +290,24 @@ class _OTPScreenState extends State<OTPScreen>
   }
 
   Future<void> _resendOTP() async {
-    if (_secondsRemaining.value != 0 || _verifying) {
-      return;
-    }
-
-    _startTimer();
-
+    if (_secondsRemaining.value != 0 || _verifying) return;
+    setState(() => _verifying = true);
     try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: widget.phoneNumber,
-        verificationCompleted: (
-          PhoneAuthCredential credential,
-        ) async {
-          try {
-            SessionService.instance.beginSignIn();
-
-            try {
-              final UserCredential result =
-                  await _auth.signInWithCredential(credential);
-              final User? user = result.user;
-
-              if (user == null) {
-                throw StateError('Firebase did not return a signed-in user.');
-              }
-
-              await SessionService.instance.activateSession(user);
-            } catch (_) {
-              SessionService.instance.cancelSignIn();
-              rethrow;
-            }
-          } on FirebaseAuthException catch (error) {
-            if (!mounted) return;
-
-            _secondsRemaining.value = 0;
-
-            _showError(
-              error.message ?? 'Automatic verification failed.',
-            );
-          }
-        },
-        verificationFailed: (
-          FirebaseAuthException error,
-        ) {
-          if (!mounted) return;
-
-          _timer?.cancel();
-          _secondsRemaining.value = 0;
-
-          _showError(
-            error.message ?? 'Unable to resend the verification code.',
-          );
-        },
-        codeSent: (
-          String verificationId,
-          int? resendToken,
-        ) {
-          if (!mounted) return;
-
-          setState(() {
-            _verificationId = verificationId;
-          });
-
-          final ScaffoldMessengerState messenger =
-              ScaffoldMessenger.of(context);
-
-          messenger
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                content: const Text(
-                  'A new verification code was sent.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                backgroundColor: textColor,
-                behavior: SnackBarBehavior.floating,
-                margin: const EdgeInsets.all(20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            );
-        },
-        codeAutoRetrievalTimeout: (
-          String verificationId,
-        ) {
-          _verificationId = verificationId;
-        },
-      );
-    } catch (error) {
+      final id = await WhatsAppAuthService()
+          .requestCode(widget.phoneNumber, 'passenger');
       if (!mounted) return;
-
-      _timer?.cancel();
-      _secondsRemaining.value = 0;
-
-      _showError(
-        'Unable to resend the code. Please try again.',
-      );
+      setState(() {
+        _verificationId = id;
+        _otp = '';
+        _controller.clear();
+      });
+      _startTimer();
+    } on FirebaseAuthException catch (error) {
+      _showError(error.message ?? 'Unable to resend the WhatsApp code.');
+    } catch (_) {
+      _showError('Unable to resend the WhatsApp code. Try again.');
+    } finally {
+      if (mounted) setState(() => _verifying = false);
     }
   }
 
@@ -604,7 +523,7 @@ class _OTPScreenState extends State<OTPScreen>
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
-                            Icons.sms_outlined,
+                            Icons.chat_outlined,
                             size: 50,
                             color: textColor,
                           ),
@@ -635,7 +554,7 @@ class _OTPScreenState extends State<OTPScreen>
                         ),
                         children: [
                           const TextSpan(
-                            text: 'Enter the six-digit code sent to\n',
+                            text: 'Enter the six-digit code sent on WhatsApp to\n',
                           ),
                           TextSpan(
                             text: widget.phoneNumber,
