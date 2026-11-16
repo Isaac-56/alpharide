@@ -4,10 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 /// The Bird key and OTP checks stay on the backend. This client receives only
 /// an opaque challenge and, after verification, a Firebase custom token.
 class WhatsAppAuthService {
-  WhatsAppAuthService({FirebaseFunctions? functions, this.invoke})
-      : _functions = functions;
+  WhatsAppAuthService({this.functions, this.invoke});
 
-  final FirebaseFunctions? _functions;
+  final FirebaseFunctions? functions;
   final Future<Map<String, dynamic>> Function(
     String name, Map<String, dynamic> data,
   )? invoke;
@@ -18,9 +17,9 @@ class WhatsAppAuthService {
   ) async {
     try {
       if (invoke != null) return await invoke!(name, data);
-      final functions = _functions ??
+      final callableFunctions = functions ??
           FirebaseFunctions.instanceFor(region: 'africa-south1');
-      final result = await functions
+      final result = await callableFunctions
           .httpsCallable(name,
               options: HttpsCallableOptions(
                 timeout: const Duration(seconds: 60),
