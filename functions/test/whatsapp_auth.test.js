@@ -6,11 +6,16 @@ class HttpsError extends Error { constructor(code, message) { super(message); th
 function fixture() {
   const rows = new Map(), calls = [], tokens = [], limits = [];
   let now = 1000000, seq = 0, user = { uid: "existing", phoneNumber: "+211922049035" };
+  let registeredRole = null;
   let deleted = false, result = { success: true }, providerError = null, hold = null;
   const service = createWhatsAppAuth({
     HttpsError, clock: () => now, random: () => (++seq).toString(16).padStart(64, "0"),
     store: {
       async mutate(key, fn) { rows.set(key, fn(rows.get(key) || {})); },
+      async assertRole(uid, phone, role) {
+        if (registeredRole && registeredRole !== role)
+          throw new HttpsError("failed-precondition", "Use a different phone number for the other app.");
+      },
       async isDeleted() { return deleted; },
     },
     async limit(...args) { limits.push(args); },
@@ -34,6 +39,7 @@ function fixture() {
   const start = (phoneNumber = "+211922049035") => service.start(request({ phoneNumber, role: "passenger" }));
   const check = id => service.check(request({ verificationId: id, code: "123456" }));
   return { rows, calls, tokens, limits, service, request, start, check,
+    setRole: role => { registeredRole = role; },
     tick: ms => { now += ms; }, setUser: v => { user = v; },
     setDeleted: () => { deleted = true; }, setResult: v => { result = v; },
     setError: v => { providerError = v; }, setHold: v => { hold = v; } };
@@ -128,4 +134,19 @@ test("a mismatched provider verification never authenticates", async () => {
   f.setResult({ success: true, verification: { id: "different" } });
   await assert.rejects(f.check(sent.verificationId), { code: "failed-precondition" });
   assert.equal(f.tokens.length, 0);
+});
+
+test("OTP proof cannot mint a token for the other account role", async () => {
+  for (const [existing, requested] of [["passenger", "driver"], ["driver", "passenger"]]) {
+    const f = fixture(); f.setRole(existing);
+    const sent = await f.service.start(f.request({ phoneNumber: "+211922049035", role: requested }));
+    await assert.rejects(f.check(sent.verificationId), { code: "failed-precondition" });
+    assert.deepEqual(f.tokens, []);
+    assert.equal(f.calls.filter(c => c.path === "/check").length, 1);
+  }
+});
+test("matching account role continues to use its original UID", async () => {
+  const f = fixture(); f.setRole("passenger");
+  const sent = await f.start(); await f.check(sent.verificationId);
+  assert.deepEqual(f.tokens, ["existing"]);
 });

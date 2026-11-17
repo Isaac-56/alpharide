@@ -132,8 +132,10 @@ function createWhatsAppAuth({ store, limit, provider, auth, HttpsError,
       }
     }
     await usable(user);
-    // Auth's canonical phone record preserves the UID and ID-token phone claim.
-    // Existing role/session checks still run in the client after Firebase login.
+    // Only disclose role conflicts after Bird proves ownership. Never mint a
+    // login token for the other product, even if its client is modified.
+    await store.assertRole(user.uid, challenge.phone, challenge.role);
+    // Registration/session endpoints independently enforce the canonical role.
     const customToken = await auth.createCustomToken(user.uid);
     return { customToken };
   }

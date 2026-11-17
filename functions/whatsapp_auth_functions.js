@@ -7,11 +7,13 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
 const { createRequestSecurity } = require("./request_security_logic");
 const { createWhatsAppAuth } = require("./whatsapp_auth_logic");
+const { createOtpRoleGuard } = require("./otp_role_guard");
 const birdKey = defineSecret("BIRD_API_KEY");
 const db = getFirestore();
 const auth = getAuth();
 const security = createRequestSecurity({ db, auth, HttpsError });
 const store = {
+  assertRole: createOtpRoleGuard({ db, HttpsError }),
   async mutate(key, change) {
     const ref = db.collection("whatsapp_auth_challenges").doc(key);
     return db.runTransaction(async tx => {
