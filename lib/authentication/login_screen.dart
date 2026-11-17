@@ -3,9 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../services/account_role_service.dart';
+import '../services/whatsapp_auth_service.dart';
 import '../services/phone_verification_error.dart';
-import '../services/session_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -50,6 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
     showCountryPicker(
       context: context,
       showPhoneCode: true,
+      countryFilter: const ['SS'],
       onSelect: (Country country) {
         setState(() {
           _selectedCountry = country;
@@ -195,82 +195,14 @@ class _LoginScreenState extends State<LoginScreen> {
     _setLoading(true);
 
     try {
-      await AccountRoleService.instance.preflightPassengerRole(phoneNumber);
-
-      await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
-        verificationCompleted: (
-          PhoneAuthCredential credential,
-        ) async {
-          try {
-            SessionService.instance.beginSignIn();
-
-            try {
-              final UserCredential result =
-                  await FirebaseAuth.instance.signInWithCredential(credential);
-              final User? user = result.user;
-
-              if (user == null) {
-                throw StateError('Firebase did not return a signed-in user.');
-              }
-
-              await SessionService.instance.activateSession(user);
-            } catch (_) {
-              SessionService.instance.cancelSignIn();
-              rethrow;
-            }
-
-            if (!mounted) return;
-
-            _setLoading(false);
-
-            Navigator.of(context, rootNavigator: true).popUntil(
-              (Route<dynamic> route) => route.isFirst,
-            );
-          } on FirebaseAuthException catch (error) {
-            _setLoading(false);
-            _showMessage(_messageForAuthError(error));
-          } catch (_) {
-            _setLoading(false);
-            _showMessage(
-              'Automatic verification failed. Please request a new code.',
-            );
-          }
-        },
-        verificationFailed: (
-          FirebaseAuthException error,
-        ) {
-          if (!mounted) return;
-
-          _setLoading(false);
-          _showMessage(_messageForAuthError(error));
-        },
-        codeSent: (
-          String verificationId,
-          int? resendToken,
-        ) {
-          if (!mounted) return;
-
-          _setLoading(false);
-
-          Navigator.pushNamed(
-            context,
-            '/otp',
-            arguments: {
-              'phone': phoneNumber,
-              'verificationId': verificationId,
-            },
-          );
-        },
-        codeAutoRetrievalTimeout: (
-          String verificationId,
-        ) {
-          if (!mounted) return;
-
-          _setLoading(false);
-        },
-      );
+      final verificationId = await WhatsAppAuthService()
+          .requestCode(phoneNumber, 'passenger');
+      if (!mounted) return;
+      _setLoading(false);
+      await Navigator.pushNamed(context, '/otp', arguments: {
+        'phone': phoneNumber,
+        'verificationId': verificationId,
+      });
     } on FirebaseAuthException catch (error) {
       _setLoading(false);
       _showMessage(_messageForAuthError(error));
@@ -360,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             horizontal: 8,
                           ),
                           child: Text(
-                            'We’ll send you a verification code by SMS to confirm your number.',
+                            'We’ll send a code to your WhatsApp from Bird Verify. Continue to request your code.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: secondaryTextColor,
