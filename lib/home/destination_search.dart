@@ -86,7 +86,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
     if (query.isEmpty) return;
 
     _searchDebounce = Timer(
-      const Duration(milliseconds: 350),
+      const Duration(milliseconds: 200),
       () => _search(query, requestId),
     );
   }
@@ -839,3 +839,4 @@ class _SearchResultTile extends StatelessWidget {
     );
   }
 }
+

@@ -58,7 +58,7 @@ test("only active registered passengers can use the server, even on cached resul
 
 test("invalid inputs cannot call Google or supply their own upstream URLs", async () => {
   const h = harness();
-  for (const change of [{ query: "a" }, { query: "x".repeat(181) }, { latitude: 91 }, { longitude: Infinity },
+  for (const change of [{ query: " " }, { query: "x".repeat(181) }, { latitude: 91 }, { longitude: Infinity },
     { latitude: "4.85" }, { sessionToken: "too-short" }]) {
     await assert.rejects(h.api.search({ ...search, data: { ...search.data, ...change } }), { code: "invalid-argument" });
   }
@@ -123,4 +123,12 @@ test("untrusted provider status and reason cannot enter diagnostics", async () =
   h.respond({ ok: false, status: 503, json: async () => ({ error: { status: secret, details: [{ reason: secret }] } }) });
   await assert.rejects(h.api.search(search), { code: "unavailable" });
   assert.equal(JSON.stringify(h.logs).includes(secret), false);
+});
+
+
+test("passenger autocomplete accepts the first letter while preserving authorization", async () => {
+  const h = harness();
+  const result = await h.api.search({ ...search, data: { ...search.data, query: " b " } });
+  assert.equal(JSON.parse(h.calls[0].options.body).input, "b");
+  assert.equal(result.results.length, 1);
 });

@@ -30,6 +30,9 @@ class PlacesService {
   }
 
   static String errorMessage(Object error) {
+    if (error is TimeoutException) {
+      return 'Location search took too long. Retry or choose a point on the map.';
+    }
     if (error is FirebaseFunctionsException) {
       switch (error.code) {
         case 'unauthenticated':
@@ -56,24 +59,16 @@ class PlacesService {
     final HttpsCallableResult<dynamic> result = await functions
         .httpsCallable(
           name,
-          options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 12)),
         )
         .call<dynamic>(data);
     return result.data;
   }
 
   Future<Object?> _call(String name, Map<String, dynamic> data) async {
-    try {
-      return await _invoke(name, data);
-    } on FirebaseFunctionsException catch (error) {
-      if (!<String>{'unavailable', 'deadline-exceeded'}.contains(error.code)) {
-        rethrow;
-      }
-      // Keep the same billing session; never retry configuration, account or
-      // quota errors. A single retry covers a cold start or brief interruption.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      return _invoke(name, data);
-    }
+    // Do not queue a second paid request after a slow autocomplete response.
+    // The screen offers an explicit retry and ignores superseded results.
+    return _invoke(name, data).timeout(const Duration(seconds: 12));
   }
 
   Future<List<PredictionModel>> searchPlaces(
@@ -82,7 +77,7 @@ class PlacesService {
     double longitude,
   ) async {
     final String query = input.trim();
-    if (query.length < 2) return <PredictionModel>[];
+    if (query.isEmpty) return <PredictionModel>[];
     final Object? response = await _call(
       'passengerSearchPlaces',
       <String, dynamic>{
@@ -150,3 +145,4 @@ class PlacesService {
     };
   }
 }
+
