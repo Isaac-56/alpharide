@@ -108,18 +108,24 @@ async function main() {
   if (!token) throw new Error('Google Cloud returned no access token.');
   async function api(url, method = 'GET', body, allow404 = false) {
     let response;
-    try { response = await fetch(url, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    try { response = await fetch(url, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-goog-user-project': PROJECT },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(25000) }); }
     catch { throw new Error('Google Cloud request timed out or could not connect. Retry when the connection is stable.'); }
     if (allow404 && response.status === 404) return null;
     if (!response.ok) {
       let reason = '';
+      let context = ` endpoint=${new URL(url).hostname}`;
       try {
         const data = await response.json();
         const known = ['SERVICE_DISABLED', 'BILLING_DISABLED', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'API_KEY_SERVICE_BLOCKED'];
         reason = data.error?.details?.map(d => d.reason).find(r => known.includes(r)) || '';
+        for (const detail of data.error?.details || []) {
+          const metadata = detail.metadata || {};
+          if (/^[a-z0-9.-]+\.googleapis\.com$/.test(metadata.service || '')) context += ` service=${metadata.service}`;
+          if (/^projects\/[a-z0-9-]+$/.test(metadata.consumer || '')) context += ` consumer=${metadata.consumer}`;
+        }
       } catch { /* Never print provider error bodies, URLs or key strings. */ }
-      throw new Error(`Google Cloud returned HTTP ${response.status} ${reason}. Verify the signed-in owner's permissions and enabled APIs; no automatic retry was made.`);
+      throw new Error(`Google Cloud returned HTTP ${response.status} ${reason}.${context}. Verify the signed-in owner's permissions and enabled APIs; no automatic retry was made.`);
     }
     return response.json();
   }
