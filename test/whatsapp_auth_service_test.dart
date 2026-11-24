@@ -85,4 +85,26 @@ void main() {
     pending.complete({'verificationId': 'late'});
     expect(calls, 1);
   });
+  test('attestation diagnostics do not expose provider secrets or send a code', () async {
+    for (final entry in <String, String>{
+      '403 App attestation failed secret-value': 'AC-REJECTED',
+      'Too many attempts secret-value': 'AC-WAIT',
+      'network error secret-value': 'AC-NETWORK',
+    }.entries) {
+      var sends = 0;
+      final service = WhatsAppAuthService(
+        getAppCheckToken: () async => throw FirebaseException(
+          plugin: 'firebase_app_check', code: 'unknown', message: entry.key,
+        ),
+        invoke: (_, __) async { sends++; return {}; },
+      );
+      await expectLater(service.requestCode('+211922049035', 'passenger'),
+        throwsA(isA<FirebaseAuthException>()
+          .having((e) => e.message, 'support reference', contains(entry.value))
+          .having((e) => e.message, 'no raw error', isNot(contains('secret-value')))));
+      expect(sends, 0);
+    }
+  });
+
 }
+

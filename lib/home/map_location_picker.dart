@@ -13,6 +13,8 @@ class MapLocationPicker extends StatefulWidget {
   final String initialAddress;
   final bool isPickup;
   final Future<LatLng>? initialLocationFuture;
+  final Future<List<Placemark>> Function(double, double)? addressResolver;
+  final Widget Function(GoogleMap)? mapBuilder;
 
   const MapLocationPicker({
     super.key,
@@ -20,6 +22,8 @@ class MapLocationPicker extends StatefulWidget {
     required this.initialAddress,
     required this.isPickup,
     this.initialLocationFuture,
+    this.addressResolver,
+    this.mapBuilder,
   });
 
   @override
@@ -49,7 +53,6 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
   bool get _canConfirm =>
       (!_initialLocationPending || _userInteractedWithMap) &&
       !_isCameraMoving &&
-      !_isResolvingAddress &&
       !_isLocatingUser &&
       !_isConfirming;
 
@@ -62,7 +65,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     final String initialAddress = widget.initialAddress.trim();
 
     _selectedAddress =
-        initialAddress.isEmpty ? 'Finding this address...' : initialAddress;
+        initialAddress.isEmpty ? 'Pinned location' : initialAddress;
 
     if (widget.initialLocationFuture != null) {
       _initialLocationPending = true;
@@ -80,7 +83,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
 
   Future<void> _applyInitialLocation(Future<LatLng> pending) async {
     try {
-      final LatLng location = await pending;
+      final LatLng location = await pending.timeout(const Duration(seconds: 12));
       // A slow GPS result must never replace a pin the user already chose.
       if (!mounted || _userInteractedWithMap || _isConfirming) return;
       _addressRequestId++;
@@ -149,12 +152,13 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     });
 
     try {
-      final List<Placemark> places = await placemarkFromCoordinates(
+      final List<Placemark> places = await
+          (widget.addressResolver ?? placemarkFromCoordinates)(
         location.latitude,
         location.longitude,
-      );
+      ).timeout(const Duration(seconds: 4));
 
-      if (!mounted || requestId != _addressRequestId) {
+      if (!mounted || _isConfirming || requestId != _addressRequestId) {
         return;
       }
 
@@ -170,7 +174,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         'Unable to resolve selected location: $error',
       );
 
-      if (!mounted || requestId != _addressRequestId) {
+      if (!mounted || _isConfirming || requestId != _addressRequestId) {
         return;
       }
 
@@ -233,6 +237,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     setState(() {
       _isCameraMoving = true;
       _isResolvingAddress = true;
+      _selectedAddress = 'Pinned location';
     });
   }
 
@@ -361,7 +366,13 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
   ) async {
     if (_isLocatingUser || _isConfirming) return;
 
-    _selectedLocation = point;
+    _addressDebounce?.cancel();
+    _addressRequestId++;
+    setState(() {
+      _selectedLocation = point;
+      _selectedAddress = 'Pinned location';
+      _isResolvingAddress = true;
+    });
 
     final GoogleMapController? controller = _mapController;
 
@@ -387,6 +398,10 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
 
   void _confirmLocation() {
     if (!_canConfirm) return;
+    _addressDebounce?.cancel();
+    _addressRequestId++;
+    // Coordinates are authoritative. A slow address label must not block a ride.
+    final String address = _isResolvingAddress ? 'Pinned location' : _selectedAddress;
 
     setState(() {
       _isConfirming = true;
@@ -397,8 +412,8 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
       LocationSelection(
         latitude: _selectedLocation.latitude,
         longitude: _selectedLocation.longitude,
-        address: _selectedAddress,
-        name: _selectedAddress,
+        address: address,
+        name: address,
       ),
     );
   }
@@ -410,6 +425,26 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     _addressRequestId++;
 
     Navigator.pop(context);
+  }
+
+  Widget _buildMap() {
+    final GoogleMap map = GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _selectedLocation,
+              zoom: 17,
+            ),
+            onMapCreated: _onMapCreated,
+            onCameraMove: _onCameraMove,
+            onCameraIdle: _onCameraIdle,
+            onTap: _moveToTappedPoint,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            compassEnabled: false,
+            buildingsEnabled: true,
+          );
+    return widget.mapBuilder?.call(map) ?? map;
   }
 
   @override
@@ -432,22 +467,7 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
         children: <Widget>[
           Listener(
             onPointerDown: (_) => _userInteractedWithMap = true,
-            child: GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: _selectedLocation,
-              zoom: 17,
-            ),
-            onMapCreated: _onMapCreated,
-            onCameraMove: _onCameraMove,
-            onCameraIdle: _onCameraIdle,
-            onTap: _moveToTappedPoint,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-            buildingsEnabled: true,
-          ),
+            child: _buildMap(),
           ),
 
           // Fixed center marker
@@ -718,3 +738,4 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     );
   }
 }
+

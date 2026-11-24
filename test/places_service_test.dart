@@ -87,7 +87,7 @@ void main() {
   );
   test('transient failure does not silently queue another request', () async {
     int attempts = 0;
-    final error = FirebaseFunctionsException(code: 'unavailable');
+    final error = FirebaseFunctionsException(code: 'unavailable', message: 'Temporary failure');
     final service = PlacesService(invoke: (name, data) async {
       attempts++;
       throw error;

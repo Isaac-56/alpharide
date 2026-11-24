@@ -23,11 +23,11 @@ class WhatsAppAuthService {
   final Duration attestationTimeout;
   final Duration requestTimeout;
 
-  FirebaseAuthException _attestationError() => FirebaseAuthException(
+  FirebaseAuthException _attestationError([String reference = 'AC-TOKEN']) => FirebaseAuthException(
     code: 'app-verification-required',
     message: kDebugMode && const bool.fromEnvironment('ALPHA_APP_CHECK_DEBUG')
         ? 'Test app setup is incomplete. Register this installation in Firebase App Check, then close and reopen the app. No WhatsApp code was requested.'
-        : 'App verification failed. Check your internet connection and reopen the app. If it continues, contact support. No WhatsApp code was requested.',
+        : 'This installation could not be verified. Contact Alpha support with code $reference. No WhatsApp code was requested.',
   );
 
   Future<void> _checkAttestation() async {
@@ -46,8 +46,25 @@ class WhatsAppAuthService {
         code: 'app-verification-timeout',
         message: 'App verification took too long. Check your connection and try again. No WhatsApp code was requested.',
       );
-    } on FirebaseException {
-      throw _attestationError();
+    } on FirebaseException catch (error) {
+      // Classify locally, but never expose raw SDK messages, tokens or API keys.
+      final reason = '${error.code} ${error.message ?? ''}'.toLowerCase();
+      if (reason.contains('too many attempts') || reason.contains('throttl')) {
+        throw FirebaseAuthException(
+          code: 'app-verification-required',
+          message: 'Verification is temporarily paused. Wait a few minutes before trying again. No WhatsApp code was requested. Support code AC-WAIT.',
+        );
+      }
+      if (reason.contains('network') || reason.contains('unable to resolve host')) {
+        throw FirebaseAuthException(
+          code: 'app-verification-required',
+          message: 'Could not connect to app verification. Check your internet connection and try again. No WhatsApp code was requested. Support code AC-NETWORK.',
+        );
+      }
+      throw _attestationError(
+        reason.contains('403') || reason.contains('attestation failed')
+            ? 'AC-REJECTED' : 'AC-PROVIDER',
+      );
     }
   }
 
@@ -72,7 +89,7 @@ class WhatsAppAuthService {
     } on FirebaseFunctionsException catch (error) {
       if (error.code == 'unauthenticated' ||
           error.code == 'permission-denied') {
-        throw _attestationError();
+        throw _attestationError('AC-BACKEND');
       }
       if (error.code == 'deadline-exceeded') {
         throw _requestTimeoutError();
@@ -122,3 +139,4 @@ class WhatsAppAuthService {
     return token;
   }
 }
+

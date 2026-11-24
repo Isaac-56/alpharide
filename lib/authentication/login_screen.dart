@@ -155,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'too-many-requests':
         return 'Too many verification attempts. Please wait a few minutes and try again.';
       case 'quota-exceeded':
-        return 'The SMS limit has been reached. Please try again later.';
+        return 'The verification request limit has been reached. Please try again later.';
       case 'network-request-failed':
         return 'Check your internet connection and try again.';
       case 'operation-not-allowed':
@@ -457,7 +457,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'Standard SMS rates may apply.',
+                            'We will send your code through WhatsApp.',
                             style: TextStyle(
                               color: secondaryTextColor,
                               fontSize: 12.5,
@@ -602,4 +602,5 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
 

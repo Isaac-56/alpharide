@@ -195,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
         ),
       );
 
@@ -335,8 +336,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final List<Placemark> places = await placemarkFromCoordinates(
         currentLocation.latitude,
         currentLocation.longitude,
-      );
+      ).timeout(const Duration(seconds: 4));
 
+      if (!mounted || _currentLocation != currentLocation) return;
       if (places.isEmpty) return;
 
       final Placemark place = places.first;
@@ -373,6 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : addressParts.take(3).join(', ');
       if (!_pickupManuallySelected) pickupAddress = _currentAddress;
     } catch (error) {
+      if (!mounted || _currentLocation != currentLocation) return;
       debugPrint(
         'Unable to resolve address: $error',
       );
@@ -1013,4 +1016,5 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
 
