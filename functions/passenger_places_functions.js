@@ -8,7 +8,9 @@ const { createPassengerPlaces } = require("./passenger_places_logic");
 const placesApiKey = defineSecret("GOOGLE_PLACES_API_KEY");
 const places = createPassengerPlaces({ db: getFirestore(), apiKey: () => placesApiKey.value(), HttpsError, logger });
 const options = { region: "africa-south1", secrets: [placesApiKey], timeoutSeconds: 20, memory: "256MiB" };
-exports.passengerSearchPlaces = onCall(options, places.search);
+// Keep autocomplete ready for the first keystroke; incurs minimum-instance cost.
+exports.passengerSearchPlaces = onCall({ ...options, minInstances: 1 }, places.search);
 exports.passengerGetPlace = onCall(options, places.details);
+
 
 

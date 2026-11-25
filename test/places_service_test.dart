@@ -1,8 +1,27 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:passengerapp/home/services/places_service.dart';
 
 void main() {
+  test('duplicate searches share a request and repeated text uses cached results', () async {
+    var calls = 0;
+    final response = Completer<Object?>();
+    final service = PlacesService(invoke: (_, data) {
+      calls++;
+      return response.future;
+    });
+    final first = service.searchPlaces('quality', 4.85, 31.57);
+    final second = service.searchPlaces('quality', 4.85, 31.57);
+    response.complete({'results': [{'placeId': 'quality', 'primaryText': 'Quality Hotel'}]});
+    expect((await first).single.mainText, 'Quality Hotel');
+    expect((await second).single.mainText, 'Quality Hotel');
+    expect((await service.searchPlaces('quality', 4.85, 31.57)).single.placeId, 'quality');
+    expect(calls, 1);
+    expect(service.cachedSearch('quality', 5.0, 31.57), isNull);
+  });
+
   test('search and details use authenticated callables and the same billing session', () async {
     final List<(String, Map<String, dynamic>)> calls =
         <(String, Map<String, dynamic>)>[];

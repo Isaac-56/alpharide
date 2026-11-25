@@ -13,6 +13,7 @@ typedef RideSelectionCallback = void Function(
 );
 
 class OrderPanel extends StatefulWidget {
+  final VoidCallback? onBack;
   final String pickupAddress;
   final String destinationAddress;
   final VoidCallback onPickupTap;
@@ -30,6 +31,7 @@ class OrderPanel extends StatefulWidget {
 
   const OrderPanel({
     super.key,
+    this.onBack,
     required this.pickupAddress,
     required this.destinationAddress,
     required this.onPickupTap,
@@ -56,8 +58,18 @@ class _OrderPanelState extends State<OrderPanel> {
   static const Color corporateGoldDark = Color(0xFFFFD700);
   static const Color corporateGoldLight = Color(0xFFFFB800);
 
-  RideOption? _selectedRide;
+  RideOption? _selectedRide = RideOption.options.firstWhere(
+    (ride) => ride.id == 'standard',
+  );
   PaymentMethod _paymentMethod = PaymentMethod.cash;
+
+  @override
+  void didUpdateWidget(covariant OrderPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.destinationAddress.isNotEmpty && widget.destinationAddress.isEmpty) {
+      _selectedRide = RideOption.options.firstWhere((ride) => ride.id == 'standard');
+    }
+  }
 
   bool _isOpeningDetails = false;
   bool _isOpeningPayment = false;
@@ -365,7 +377,12 @@ class _OrderPanelState extends State<OrderPanel> {
                 16,
                 12,
               ),
-              child: Text(
+              child: Row(children: <Widget>[
+                if (widget.onBack != null)
+                  IconButton(tooltip: 'Back to home',
+                    onPressed: widget.onBack,
+                    icon: const Icon(Icons.arrow_back)),
+                Expanded(child: Text(
                 'Order a ride',
                 style: TextStyle(
                   color: textColor,
@@ -373,7 +390,8 @@ class _OrderPanelState extends State<OrderPanel> {
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.45,
                 ),
-              ),
+              )),
+              ]),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(
@@ -1161,3 +1179,4 @@ class _OrderPanelState extends State<OrderPanel> {
     );
   }
 }
+

@@ -71,6 +71,7 @@ class _DestinationSearchState extends State<DestinationSearch> {
 
     final String query = value.trim();
     final int requestId = ++_searchRequestId;
+    final cached = _placesService.cachedSearch(query, widget.latitude, widget.longitude);
 
     setState(() {
       _errorMessage = null;
@@ -78,12 +79,18 @@ class _DestinationSearchState extends State<DestinationSearch> {
       if (query.isEmpty) {
         _predictions.clear();
         _isSearching = false;
+      } else if (cached != null) {
+        _predictions..clear()..addAll(cached);
+        _isSearching = false;
       } else {
+        // Never show unrelated results from the previous query while waiting.
+        _predictions.removeWhere((place) =>
+          !('${place.mainText} ${place.secondaryText}'.toLowerCase().contains(query.toLowerCase())));
         _isSearching = true;
       }
     });
 
-    if (query.isEmpty) return;
+    if (query.isEmpty || cached != null) return;
 
     _searchDebounce = Timer(
       const Duration(milliseconds: 200),

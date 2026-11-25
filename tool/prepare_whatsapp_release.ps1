@@ -24,7 +24,7 @@ Assert-Command 'Release configuration needs attention. Stop here and send the sh
 
 npm --prefix functions ci
 Assert-Command 'Backend dependency installation failed.'
-firebase deploy --only 'functions:passengerSearchPlaces' --project alpha-ride-29708
+firebase deploy --only 'functions:passengerSearchPlaces,functions:passengerGetPlace,functions:calculateRoute' --project alpha-ride-29708
 Assert-Command 'First-letter search backend deployment failed.'
 
 foreach ($app in $apps) {

@@ -18,6 +18,18 @@ class PlacesService {
   final FirebaseFunctions? _functions;
   final PlacesInvoker? _invokeOverride;
   String? _sessionToken;
+  final Map<String, ({DateTime at, List<PredictionModel> results})> _searchCache = {};
+  final Map<String, Future<List<PredictionModel>>> _pendingSearches = {};
+
+  String _searchKey(String input, double latitude, double longitude) =>
+      '${input.trim().toLowerCase()}:${latitude.toStringAsFixed(3)}:${longitude.toStringAsFixed(3)}';
+
+  List<PredictionModel>? cachedSearch(String input, double latitude, double longitude) {
+    final entry = _searchCache[_searchKey(input, latitude, longitude)];
+    if (entry == null || DateTime.now().difference(entry.at) > const Duration(minutes: 2)) return null;
+    return entry.results;
+  }
+
 
   String _session() {
     final String? current = _sessionToken;
@@ -72,6 +84,27 @@ class PlacesService {
   }
 
   Future<List<PredictionModel>> searchPlaces(
+    String input, double latitude, double longitude,
+  ) async {
+    if (input.trim().isEmpty) return <PredictionModel>[];
+    final cached = cachedSearch(input, latitude, longitude);
+    if (cached != null) return cached;
+    final key = _searchKey(input, latitude, longitude);
+    final pending = _pendingSearches[key];
+    if (pending != null) return pending;
+    final request = _searchRemote(input, latitude, longitude);
+    _pendingSearches[key] = request;
+    try {
+      final results = List<PredictionModel>.unmodifiable(await request);
+      if (_searchCache.length >= 30) _searchCache.remove(_searchCache.keys.first);
+      _searchCache[key] = (at: DateTime.now(), results: results);
+      return results;
+    } finally {
+      _pendingSearches.remove(key);
+    }
+  }
+
+  Future<List<PredictionModel>> _searchRemote(
     String input,
     double latitude,
     double longitude,
@@ -135,7 +168,10 @@ class PlacesService {
         'The selected place has no valid map location.',
       );
     }
-    if (_sessionToken == session) _sessionToken = null;
+    if (_sessionToken == session) {
+      _sessionToken = null;
+      _searchCache.clear();
+    }
     return <String, dynamic>{
       'latitude': latitude.toDouble(),
       'longitude': longitude.toDouble(),
