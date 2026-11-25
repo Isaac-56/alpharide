@@ -419,6 +419,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openDestinationSearch({
     required bool isPickup,
+    String? previousDestination,
   }) async {
     final LatLng? currentLocation = _currentLocation;
 
@@ -447,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
           latitude: initialSearchLocation.latitude,
           longitude: initialSearchLocation.longitude,
           pickupAddress: pickupAddress,
-          initialAddress: isPickup ? pickupAddress : destinationAddress,
+          initialAddress: isPickup ? pickupAddress : (previousDestination ?? destinationAddress),
           isPickup: isPickup,
           currentLatitude: currentLocation.latitude,
           currentLongitude: currentLocation.longitude,
@@ -696,6 +697,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return true;
     }
     if (_destinationLocation != null) {
+      final previousDestination = destinationAddress;
       _routeRequestId++;
       setState(() {
         _destinationLocation = null;
@@ -714,6 +716,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _markers.removeWhere((marker) => marker.markerId.value == 'destination');
       });
       unawaited(_collapseOrderPanel());
+      unawaited(_openDestinationSearch(isPickup: false, previousDestination: previousDestination));
       return true;
     }
     if (!_isSheetCollapsed) {

@@ -40,7 +40,7 @@ void main() {
   );
 
   testWidgets(
-    'order panel requires an explicit ride choice before continuing',
+    'order panel defaults to Standard and allows choosing Boda',
     (WidgetTester tester) async {
       RideOption? confirmedRide;
       int confirmationCount = 0;
@@ -70,8 +70,8 @@ void main() {
       expect(find.text('Boda'), findsOneWidget);
       expect(find.text('Rickshaw'), findsOneWidget);
       expect(find.text('Standard'), findsOneWidget);
-      expect(find.text('Choose a ride above'), findsOneWidget);
-      expect(find.text('Select ride'), findsOneWidget);
+      expect(find.text('Choose a ride above'), findsNothing);
+      expect(find.text('Continue'), findsOneWidget);
       expect(confirmedRide, isNull);
 
       await tester.tap(find.text('Boda'));
@@ -238,3 +238,4 @@ void main() {
     );
   });
 }
+

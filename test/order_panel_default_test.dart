@@ -19,5 +19,6 @@ void main() {
     await tester.tap(button);
     await tester.pump();
     expect(chosen, 'standard');
+    await tester.pump(const Duration(milliseconds: 181));
   });
 }

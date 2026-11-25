@@ -379,7 +379,7 @@ class _OrderPanelState extends State<OrderPanel> {
               ),
               child: Row(children: <Widget>[
                 if (widget.onBack != null)
-                  IconButton(tooltip: 'Back to home',
+                  IconButton(tooltip: 'Back',
                     onPressed: widget.onBack,
                     icon: const Icon(Icons.arrow_back)),
                 Expanded(child: Text(

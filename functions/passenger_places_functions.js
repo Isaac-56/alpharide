@@ -10,7 +10,7 @@ const places = createPassengerPlaces({ db: getFirestore(), apiKey: () => placesA
 const options = { region: "africa-south1", secrets: [placesApiKey], timeoutSeconds: 20, memory: "256MiB" };
 // Keep autocomplete ready for the first keystroke; incurs minimum-instance cost.
 exports.passengerSearchPlaces = onCall({ ...options, minInstances: 1 }, places.search);
-exports.passengerGetPlace = onCall(options, places.details);
+exports.passengerGetPlace = onCall({ ...options, minInstances: 1 }, places.details);
 
 
 
