@@ -18,7 +18,7 @@
 - Autocomplete uses a bounded two-minute cache within a search session, coalesces identical pending requests, and displays cached results without another network wait. Different map areas have separate cache keys. Completing place details clears the session cache.
 - The search list removes unrelated old suggestions while the new query is pending. First-letter queries and the 200 ms typing debounce remain enabled.
 - Passenger home can center on an accurate location less than two minutes old while fresh GPS is obtained. Fresh GPS still runs. Pickup coordinates remain fixed while a destination/quote is selected.
-- Autocomplete and place details each keep one minimum backend instance. This reduces cold-start delays and incurs ongoing minimum-instance charges. calculateRoute already specifies one minimum instance, concurrent authorization/routing/pricing reads, and route caching.
+- Autocomplete, place details and calculateRoute scale to zero: no reserved-instance minimum charge. Cold starts can still delay a first request. Route calculation retains concurrent authorization/routing/pricing reads and route caching.
 - The release workflow now deploys calculateRoute and passengerGetPlace as well as passengerSearchPlaces, so the route/fare optimizations actually reach Firebase.
 
 ## Verification limits
