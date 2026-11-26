@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/session_service.dart';
+import '../services/whatsapp_auth_service.dart';
 
 class AuthController extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -13,89 +14,15 @@ class AuthController extends ChangeNotifier {
     BuildContext context,
   ) async {
     try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
-        verificationCompleted: (
-          PhoneAuthCredential credential,
-        ) async {
-          SessionService.instance.beginSignIn();
-
-          try {
-            final UserCredential result =
-                await _auth.signInWithCredential(credential);
-            final User? user = result.user;
-
-            if (user == null) {
-              throw StateError('Firebase did not return a signed-in user.');
-            }
-
-            await SessionService.instance.activateSession(user);
-            notifyListeners();
-          } on FirebaseAuthException catch (error) {
-            SessionService.instance.cancelSignIn();
-
-            if (!context.mounted) return;
-
-            _showSnackBar(
-              context,
-              error.message ?? 'Automatic phone verification failed.',
-            );
-          } catch (_) {
-            SessionService.instance.cancelSignIn();
-
-            if (!context.mounted) return;
-
-            _showSnackBar(
-              context,
-              'Automatic phone verification failed.',
-            );
-          }
-        },
-        verificationFailed: (
-          FirebaseAuthException error,
-        ) {
-          if (!context.mounted) return;
-
-          final String message = error.code == 'invalid-phone-number'
-              ? 'The provided phone number is not valid.'
-              : error.message ?? 'Phone verification failed.';
-
-          _showSnackBar(context, message);
-        },
-        codeSent: (
-          String verificationId,
-          int? resendToken,
-        ) {
-          _verificationId = verificationId;
-
-          if (!context.mounted) return;
-
-          _showSnackBar(
-            context,
-            'OTP has been sent to your phone.',
-          );
-        },
-        codeAutoRetrievalTimeout: (
-          String verificationId,
-        ) {
-          _verificationId = verificationId;
-        },
-      );
+      _verificationId = await WhatsAppAuthService()
+          .requestCode(phoneNumber, 'passenger');
+      if (context.mounted) {
+        _showSnackBar(context, 'Your verification code was sent on WhatsApp.');
+      }
     } on FirebaseAuthException catch (error) {
-      if (!context.mounted) return;
-
-      _showSnackBar(
-        context,
-        error.message ?? 'Unable to verify this phone number.',
-      );
-    } catch (_) {
-      if (!context.mounted) return;
-
-      _showSnackBar(
-        context,
-        'Unable to verify this phone number.',
-      );
+      if (context.mounted) {
+        _showSnackBar(context, error.message ?? 'Unable to send the code.');
+      }
     }
   }
 
@@ -114,19 +41,16 @@ class AuthController extends ChangeNotifier {
     SessionService.instance.beginSignIn();
 
     try {
-      final PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId,
-        smsCode: smsCode,
-      );
-
-      final UserCredential result =
-          await _auth.signInWithCredential(credential);
+      final token = await WhatsAppAuthService()
+          .verifyCode(_verificationId, smsCode);
+      final UserCredential result = await _auth.signInWithCustomToken(token);
       final User? user = result.user;
 
       if (user == null) {
         throw StateError('Firebase did not return a signed-in user.');
       }
 
+      await user.getIdToken(true);
       await SessionService.instance.activateSession(user);
       notifyListeners();
 
@@ -138,6 +62,7 @@ class AuthController extends ChangeNotifier {
       );
     } on FirebaseAuthException catch (error) {
       SessionService.instance.cancelSignIn();
+      await _auth.signOut();
 
       if (!context.mounted) return;
 
@@ -147,6 +72,7 @@ class AuthController extends ChangeNotifier {
       );
     } catch (_) {
       SessionService.instance.cancelSignIn();
+      await _auth.signOut();
 
       if (!context.mounted) return;
 

@@ -18,6 +18,18 @@ class PlacesService {
   final FirebaseFunctions? _functions;
   final PlacesInvoker? _invokeOverride;
   String? _sessionToken;
+  final Map<String, ({DateTime at, List<PredictionModel> results})> _searchCache = {};
+  final Map<String, Future<List<PredictionModel>>> _pendingSearches = {};
+
+  String _searchKey(String input, double latitude, double longitude) =>
+      '${input.trim().toLowerCase()}:${latitude.toStringAsFixed(3)}:${longitude.toStringAsFixed(3)}';
+
+  List<PredictionModel>? cachedSearch(String input, double latitude, double longitude) {
+    final entry = _searchCache[_searchKey(input, latitude, longitude)];
+    if (entry == null || DateTime.now().difference(entry.at) > const Duration(minutes: 2)) return null;
+    return entry.results;
+  }
+
 
   String _session() {
     final String? current = _sessionToken;
@@ -30,6 +42,9 @@ class PlacesService {
   }
 
   static String errorMessage(Object error) {
+    if (error is TimeoutException) {
+      return 'Location search took too long. Retry or choose a point on the map.';
+    }
     if (error is FirebaseFunctionsException) {
       switch (error.code) {
         case 'unauthenticated':
@@ -56,33 +71,46 @@ class PlacesService {
     final HttpsCallableResult<dynamic> result = await functions
         .httpsCallable(
           name,
-          options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 12)),
         )
         .call<dynamic>(data);
     return result.data;
   }
 
   Future<Object?> _call(String name, Map<String, dynamic> data) async {
-    try {
-      return await _invoke(name, data);
-    } on FirebaseFunctionsException catch (error) {
-      if (!<String>{'unavailable', 'deadline-exceeded'}.contains(error.code)) {
-        rethrow;
-      }
-      // Keep the same billing session; never retry configuration, account or
-      // quota errors. A single retry covers a cold start or brief interruption.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      return _invoke(name, data);
-    }
+    // Do not queue a second paid request after a slow autocomplete response.
+    // The screen offers an explicit retry and ignores superseded results.
+    return _invoke(name, data).timeout(const Duration(seconds: 12));
   }
 
   Future<List<PredictionModel>> searchPlaces(
+    String input, double latitude, double longitude,
+  ) async {
+    if (input.trim().isEmpty) return <PredictionModel>[];
+    final cached = cachedSearch(input, latitude, longitude);
+    if (cached != null) return cached;
+    final key = _searchKey(input, latitude, longitude);
+    final pending = _pendingSearches[key];
+    if (pending != null) return pending;
+    final request = _searchRemote(input, latitude, longitude);
+    _pendingSearches[key] = request;
+    try {
+      final results = List<PredictionModel>.unmodifiable(await request);
+      if (_searchCache.length >= 30) _searchCache.remove(_searchCache.keys.first);
+      _searchCache[key] = (at: DateTime.now(), results: results);
+      return results;
+    } finally {
+      _pendingSearches.remove(key);
+    }
+  }
+
+  Future<List<PredictionModel>> _searchRemote(
     String input,
     double latitude,
     double longitude,
   ) async {
     final String query = input.trim();
-    if (query.length < 2) return <PredictionModel>[];
+    if (query.isEmpty) return <PredictionModel>[];
     final Object? response = await _call(
       'passengerSearchPlaces',
       <String, dynamic>{
@@ -140,7 +168,10 @@ class PlacesService {
         'The selected place has no valid map location.',
       );
     }
-    if (_sessionToken == session) _sessionToken = null;
+    if (_sessionToken == session) {
+      _sessionToken = null;
+      _searchCache.clear();
+    }
     return <String, dynamic>{
       'latitude': latitude.toDouble(),
       'longitude': longitude.toDouble(),
@@ -150,3 +181,4 @@ class PlacesService {
     };
   }
 }
+

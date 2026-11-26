@@ -981,7 +981,7 @@ exports.calculateRoute = onCall(
     secrets: [googleRoutesApiKey],
     timeoutSeconds: 30,
     memory: "256MiB",
-    minInstances: 1,
+    minInstances: 0,
   },
   async (request) => {
     try {

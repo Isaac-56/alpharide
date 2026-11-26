@@ -83,7 +83,7 @@ function createPassengerPlaces({ db, apiKey, HttpsError, fetchImpl = fetch, cloc
     async search(request) {
       try {
         const uid = requireUid(request);
-        const query = validatePlaceSearchQuery(request.data?.query);
+        const query = validatePlaceSearchQuery(request.data?.query, 1);
         const { latitude, longitude } = request.data || {};
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
             latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
@@ -126,4 +126,5 @@ function createPassengerPlaces({ db, apiKey, HttpsError, fetchImpl = fetch, cloc
   };
 }
 module.exports = { createPassengerPlaces };
+
 

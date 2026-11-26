@@ -386,9 +386,9 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
   @override
   Widget build(BuildContext context) {
     final ImageProvider? imageProvider = _selectedImage != null
-        ? FileImage(_selectedImage!)
+        ? ResizeImage.resizeIfNeeded(384, null, FileImage(_selectedImage!))
         : (_photoUrl?.trim().isNotEmpty ?? false)
-            ? NetworkImage(_photoUrl!.trim())
+            ? ResizeImage.resizeIfNeeded(384, null, NetworkImage(_photoUrl!.trim()))
             : null;
 
     return AlphaPageScaffold(
@@ -998,4 +998,5 @@ IconData _placeIcon(String label) {
 
   return Icons.place_outlined;
 }
+
 

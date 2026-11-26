@@ -17,6 +17,7 @@ import '../widgets/custom_drawer.dart';
 import '../widgets/location_permission_request.dart';
 import 'destination_search.dart';
 import 'map_view.dart';
+import 'home_back_scope.dart';
 import 'order_confirmation_screen.dart';
 import 'order_panel.dart';
 import 'services/directions_service.dart';
@@ -192,9 +193,21 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      if (_currentLocation == null) {
+        try {
+          final cached = await Geolocator.getLastKnownPosition()
+              .timeout(const Duration(seconds: 1));
+          if (cached != null && cached.accuracy <= 100 &&
+              DateTime.now().difference(cached.timestamp).inSeconds >= 0 &&
+              DateTime.now().difference(cached.timestamp).inSeconds < 120) {
+            await _updateLocation(cached, centerCamera: true, resolveAddress: false);
+          }
+        } catch (_) { /* Fresh GPS below remains authoritative. */ }
+      }
       final Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
         ),
       );
 
@@ -264,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _currentLocation = updatedLocation;
 
-      if (!_pickupManuallySelected) {
+      if (!_pickupManuallySelected && _destinationLocation == null) {
         _pickupLocation = updatedLocation;
       }
 
@@ -335,8 +348,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final List<Placemark> places = await placemarkFromCoordinates(
         currentLocation.latitude,
         currentLocation.longitude,
-      );
+      ).timeout(const Duration(seconds: 4));
 
+      if (!mounted || _currentLocation != currentLocation) return;
       if (places.isEmpty) return;
 
       final Placemark place = places.first;
@@ -373,6 +387,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : addressParts.take(3).join(', ');
       if (!_pickupManuallySelected) pickupAddress = _currentAddress;
     } catch (error) {
+      if (!mounted || _currentLocation != currentLocation) return;
       debugPrint(
         'Unable to resolve address: $error',
       );
@@ -404,6 +419,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openDestinationSearch({
     required bool isPickup,
+    String? previousDestination,
   }) async {
     final LatLng? currentLocation = _currentLocation;
 
@@ -432,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
           latitude: initialSearchLocation.latitude,
           longitude: initialSearchLocation.longitude,
           pickupAddress: pickupAddress,
-          initialAddress: isPickup ? pickupAddress : destinationAddress,
+          initialAddress: isPickup ? pickupAddress : (previousDestination ?? destinationAddress),
           isPickup: isPickup,
           currentLatitude: currentLocation.latitude,
           currentLongitude: currentLocation.longitude,
@@ -675,6 +691,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  bool _backBookingStep() {
+    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeDrawer();
+      return true;
+    }
+    if (_destinationLocation != null) {
+      final previousDestination = destinationAddress;
+      _routeRequestId++;
+      setState(() {
+        _destinationLocation = null;
+        destinationAddress = '';
+        if (!_pickupManuallySelected) {
+          _pickupLocation = _currentLocation;
+          pickupAddress = _currentAddress;
+        }
+        _routePoints = const <LatLng>[];
+        _routeDistanceMeters = null;
+        _routeDuration = null;
+        _fareEstimates = const <String, RideFareQuote>{};
+        _isCalculatingFare = false;
+        _fareCalculationError = null;
+        _polylines.clear();
+        _markers.removeWhere((marker) => marker.markerId.value == 'destination');
+      });
+      unawaited(_collapseOrderPanel());
+      unawaited(_openDestinationSearch(isPickup: false, previousDestination: previousDestination));
+      return true;
+    }
+    if (!_isSheetCollapsed) {
+      unawaited(_collapseOrderPanel());
+      return true;
+    }
+    if (_pickupManuallySelected) {
+      setState(() {
+        _pickupManuallySelected = false;
+        _pickupLocation = _currentLocation;
+        pickupAddress = _currentAddress;
+        _markers.removeWhere((marker) => marker.markerId.value == 'pickup');
+      });
+      return true;
+    }
+    return false;
+  }
+
   void _cancelFareCalculation() {
     if (!_isCalculatingFare) return;
 
@@ -822,7 +882,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color mapControlIconColor =
         isDarkMode ? Colors.white : const Color(0xFF111311);
 
-    return Scaffold(
+    return HomeBackScope(
+      onBackStep: _backBookingStep,
+      child: Scaffold(
       key: _scaffoldKey,
       drawer: CustomDrawer(
         userData: userData,
@@ -992,6 +1054,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           isPickup: false,
                         );
                       },
+                      onBack: _backBookingStep,
                       onConfirmRide: _openBookingConfirmation,
                       collapsed: _isSheetCollapsed,
                       onExpand: _expandOrderPanel,
@@ -1010,7 +1073,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 }
+
 

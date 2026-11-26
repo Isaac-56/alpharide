@@ -82,14 +82,14 @@ function maskPhoneNumber(phone) {
   return `${normalized.slice(0, 5)}••••${normalized.slice(-3)}`;
 }
 
-function validatePlaceSearchQuery(value) {
+function validatePlaceSearchQuery(value, minLength = 2) {
   if (typeof value !== "string") {
     throw new TypeError("query must be a string");
   }
   const query = value.trim().replace(/\s+/g, " ");
-  if (query.length < 2 || query.length > MAX_PLACE_QUERY_LENGTH) {
+  if (query.length < minLength || query.length > MAX_PLACE_QUERY_LENGTH) {
     throw new RangeError(
-      `query must contain between 2 and ${MAX_PLACE_QUERY_LENGTH} characters`,
+      `query must contain between ${minLength} and ${MAX_PLACE_QUERY_LENGTH} characters`,
     );
   }
   return query;
@@ -161,3 +161,4 @@ module.exports = {
   validatePlaceId,
   validatePlaceSearchQuery,
 };
+

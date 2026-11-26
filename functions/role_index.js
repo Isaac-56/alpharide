@@ -8,6 +8,7 @@ const walletFunctions = require("./wallet_functions");
 const adminOpsFunctions = require("./admin_ops_functions");
 
 module.exports = {
+  ...require("./whatsapp_auth_functions"),
   ...appNotificationFunctions,
   ...rideFunctions,
   ...roleFunctions,

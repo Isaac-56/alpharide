@@ -1,3 +1,4 @@
+import 'core/widgets/app_startup.dart';
 import 'dart:async';
 
 import 'services/app_attestation.dart';
@@ -18,20 +19,29 @@ import 'services/passenger_push_notification_service.dart';
 import 'theme_controller.dart';
 import 'widgets/loading_screen.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(AppStartup(initialize: _initializeApp, builder: (_) => const MyApp()));
+}
 
-  final Future<void> themeInitialization = AppThemeController.initialize();
-  await Firebase.initializeApp(
-    options: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-        ? null
-        : DefaultFirebaseOptions.currentPlatform,
-  );
-  await initializeAppAttestation();
-  await themeInitialization;
-
-  runApp(const MyApp());
+Future<void> _initializeApp() async {
+  await Future.wait<void>(<Future<void>>[
+    AppThemeController.initialize(),
+    _initializeFirebase(),
+  ]);
   PassengerPushNotificationService.instance.bindAuthentication();
+}
+
+Future<void> _initializeFirebase() async {
+  // A failed attestation attempt can be retried without creating a second app.
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+          ? null
+          : DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+  await initializeAppAttestation();
 }
 
 class MyApp extends StatelessWidget {
@@ -247,3 +257,4 @@ class _SessionCheckingScreen extends StatelessWidget {
     );
   }
 }
+
