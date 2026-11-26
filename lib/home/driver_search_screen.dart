@@ -193,26 +193,22 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     }
   }
 
+  Widget _fareMetric(DateTime now) => AlphaMetricChip(
+    icon: Icons.payments_outlined,
+    label:
+        '${_liveState?.status == 'in_progress' ? 'Current fare' : 'Estimate'} ${RideOption.formatAmount(_liveState?.fareAt(now) ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
+  );
+
   void _handleRideState(RideLiveState? state) {
     if (!mounted || state == null) return;
 
-    final bool statusChanged = _rideStatus != state.status;
     final bool driverChanged = _liveState?.driverId != state.driverId;
-    final bool summaryChanged =
-        _liveState?.driver?.displayName != state.driver?.displayName ||
-        _liveState?.driver?.plateNumber != state.driver?.plateNumber;
-
-    if (statusChanged ||
-        driverChanged ||
-        summaryChanged ||
-        _liveState == null) {
-      setState(() {
-        _rideStatus = state.status;
-        _liveState = state;
-      });
-    } else {
+    // Backend changes (including waiting/fare updates) refresh the ride UI.
+    // Marker animation frames independently refresh only the map subtree.
+    setState(() {
+      _rideStatus = state.status;
       _liveState = state;
-    }
+    });
 
     _liveDrivers.showOnlyDriver(state.driverId);
     if (driverChanged) {
@@ -635,25 +631,25 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
               child: ListenableBuilder(
                 listenable: _liveDrivers,
                 builder: (BuildContext context, Widget? child) => GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: widget.pickupLocation,
-                  zoom: 15.7,
-                ),
-                markers: <Marker>{..._markers, ..._liveDrivers.markers},
-                polylines: _polylines,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                mapToolbarEnabled: false,
-                padding: const EdgeInsets.only(bottom: 330),
-                onMapCreated: (GoogleMapController controller) {
-                  if (!_mapController.isCompleted) {
-                    _mapController.complete(controller);
-                    Future<void>.delayed(
-                      const Duration(milliseconds: 350),
-                      _fitRoute,
-                    );
-                  }
-                },
+                  initialCameraPosition: CameraPosition(
+                    target: widget.pickupLocation,
+                    zoom: 15.7,
+                  ),
+                  markers: <Marker>{..._markers, ..._liveDrivers.markers},
+                  polylines: _polylines,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  mapToolbarEnabled: false,
+                  padding: const EdgeInsets.only(bottom: 330),
+                  onMapCreated: (GoogleMapController controller) {
+                    if (!_mapController.isCompleted) {
+                      _mapController.complete(controller);
+                      Future<void>.delayed(
+                        const Duration(milliseconds: 350),
+                        _fitRoute,
+                      );
+                    }
+                  },
                 ),
               ),
             ),
@@ -750,11 +746,10 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                         : Icons.local_taxi_rounded,
                     label: widget.ride.name,
                   ),
-                  AlphaMetricChip(
-                    icon: Icons.payments_outlined,
-                    label:
-                        '${_liveState?.status == 'in_progress' ? 'Current fare' : 'Estimate'} ${RideOption.formatAmount(_liveState?.fareAt(DateTime.now()) ?? widget.ride.estimatedFare!)} ${RideOption.currencyCode}',
-                  ),
+                  if (_liveState?.isWaiting == true)
+                    VisibleClock(builder: (_, now) => _fareMetric(now))
+                  else
+                    _fareMetric(DateTime.now()),
                   AlphaMetricChip(
                     icon: _isSearching
                         ? Icons.radar_rounded
