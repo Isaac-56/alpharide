@@ -568,7 +568,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                             primaryColor.withValues(alpha: 0.14),
                                         backgroundImage: _image == null
                                             ? null
-                                            : FileImage(_image!),
+                                            : ResizeImage.resizeIfNeeded(384, null, FileImage(_image!)),
                                         child: _image == null
                                             ? const Icon(
                                                 Icons.person_outline_rounded,
@@ -930,4 +930,5 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 }
+
 

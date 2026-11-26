@@ -1,3 +1,4 @@
+import '../core/widgets/visible_clock.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -96,7 +97,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
 
     _routePoints = List<LatLng>.of(widget.initialRoutePoints);
     _liveDrivers = LiveDriverMarkerController(center: widget.pickupLocation)
-      ..addListener(_refreshDriverMarkers)
       ..start();
 
     _buildStaticMarkers();
@@ -429,10 +429,6 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
       );
   }
 
-  void _refreshDriverMarkers() {
-    if (mounted) setState(() {});
-  }
-
   void _closeRideFlow() {
     final ModalRoute<dynamic>? rideRoute = ModalRoute.of(context);
     if (rideRoute == null || !rideRoute.isActive) return;
@@ -616,9 +612,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
     _driverPhotoRetry?.cancel();
     _driverPhotoRequestId++;
     _rideSubscription?.cancel();
-    _liveDrivers
-      ..removeListener(_refreshDriverMarkers)
-      ..dispose();
+    _liveDrivers.dispose();
     _progressController.dispose();
     super.dispose();
   }
@@ -638,7 +632,9 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
         body: Stack(
           children: [
             Positioned.fill(
-              child: GoogleMap(
+              child: ListenableBuilder(
+                listenable: _liveDrivers,
+                builder: (BuildContext context, Widget? child) => GoogleMap(
                 initialCameraPosition: CameraPosition(
                   target: widget.pickupLocation,
                   zoom: 15.7,
@@ -658,6 +654,7 @@ class _DriverSearchScreenState extends State<DriverSearchScreen>
                     );
                   }
                 },
+                ),
               ),
             ),
             Positioned.fill(
@@ -1172,14 +1169,8 @@ class _PassengerWaitingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<int>(
-      stream: Stream<int>.periodic(
-        const Duration(seconds: 1),
-        (int tick) => tick,
-      ),
-      initialData: 0,
-      builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
-        final DateTime now = DateTime.now();
+    return VisibleClock(
+      builder: (BuildContext context, DateTime now) {
         final int totalSeconds = state.waitingSecondsAt(now);
         final int activeSeconds = state.waitingStartedAt == null
             ? 0
@@ -1467,3 +1458,4 @@ class RideCompletionReceipt extends StatelessWidget {
     );
   }
 }
+
